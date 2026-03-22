@@ -107,7 +107,7 @@ function buildMessage(schedule) {
 
   if (type === 'photo') {
     const msg = { type: 'photo' };
-    msg.photo = resolveMediaUrl(schedule.content_media_url) || schedule.content_file_id || '';
+    msg.photo = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '');
     if (schedule.content_text) msg.caption = schedule.content_text;
     if (replyMarkup) msg.reply_markup = replyMarkup;
     return msg;
@@ -115,7 +115,7 @@ function buildMessage(schedule) {
 
   if (type === 'video') {
     const msg = { type: 'video' };
-    msg.video = resolveMediaUrl(schedule.content_media_url) || schedule.content_file_id || '';
+    msg.video = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '');
     if (schedule.content_text) msg.caption = schedule.content_text;
     if (replyMarkup) msg.reply_markup = replyMarkup;
     return msg;

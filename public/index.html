@@ -319,15 +319,46 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 
       <!-- Feed -->
       <div class="panel" id="panel-feed">
-        <div class="feed-toolbar">
-          <div class="feed-toolbar-left">
-            <span class="badge badge-live">AO VIVO</span>
-            <span class="feed-count" id="msgCount">0 mensagens</span>
+        <!-- Setup overlay -->
+        <div id="feedSetup" style="display:none">
+          <div style="max-width:480px;margin:40px auto;text-align:center">
+            <div style="font-size:48px;margin-bottom:12px;opacity:.6">&#128279;</div>
+            <h3 style="font-size:18px;font-weight:700;margin-bottom:8px">Configurar Feed ao vivo</h3>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6">
+              Para monitorar mensagens em tempo real, vincule um grupo/canal do Telegram a um bot da SendPulse.<br>
+              O bot monitor (<strong>sentinelalng_bot</strong>) captura as mensagens e o bot SendPulse faz os disparos.
+            </p>
+            <div class="config-form" style="max-width:100%;text-align:left">
+              <div class="form-group">
+                <label>Nome do par</label>
+                <input type="text" id="setupNome" placeholder="Ex: Grupo VIP + Bot Vendas">
+                <div class="form-hint">Um nome para identificar essa conexao.</div>
+              </div>
+              <div class="form-group">
+                <label>ID do grupo/canal Telegram</label>
+                <input type="text" id="setupGroupId" placeholder="-100xxxxxxxxxx">
+                <div class="form-hint">Encontre o ID adicionando @RawDataBot ao grupo e vendo o chat.id.</div>
+              </div>
+              <div class="form-group">
+                <label>Bot SendPulse (para disparos)</label>
+                <select id="setupBotSelect"><option value="">Carregando bots...</option></select>
+              </div>
+              <button class="btn btn-primary" onclick="submitSetup()" style="width:100%;justify-content:center;padding:10px">Conectar e ativar feed</button>
+            </div>
           </div>
-          <button class="btn btn-primary btn-sm" id="btnAgendarSel" disabled onclick="openScheduleModal()">Agendar selecionadas</button>
         </div>
-        <div class="msg-list" id="msgList">
-          <div class="empty-state"><div class="empty-icon">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>
+        <!-- Feed content -->
+        <div id="feedContent" style="display:none">
+          <div class="feed-toolbar">
+            <div class="feed-toolbar-left">
+              <span class="badge badge-live">AO VIVO</span>
+              <span class="feed-count" id="msgCount">0 mensagens</span>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btnAgendarSel" disabled onclick="openScheduleModal()">Agendar selecionadas</button>
+          </div>
+          <div class="msg-list" id="msgList">
+            <div class="empty-state"><div class="empty-icon">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>
+          </div>
         </div>
       </div>
 
@@ -674,6 +705,7 @@ async function init() {
   }
   loadBots();
   loadDashboard();
+  checkFeedSetup();
 }
 
 function renderParSelect() {
@@ -692,6 +724,38 @@ async function switchPar() {
 }
 
 // ── Feed ────────────────────────────────────────
+function checkFeedSetup() {
+  const hasSetup = pares.length > 0;
+  document.getElementById('feedSetup').style.display = hasSetup ? 'none' : '';
+  document.getElementById('feedContent').style.display = hasSetup ? '' : 'none';
+  if (!hasSetup) {
+    // Populate bot dropdown in setup
+    const sel = document.getElementById('setupBotSelect');
+    if (botsList.length > 0) {
+      sel.innerHTML = botsList.map(b => `<option value="${b.id}">@${b.username || b.name} (${b.subscribers} inscritos)</option>`).join('');
+    }
+  }
+}
+
+async function submitSetup() {
+  const nome = document.getElementById('setupNome').value.trim();
+  const groupId = document.getElementById('setupGroupId').value.trim();
+  const sel = document.getElementById('setupBotSelect');
+  const botId = sel.value;
+  const botNome = sel.options[sel.selectedIndex]?.text || '';
+  if (!nome || !groupId || !botId) return alert('Preencha todos os campos');
+
+  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: botId, sendpulse_bot_nome: botNome }});
+  pares = await api('/pares');
+  renderParSelect();
+  if (pares.length > 0) {
+    currentPar = pares[0];
+    document.getElementById('parSelect').value = currentPar.id;
+  }
+  checkFeedSetup();
+  switchPar();
+}
+
 async function loadFeed() {
   if (!currentPar) return;
   const msgs = await api(`/messages?par_id=${currentPar.id}`);
@@ -711,24 +775,38 @@ function renderMsg(m) {
   const labels = { text:'texto', photo:'imagem', video:'video', document:'doc' };
   const time = m.created_at ? m.created_at.slice(11, 16) : '';
   const fileId = m.file_id || '';
-  const isUrl = fileId.startsWith('http');
+  const isLocal = fileId.startsWith('/uploads/');
 
   let mediaHtml = '';
   if (m.message_type === 'photo' && fileId) {
-    mediaHtml = isUrl
-      ? `<img src="${esc(fileId)}" style="max-width:200px;max-height:140px;border-radius:6px;margin-bottom:6px;display:block" onerror="this.style.display='none'">`
-      : `<div style="background:var(--surface3);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:var(--muted)">&#128247; Imagem</div>`;
+    const src = isLocal ? fileId : esc(fileId);
+    mediaHtml = `<img src="${src}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
   } else if (m.message_type === 'video' && fileId) {
-    mediaHtml = isUrl
-      ? `<video src="${esc(fileId)}" style="max-width:200px;max-height:140px;border-radius:6px;margin-bottom:6px;display:block" controls></video>`
-      : `<div style="background:var(--surface3);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:var(--muted)">&#127909; Video</div>`;
+    const src = isLocal ? fileId : esc(fileId);
+    mediaHtml = `<video src="${src}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block" controls></video>`;
+  }
+
+  const uid = 'msg_' + m.id;
+  const text = m.text || '';
+  const maxLen = 120;
+  const truncated = text.length > maxLen;
+  const displayText = truncated ? text.slice(0, maxLen) + '...' : text;
+
+  let textHtml = '';
+  if (text) {
+    textHtml = `<div class="msg-text" id="${uid}" style="overflow:hidden">${esc(displayText)}</div>`;
+    if (truncated) {
+      textHtml += `<button onclick="toggleExpand('${uid}',this)" style="background:none;border:none;color:var(--primary);font-size:11px;padding:2px 0;cursor:pointer">Ver mais</button>`;
+    }
+  } else if (!fileId) {
+    textHtml = '<div class="msg-text" style="color:var(--muted)">[vazio]</div>';
   }
 
   return `<div class="msg-item">
-    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(m.text||'')}" data-fileid="${esc(fileId)}" onchange="toggleMsg(this)">
+    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||fileId)}" onchange="toggleMsg(this)">
     <div class="msg-body">
       ${mediaHtml}
-      ${m.text ? `<div class="msg-text">${esc(m.text)}</div>` : (!fileId ? '<div class="msg-text" style="color:var(--muted)">[vazio]</div>' : '')}
+      ${textHtml}
       <div class="msg-meta">
         <span class="badge ${badges[m.message_type]||'badge-text'}">${labels[m.message_type]||m.message_type}</span>
         <span>${esc(m.from_user)}</span><span>${time}</span>
@@ -738,6 +816,22 @@ function renderMsg(m) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function toggleExpand(uid, btn) {
+  const el = document.getElementById(uid);
+  if (!el) return;
+  const msgItem = el.closest('.msg-item');
+  const cb = msgItem?.querySelector('input[type="checkbox"]');
+  const fullText = cb?.dataset?.text || '';
+  if (btn.textContent === 'Ver mais') {
+    el.textContent = fullText;
+    btn.textContent = 'Ver menos';
+  } else {
+    el.textContent = fullText.slice(0, 120) + '...';
+    btn.textContent = 'Ver mais';
+  }
+}
+
 function toggleMsg(cb) { const id = Number(cb.dataset.id); if (cb.checked) selectedMsgs.add(id); else selectedMsgs.delete(id); updateSelBtn(); }
 function updateSelBtn() {
   const btn = document.getElementById('btnAgendarSel');
@@ -794,14 +888,12 @@ async function confirmScheduleSelected() {
 
   try {
     for (const cb of checkboxes) {
-      const fileId = cb.dataset.fileid || null;
-      const isUrl = fileId && fileId.startsWith('http');
+      const mediaUrl = cb.dataset.mediaurl || null;
       const sched = await api('/schedules', { method: 'POST', body: {
         par_id: currentPar.id, origem: 'grupo',
         content_type: cb.dataset.type || 'text',
         content_text: cb.dataset.text || null,
-        content_file_id: fileId && !isUrl ? fileId : null,
-        content_media_url: isUrl ? fileId : null,
+        content_media_url: mediaUrl || null,
         scheduled_at, recurrence,
       }});
 
@@ -1460,6 +1552,7 @@ function showPanel(name) {
   if (nav) nav.classList.add('active');
   document.getElementById('topbarTitle').textContent = titles[name] || '';
   if (name === 'dashboard') loadDashboard();
+  if (name === 'feed') checkFeedSetup();
   if (name === 'config') renderPares();
   if (name === 'schedules') loadSchedules();
   if (name === 'composer') updatePreview();

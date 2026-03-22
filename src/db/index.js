@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS logs (
 // Migration: add columns if missing (safe for existing DBs)
 try { db.exec('ALTER TABLE schedules ADD COLUMN sendpulse_bot_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE schedules ADD COLUMN sendpulse_bot_nome TEXT'); } catch {}
+try { db.exec('ALTER TABLE messages ADD COLUMN telegram_media_url TEXT'); } catch {}
 
 // ── Pares ───────────────────────────────────────────────
 const insertPar = db.prepare(`
@@ -99,9 +100,11 @@ module.exports = {
 
   // Messages
   insertMessage(msg) {
-    const stmt = msg.created_at
-      ? db.prepare(`INSERT INTO messages (par_id, text, from_user, message_type, file_id, created_at) VALUES (@par_id, @text, @from_user, @message_type, @file_id, @created_at)`)
-      : db.prepare(`INSERT INTO messages (par_id, text, from_user, message_type, file_id) VALUES (@par_id, @text, @from_user, @message_type, @file_id)`);
+    const cols = ['par_id', 'text', 'from_user', 'message_type', 'file_id'];
+    if (msg.created_at) cols.push('created_at');
+    if (msg.telegram_media_url) cols.push('telegram_media_url');
+    const placeholders = cols.map(c => '@' + c).join(', ');
+    const stmt = db.prepare(`INSERT INTO messages (${cols.join(', ')}) VALUES (${placeholders})`);
     const info = stmt.run(msg);
     return db.prepare('SELECT * FROM messages WHERE id=?').get(info.lastInsertRowid);
   },

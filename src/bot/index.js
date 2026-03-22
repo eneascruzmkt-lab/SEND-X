@@ -3,11 +3,18 @@ const db = require('../db');
 
 let io = null;
 let pollingInterval = null;
+let telegrafBot = null;
 const lastSeenMsg = {}; // par_id -> last message id
 
 function start(socketIo) {
   io = socketIo;
 
+  // Method 1: Telegraf (if TELEGRAM_TOKEN is set) — captures ALL messages including media
+  if (process.env.TELEGRAM_TOKEN) {
+    startTelegraf();
+  }
+
+  // Method 2: SendPulse API polling — fallback for text messages
   pollingInterval = setInterval(async () => {
     try {
       const pares = db.getAllPares();
@@ -19,7 +26,6 @@ function start(socketIo) {
     }
   }, 15000);
 
-  // First poll immediately
   setTimeout(async () => {
     const pares = db.getAllPares();
     for (const par of pares) {
@@ -27,10 +33,146 @@ function start(socketIo) {
     }
   }, 3000);
 
-  console.log('[feed] polling iniciado (15s interval)');
+  console.log('[feed] polling SendPulse iniciado (15s)');
 }
 
+// ── Telegraf listener ───────────────────────────
+function startTelegraf() {
+  try {
+    const { Telegraf } = require('telegraf');
+    telegrafBot = new Telegraf(process.env.TELEGRAM_TOKEN);
+
+    // 'message' for groups, 'channel_post' for channels
+    telegrafBot.on(['message', 'channel_post'], async (ctx) => {
+      try {
+        const groupId = String(ctx.chat.id);
+        const par = db.getParByGroupId(groupId);
+        if (!par || !par.ativo) return;
+
+        const msg = ctx.message || ctx.channelPost || ctx.update?.channel_post;
+        if (!msg) return;
+
+        const msgType = detectTelegrafType(msg);
+        const fileId = extractTelegrafFileId(msg);
+        const text = msg.text || msg.caption || null;
+
+
+        // Download media to local uploads + get telegram public URL
+        let localPreview = null;
+        let publicMediaUrl = null;
+        if (fileId && (msgType === 'photo' || msgType === 'video')) {
+          try {
+            const result = await downloadTelegramFile(ctx, fileId, msgType);
+            localPreview = result.localPath;
+            publicMediaUrl = result.publicUrl;
+          } catch (e) {
+            console.error('[feed] download error:', e.message);
+          }
+        }
+
+        const msgData = {
+          par_id: par.id,
+          text,
+          from_user: ctx.from?.username || ctx.from?.first_name || ctx.chat?.title || 'canal',
+          message_type: msgType,
+          // file_id = local path for UI preview; store telegram URL in a data attribute
+          file_id: localPreview || fileId || null,
+          telegram_media_url: publicMediaUrl || null,
+        };
+
+        // Dedup by message_id
+        const existing = db.getMessages(par.id, 30);
+        const isDup = existing.some(e =>
+          e.text === msgData.text &&
+          e.file_id === msgData.file_id &&
+          e.message_type === msgData.message_type &&
+          e.created_at &&
+          (Date.now() - new Date(e.created_at).getTime()) < 120000
+        );
+        if (isDup) return;
+
+        const saved = db.insertMessage(msgData);
+        if (io) io.to(`par_${par.id}`).emit('new_message', saved);
+      } catch (err) {
+        console.error('[feed/telegraf] error:', err.message);
+      }
+    });
+
+    telegrafBot.launch({ dropPendingUpdates: true });
+    console.log('[feed] Telegraf bot iniciado — captura de midia ativa');
+  } catch (err) {
+    console.error('[feed] Telegraf error:', err.message);
+  }
+}
+
+async function downloadTelegramFile(ctx, fileId, type) {
+  const fs = require('fs');
+  const path = require('path');
+  const crypto = require('crypto');
+  const https = require('https');
+  const axios = require('axios');
+  const FormData = require('form-data');
+
+  const fileInfo = await ctx.telegram.getFile(fileId);
+  const filePath = fileInfo.file_path;
+  const ext = path.extname(filePath) || (type === 'photo' ? '.jpg' : '.mp4');
+  const filename = crypto.randomBytes(12).toString('hex') + ext;
+  const localPath = path.join(__dirname, '..', '..', 'public', 'uploads', filename);
+
+  const telegramUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${filePath}`;
+
+  // Download locally for UI preview
+  await new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(localPath);
+    https.get(telegramUrl, (res) => {
+      res.pipe(file);
+      file.on('finish', () => { file.close(); resolve(); });
+    }).on('error', reject);
+  });
+
+  // Upload to freeimage.host for public URL (SendPulse needs publicly accessible URL)
+  let publicUrl = telegramUrl; // fallback
+  try {
+    const form = new FormData();
+    form.append('source', fs.createReadStream(localPath));
+    form.append('type', 'file');
+    form.append('action', 'upload');
+    const res = await axios.post(
+      'https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5',
+      form, { headers: form.getHeaders(), timeout: 30000 }
+    );
+    if (res.data?.image?.url) {
+      publicUrl = res.data.image.url;
+      console.log('[feed] image uploaded:', publicUrl);
+    }
+  } catch (e) {
+    console.error('[feed] freeimage upload failed, using telegram URL:', e.message);
+  }
+
+  return { localPath: `/uploads/${filename}`, publicUrl };
+}
+
+function detectTelegrafType(message) {
+  if (message.photo && message.photo.length > 0) return 'photo';
+  if (message.video) return 'video';
+  if (message.document) return 'document';
+  if (message.animation) return 'photo'; // GIFs
+  return 'text';
+}
+
+function extractTelegrafFileId(message) {
+  if (message.photo && message.photo.length > 0) return message.photo[message.photo.length - 1].file_id;
+  if (message.video) return message.video.file_id;
+  if (message.document) return message.document.file_id;
+  if (message.animation) return message.animation.file_id;
+  return null;
+}
+
+// ── SendPulse API polling (text fallback) ───────
 async function pollParMessages(par) {
+  // Skip if Telegraf is active for this group — it handles everything
+  if (telegrafBot) return;
+
   try {
     const contacts = await sendpulse.listContacts(par.sendpulse_bot_id);
     const groupContact = contacts.find(c => c.type === 3);
@@ -52,12 +194,10 @@ async function pollParMessages(par) {
       : msgs.slice(0, 10);
 
     if (newMsgs.length === 0) return;
-
     lastSeenMsg[par.id] = msgs[0].id;
 
     for (const m of newMsgs.reverse()) {
       const media = extractMedia(m.data);
-
       const msgData = {
         par_id: par.id,
         text: m.data?.text || m.data?.caption || null,
@@ -67,7 +207,6 @@ async function pollParMessages(par) {
         created_at: m.created_at ? m.created_at.replace('+00:00', '').replace('T', ' ') : undefined,
       };
 
-      // Dedup
       const existing = db.getMessages(par.id, 50);
       const isDuplicate = existing.some(e =>
         e.text === msgData.text &&
@@ -87,40 +226,27 @@ async function pollParMessages(par) {
   }
 }
 
-// Extract media URL from Telegram Bot API message structure
-// data.photo = array of PhotoSize (pick largest) or string URL
-// data.video = Video object with file_id or string URL
-// data.document = Document object
 function extractMedia(data) {
   if (!data) return { type: 'text', url: null };
-
-  // Photo: can be array (Telegram format) or string URL (SendPulse stored)
   if (data.photo) {
     if (typeof data.photo === 'string') return { type: 'photo', url: data.photo };
-    if (Array.isArray(data.photo) && data.photo.length > 0) {
-      const largest = data.photo[data.photo.length - 1];
-      return { type: 'photo', url: largest.file_id || largest.url || null };
-    }
-    if (data.photo.file_id) return { type: 'photo', url: data.photo.file_id };
-    if (data.photo.url) return { type: 'photo', url: data.photo.url };
-    return { type: 'photo', url: null };
+    if (Array.isArray(data.photo) && data.photo.length > 0) return { type: 'photo', url: data.photo[data.photo.length - 1].file_id || null };
+    return { type: 'photo', url: data.photo.file_id || data.photo.url || null };
   }
-
   if (data.video) {
     if (typeof data.video === 'string') return { type: 'video', url: data.video };
     return { type: 'video', url: data.video.file_id || data.video.url || null };
   }
-
   if (data.document) {
     if (typeof data.document === 'string') return { type: 'document', url: data.document };
     return { type: 'document', url: data.document.file_id || data.document.url || null };
   }
-
   return { type: 'text', url: null };
 }
 
 function stop() {
   if (pollingInterval) clearInterval(pollingInterval);
+  if (telegrafBot) telegrafBot.stop();
 }
 
 module.exports = { start, stop };

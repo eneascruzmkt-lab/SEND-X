@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEND X</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root {
+  --bg: #0c0f0c;
+  --surface: #141a14;
+  --surface2: #1c261c;
+  --surface3: #243024;
+  --border: #2a3a2a;
+  --border-light: #223022;
+  --text: #e2efe2;
+  --text-secondary: #a3bfa3;
+  --muted: #6b8a6b;
+  --primary: #22c55e;
+  --primary-dark: #4ade80;
+  --primary-light: #166534;
+  --primary-bg: #0f2a1a;
+  --accent: #86efac;
+  --green: #22c55e;
+  --green-light: #0f2a1a;
+  --red: #f87171;
+  --red-light: #2a1010;
+  --orange: #fbbf24;
+  --orange-light: #2a2210;
+  --blue: #60a5fa;
+  --blue-light: #10182a;
+  --sidebar-w: 260px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.2);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,.5);
+  --transition: 150ms ease;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+button { cursor: pointer; font-family: inherit; font-size: inherit; }
+input, textarea, select { font-family: inherit; font-size: 14px; }
+
+/* ── Layout ──────────────────────────────────── */
+.app { display: flex; height: 100vh; }
+
+/* Sidebar */
+.sidebar { width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 20px; border-bottom: 1px solid var(--border-light); }
+.sidebar-header h1 { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -.5px; }
+.sidebar-header p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.sidebar-section { padding: 12px 16px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); color: var(--text-secondary); font-size: 13px; font-weight: 500; border: none; background: none; width: 100%; text-align: left; transition: all var(--transition); }
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: var(--primary-bg); color: var(--primary-dark); font-weight: 600; }
+.nav-item .icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.nav-item .nav-badge { margin-left: auto; background: var(--primary); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+
+.sidebar-par { padding: 12px 16px; border-top: 1px solid var(--border-light); }
+.sidebar-par label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 6px; }
+.sidebar-par select { width: 100%; background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 7px 10px; border-radius: var(--radius); font-size: 13px; }
+
+/* Main */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Topbar */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; }
+.topbar h2 { font-size: 18px; font-weight: 700; color: var(--text); }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+/* Content */
+.content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── Cards & Components ──────────────────────── */
+.card { background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.card-header { padding: 16px 20px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; justify-content: space-between; }
+.card-header h3 { font-size: 14px; font-weight: 600; }
+.card-body { padding: 20px; }
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: .2px; }
+.badge-live { background: var(--red); color: #fff; animation: pulse 2s ease infinite; gap: 4px; }
+.badge-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+.badge-text { background: var(--surface3); color: var(--muted); }
+.badge-photo { background: var(--blue-light); color: var(--blue); }
+.badge-video { background: #1a1030; color: #a78bfa; }
+.badge-pendente { background: var(--orange-light); color: var(--orange); }
+.badge-enviado { background: var(--green-light); color: var(--green); }
+.badge-erro { background: var(--red-light); color: var(--red); }
+.badge-grupo { background: var(--blue-light); color: var(--blue); }
+.badge-manual { background: #1a1030; color: #a78bfa; }
+.badge-rec { background: var(--orange-light); color: var(--orange); border: 1px solid #3a3010; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+
+/* Stats row */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow-sm); }
+.stat-card .stat-val { font-size: 28px; font-weight: 800; line-height: 1; }
+.stat-card .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.stat-green .stat-val { color: var(--green); }
+.stat-orange .stat-val { color: var(--orange); }
+.stat-red .stat-val { color: var(--red); }
+.stat-blue .stat-val { color: var(--blue); }
+
+/* ── Feed ────────────────────────────────────── */
+.feed-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.feed-toolbar-left { display: flex; align-items: center; gap: 12px; }
+.feed-toolbar-left .badge-live { padding: 4px 10px; font-size: 12px; }
+.feed-count { font-size: 13px; color: var(--muted); }
+
+.msg-list { display: flex; flex-direction: column; gap: 4px; }
+.msg-item { background: var(--surface); border: 1px solid var(--border-light); padding: 12px 16px; border-radius: var(--radius); display: flex; align-items: flex-start; gap: 12px; transition: all var(--transition); }
+.msg-item:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+.msg-item input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--primary); flex-shrink: 0; }
+.msg-body { flex: 1; min-width: 0; }
+.msg-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+.msg-meta { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+
+/* ── Schedules ───────────────────────────────── */
+.filters { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-btn { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 500; transition: all var(--transition); }
+.filter-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
+.filter-btn.active { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
+
+.sched-item { background: var(--surface); border: 1px solid var(--border-light); padding: 14px 18px; border-radius: var(--radius); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 16px; transition: all var(--transition); }
+.sched-item:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+.sched-info { flex: 1; min-width: 0; }
+.sched-text { font-size: 14px; margin-bottom: 6px; white-space: pre-wrap; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sched-meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sched-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.sched-actions button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-secondary); padding: 5px 12px; border-radius: var(--radius); font-size: 12px; font-weight: 500; transition: all var(--transition); }
+.sched-actions button:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
+
+/* ── Composer (Campaign-style) ───────────────── */
+.composer-layout { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .composer-layout { grid-template-columns: 1fr; } }
+
+.composer-editor { display: flex; flex-direction: column; gap: 16px; }
+
+.composer-step { background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+.composer-step-header { padding: 14px 18px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px; }
+.step-number { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.composer-step-header span { font-size: 13px; font-weight: 600; color: var(--text); }
+.composer-step-body { padding: 18px; }
+
+/* Message blocks */
+.msg-blocks { display: flex; flex-direction: column; gap: 12px; }
+.msg-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; background: var(--surface2); position: relative; }
+.msg-block-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.msg-block-type { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
+.msg-block-remove { background: none; border: none; color: var(--muted); font-size: 18px; padding: 0 4px; line-height: 1; }
+.msg-block-remove:hover { color: var(--red); }
+
+.add-element-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.add-el-btn { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 500; transition: all var(--transition); }
+.add-el-btn:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
+.add-el-btn .el-icon { font-size: 16px; }
+
+/* Buttons editor */
+.buttons-list { display: flex; flex-direction: column; gap: 8px; }
+.btn-row { display: flex; gap: 8px; align-items: center; }
+.btn-row input { flex: 1; background: var(--surface); border: 1px solid var(--border); padding: 7px 10px; border-radius: var(--radius); color: var(--text); }
+.btn-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(34,197,94,.12); }
+.btn-row-remove { background: none; border: none; color: var(--muted); font-size: 16px; padding: 4px; }
+.btn-row-remove:hover { color: var(--red); }
+.add-btn-link { background: none; border: none; color: var(--primary-dark); font-size: 12px; font-weight: 600; padding: 4px 0; display: flex; align-items: center; gap: 4px; }
+.add-btn-link:hover { color: var(--primary); }
+
+/* Upload zone */
+.upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 20px; text-align: center; cursor: pointer; transition: all var(--transition); position: relative; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-bg); }
+.upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.upload-zone .uz-icon { font-size: 28px; margin-bottom: 6px; opacity: .5; }
+.upload-zone .uz-text { font-size: 12px; color: var(--muted); }
+.upload-zone .uz-text strong { color: var(--primary); }
+.upload-zone .uz-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.upload-preview { margin-top: 10px; position: relative; display: inline-block; }
+.upload-preview img, .upload-preview video { max-width: 100%; max-height: 180px; border-radius: var(--radius); display: block; }
+.upload-preview .up-remove { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.7); color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.upload-progress { margin-top: 8px; height: 4px; background: var(--surface3); border-radius: 2px; overflow: hidden; }
+.upload-progress .bar { height: 100%; background: var(--primary); transition: width 200ms; }
+
+/* Preview phone */
+.preview-container { position: sticky; top: 24px; }
+.preview-phone { background: #0a0f0a; border: 1px solid var(--border); border-radius: 28px; padding: 12px; box-shadow: var(--shadow-lg); }
+.preview-phone-screen { background: #0d120d; border-radius: 18px; min-height: 480px; display: flex; flex-direction: column; overflow: hidden; }
+.preview-phone-header { background: #111a11; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+.preview-phone-header .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
+.preview-phone-header .name { color: #e6edf3; font-size: 13px; font-weight: 600; }
+.preview-phone-body { flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; }
+.preview-bubble { background: #1a2e1a; color: var(--text); border-radius: 12px 12px 12px 4px; padding: 10px 14px; max-width: 90%; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.preview-bubble img { width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; }
+.preview-media-placeholder { width: 100%; height: 120px; border-radius: 8px; background: var(--surface3); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 24px; margin-bottom: 6px; }
+.preview-bubble .preview-caption { margin-top: 4px; }
+.preview-btn-row { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.preview-inline-btn { display: block; text-align: center; padding: 7px; background: transparent; border: 1px solid #22c55e; color: #22c55e; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 500; }
+.preview-time { font-size: 10px; color: var(--muted); text-align: right; margin-top: 2px; }
+.preview-label { text-align: center; font-size: 11px; color: var(--muted); padding: 8px; }
+
+/* ── Buttons ─────────────────────────────────── */
+.btn { padding: 8px 18px; border-radius: var(--radius); border: none; font-size: 13px; font-weight: 600; transition: all var(--transition); display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary-dark); }
+.btn-danger { background: var(--red-light); color: var(--red); border: 1px solid #3a1a1a; }
+.btn-danger:hover { background: var(--red); color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+/* ── Forms ────────────────────────────────────── */
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; }
+.form-group input, .form-group textarea, .form-group select {
+  width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  padding: 9px 12px; border-radius: var(--radius); transition: border-color var(--transition), box-shadow var(--transition);
+}
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(34,197,94,.1); }
+.form-group textarea { resize: vertical; min-height: 100px; }
+.form-row { display: flex; gap: 12px; }
+.form-row > .form-group { flex: 1; }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* ── Modal ────────────────────────────────────── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+.modal-overlay.hidden { display: none; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; width: 90%; max-width: 480px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+
+/* ── Config ───────────────────────────────────── */
+.pares-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.par-card { background: var(--surface); border: 1px solid var(--border-light); padding: 16px; border-radius: var(--radius-lg); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); transition: all var(--transition); }
+.par-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+.par-card .par-name { font-weight: 600; font-size: 14px; }
+.par-card .par-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.config-form { max-width: 480px; background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 20px; }
+
+/* Send type options */
+.send-type-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.send-type-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all var(--transition); }
+.send-type-option:hover { border-color: var(--primary); }
+.send-type-option.selected { border-color: var(--primary); background: var(--primary-bg); }
+.send-type-option input[type="radio"] { margin-top: 2px; accent-color: var(--primary); }
+.send-type-content { display: flex; flex-direction: column; gap: 2px; }
+.send-type-content strong { font-size: 13px; color: var(--text); }
+.send-type-content span { font-size: 11px; color: var(--muted); }
+
+.empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
+.empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+.empty-state p { font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>SEND X</h1>
+      <p>Agendamento SendPulse</p>
+    </div>
+    <div class="sidebar-section">Menu</div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="dashboard" onclick="showPanel('dashboard')">
+        <span class="icon">&#9632;</span> Dashboard
+      </button>
+      <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
+        <span class="icon">&#9673;</span> Feed ao vivo
+        <span class="nav-badge badge-live" style="padding:2px 6px;font-size:9px;animation:pulse 2s ease infinite">LIVE</span>
+      </button>
+      <button class="nav-item" data-tab="composer" onclick="showPanel('composer')">
+        <span class="icon">&#9998;</span> Nova campanha
+      </button>
+      <button class="nav-item" data-tab="schedules" onclick="showPanel('schedules')">
+        <span class="icon">&#128339;</span> Historico
+      </button>
+      <button class="nav-item" data-tab="config" onclick="showPanel('config')">
+        <span class="icon">&#9881;</span> Configuracoes
+      </button>
+    </nav>
+    <div class="sidebar-par">
+      <label>Par ativo</label>
+      <select id="parSelect" onchange="switchPar()"></select>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbarTitle">Dashboard</h2>
+      <div class="topbar-right" id="topbarRight"></div>
+    </div>
+
+    <div class="content">
+      <!-- Dashboard -->
+      <div class="panel active" id="panel-dashboard">
+        <div class="stats-row" id="dashCounters"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
+          <div class="card">
+            <div class="card-header"><h3>Ultimos enviados</h3></div>
+            <div class="card-body" id="dashSent" style="max-height:300px;overflow-y:auto"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Pendentes</h3></div>
+            <div class="card-body" id="dashPending" style="max-height:300px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px" id="dashErrorsCard" style="display:none">
+          <div class="card-header"><h3>Erros recentes</h3></div>
+          <div class="card-body" id="dashErrors" style="max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- Feed -->
+      <div class="panel" id="panel-feed">
+        <div class="feed-toolbar">
+          <div class="feed-toolbar-left">
+            <span class="badge badge-live">AO VIVO</span>
+            <span class="feed-count" id="msgCount">0 mensagens</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btnAgendarSel" disabled onclick="openScheduleModal()">Agendar selecionadas</button>
+        </div>
+        <div class="msg-list" id="msgList">
+          <div class="empty-state"><div class="empty-icon">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>
+        </div>
+      </div>
+
+      <!-- Historico -->
+      <div class="panel" id="panel-schedules">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <div class="filters" id="schedFilters" style="margin-bottom:0">
+            <button class="filter-btn active" onclick="filterSched('all',this)">Todos</button>
+            <button class="filter-btn" onclick="filterSched('pendente',this)">Pendentes</button>
+            <button class="filter-btn" onclick="filterSched('enviado',this)">Enviados</button>
+            <button class="filter-btn" onclick="filterSched('erro',this)">Erros</button>
+          </div>
+          <select id="schedBotFilter" onchange="renderSchedules()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">
+            <option value="">Todos os bots</option>
+          </select>
+        </div>
+        <div id="schedList"></div>
+      </div>
+
+      <!-- Composer -->
+      <div class="panel" id="panel-composer">
+        <div class="composer-layout">
+          <div class="composer-editor">
+
+            <!-- Step 1: Bot -->
+            <div class="composer-step">
+              <div class="composer-step-header">
+                <span class="step-number">1</span>
+                <span>Selecione o bot de destino</span>
+              </div>
+              <div class="composer-step-body">
+                <select id="compBot" onchange="updatePreview()" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px">
+                  <option value="">Carregando bots...</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Step 2: Message content -->
+            <div class="composer-step">
+              <div class="composer-step-header">
+                <span class="step-number">2</span>
+                <span>Conteudo da mensagem</span>
+              </div>
+              <div class="composer-step-body">
+                <div class="msg-blocks" id="msgBlocks">
+                  <div class="msg-block" data-block="text">
+                    <div class="msg-block-header">
+                      <span class="msg-block-type">Texto</span>
+                    </div>
+                    <textarea id="compText" rows="4" placeholder="Digite sua mensagem... (ate 2.000 caracteres)" maxlength="2000" oninput="updatePreview();updateCharCount()" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:9px 12px;border-radius:var(--radius);resize:vertical;min-height:100px;color:var(--text)"></textarea>
+                    <div class="form-hint"><span id="charCount">0</span>/2000 caracteres</div>
+                  </div>
+                </div>
+                <div class="add-element-bar" style="margin-top:12px">
+                  <button class="add-el-btn" onclick="addMediaBlock('photo')" id="addPhotoBtn">
+                    <span class="el-icon">&#128247;</span> Imagem
+                  </button>
+                  <button class="add-el-btn" onclick="addMediaBlock('video')" id="addVideoBtn">
+                    <span class="el-icon">&#127909;</span> Video
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3: Buttons -->
+            <div class="composer-step">
+              <div class="composer-step-header">
+                <span class="step-number">3</span>
+                <span>Botoes (opcional)</span>
+              </div>
+              <div class="composer-step-body">
+                <div class="buttons-list" id="btnEditor">
+                  <div class="btn-row">
+                    <input type="text" placeholder="Texto do botao" class="btn-label" oninput="updatePreview()">
+                    <input type="url" placeholder="https://..." class="btn-url" oninput="updatePreview()">
+                    <button class="btn-row-remove" onclick="removeBtnRow(this)" title="Remover">&times;</button>
+                  </div>
+                </div>
+                <button class="add-btn-link" onclick="addBtnRow()" id="addBtnBtn">+ Adicionar botao</button>
+                <div class="form-hint">Maximo 3 botoes. Tipo: URL externa.</div>
+              </div>
+            </div>
+
+            <!-- Step 4: Envio -->
+            <div class="composer-step">
+              <div class="composer-step-header">
+                <span class="step-number">4</span>
+                <span>Quando enviar</span>
+              </div>
+              <div class="composer-step-body">
+                <div class="send-type-options">
+                  <label class="send-type-option selected" data-type="unico">
+                    <input type="radio" name="sendType" value="unico" checked onchange="sendTypeChanged()">
+                    <div class="send-type-content">
+                      <strong>Envio unico</strong>
+                      <span>Agendar para uma data e horario especificos</span>
+                    </div>
+                  </label>
+                  <label class="send-type-option" data-type="diario">
+                    <input type="radio" name="sendType" value="diario" onchange="sendTypeChanged()">
+                    <div class="send-type-content">
+                      <strong>Diario</strong>
+                      <span>Todos os dias no mesmo horario</span>
+                    </div>
+                  </label>
+                  <label class="send-type-option" data-type="diasuteis">
+                    <input type="radio" name="sendType" value="diasuteis" onchange="sendTypeChanged()">
+                    <div class="send-type-content">
+                      <strong>Dias uteis</strong>
+                      <span>Segunda a sexta no mesmo horario</span>
+                    </div>
+                  </label>
+                  <label class="send-type-option" data-type="semanal">
+                    <input type="radio" name="sendType" value="semanal" onchange="sendTypeChanged()">
+                    <div class="send-type-content">
+                      <strong>Semanal</strong>
+                      <span>Uma vez por semana no mesmo dia e horario</span>
+                    </div>
+                  </label>
+                </div>
+
+                <div id="schedFields" style="margin-top:14px">
+                  <div class="form-row">
+                    <div class="form-group" id="dateGroup">
+                      <label>Data</label>
+                      <input type="date" id="compDate">
+                    </div>
+                    <div class="form-group">
+                      <label>Horario</label>
+                      <input type="time" id="compTime">
+                    </div>
+                  </div>
+                  <div class="form-hint" id="schedHint">Escolha a data e horario do envio.</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:10px;padding-top:4px">
+              <button class="btn btn-primary" onclick="submitComposer(false)" style="padding:10px 28px;font-size:14px">Agendar campanha</button>
+              <button class="btn btn-primary" onclick="submitComposer(true)" style="padding:10px 28px;font-size:14px;background:var(--green)">Enviar agora</button>
+              <button class="btn btn-secondary" onclick="resetComposer()">Limpar</button>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="preview-container">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Preview</div>
+            <div class="preview-phone">
+              <div class="preview-phone-screen">
+                <div class="preview-phone-header">
+                  <div class="avatar">B</div>
+                  <div class="name" id="previewBotName">Bot</div>
+                </div>
+                <div class="preview-phone-body" id="previewBody">
+                  <div class="preview-label">A mensagem aparecera aqui</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Config -->
+      <div class="panel" id="panel-config">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">Pares configurados</h3>
+        <div class="pares-grid" id="paresList"></div>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">Criar novo par</h3>
+        <div class="config-form">
+          <div class="form-group">
+            <label>Nome do par</label>
+            <input type="text" id="cfgNome" placeholder="Ex: Grupo VIP + Bot Vendas">
+          </div>
+          <div class="form-group">
+            <label>Telegram Group ID</label>
+            <input type="text" id="cfgGroupId" placeholder="-100xxxxxxxxxx">
+          </div>
+          <div class="form-group">
+            <label>Bot SendPulse</label>
+            <select id="cfgBotSelect"><option value="">Carregando bots...</option></select>
+          </div>
+          <button class="btn btn-primary" onclick="createPar()">Criar par</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule modal -->
+<div class="modal-overlay hidden" id="schedModal">
+  <div class="modal">
+    <h3>Enviar mensagens selecionadas</h3>
+    <div id="schedModalSummary" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <label class="send-type-option selected" data-type="agora" style="flex:1;margin:0" onclick="modalModeChanged('agora')">
+        <input type="radio" name="modalMode" value="agora" checked>
+        <div class="send-type-content"><strong>Enviar agora</strong><span>Disparo imediato</span></div>
+      </label>
+      <label class="send-type-option" data-type="agendar" style="flex:1;margin:0" onclick="modalModeChanged('agendar')">
+        <input type="radio" name="modalMode" value="agendar">
+        <div class="send-type-content"><strong>Agendar</strong><span>Escolher data e hora</span></div>
+      </label>
+    </div>
+
+    <div id="modalSchedFields" style="display:none">
+      <div class="form-group">
+        <label>Tipo de envio</label>
+        <select id="modalRec" onchange="modalRecChanged()">
+          <option value="">Envio unico</option>
+          <option value="diario">Diario</option>
+          <option value="diasuteis">Dias uteis</option>
+          <option value="semanal">Semanal</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group" id="modalDateGroup"><label>Data</label><input type="date" id="modalDate"></div>
+        <div class="form-group"><label>Hora</label><input type="time" id="modalTime"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-secondary btn-sm" onclick="closeScheduleModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmScheduleSelected()" id="modalConfirmBtn">Enviar agora</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-overlay hidden" id="editModal">
+  <div class="modal" style="max-width:600px">
+    <h3>Editar campanha</h3>
+    <input type="hidden" id="editId">
+
+    <div class="form-group">
+      <label>Bot de destino</label>
+      <select id="editBot" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)"></select>
+    </div>
+
+    <div class="form-group">
+      <label>Tipo de midia</label>
+      <select id="editType" onchange="editTypeChanged()" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)">
+        <option value="text">Texto</option>
+        <option value="photo">Imagem</option>
+        <option value="video">Video</option>
+      </select>
+    </div>
+
+    <div class="form-group" id="editMediaGroup" style="display:none">
+      <label>Midia</label>
+      <div class="upload-zone" id="editUploadZone"
+        ondragover="event.preventDefault();this.classList.add('dragover')"
+        ondragleave="this.classList.remove('dragover')"
+        ondrop="event.preventDefault();this.classList.remove('dragover');handleEditUpload(event.dataTransfer.files[0])">
+        <input type="file" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.gif" onchange="handleEditUpload(this.files[0])">
+        <div class="uz-icon">&#128206;</div>
+        <div class="uz-text">Arraste ou <strong>clique para selecionar</strong></div>
+        <div class="uz-hint">JPG, PNG (2MB) ou MP4 (20MB)</div>
+      </div>
+      <div id="editUploadPreview"></div>
+      <div id="editUploadProgress" class="upload-progress" style="display:none"><div class="bar" style="width:0%"></div></div>
+      <input type="hidden" id="editMediaUrl" value="">
+    </div>
+
+    <div class="form-group">
+      <label id="editTextLabel">Texto</label>
+      <textarea id="editText" rows="4" maxlength="2000"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Botoes inline (max 3)</label>
+      <div class="buttons-list" id="editBtnEditor">
+        <div class="btn-row">
+          <input type="text" placeholder="Texto do botao" class="btn-label">
+          <input type="url" placeholder="https://..." class="btn-url">
+          <button class="btn-row-remove" onclick="editRemoveBtnRow(this)">&times;</button>
+        </div>
+      </div>
+      <button class="add-btn-link" onclick="editAddBtnRow()" id="editAddBtnBtn">+ Adicionar botao</button>
+    </div>
+
+    <div class="form-group">
+      <label>Quando enviar</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <label class="send-type-option selected" data-type="unico" style="margin:0">
+          <input type="radio" name="editSendType" value="unico" checked onchange="editSendTypeChanged()">
+          <div class="send-type-content"><strong>Unico</strong><span>Data e hora</span></div>
+        </label>
+        <label class="send-type-option" data-type="diario" style="margin:0">
+          <input type="radio" name="editSendType" value="diario" onchange="editSendTypeChanged()">
+          <div class="send-type-content"><strong>Diario</strong><span>Mesmo horario</span></div>
+        </label>
+        <label class="send-type-option" data-type="diasuteis" style="margin:0">
+          <input type="radio" name="editSendType" value="diasuteis" onchange="editSendTypeChanged()">
+          <div class="send-type-content"><strong>Dias uteis</strong><span>Seg-sex</span></div>
+        </label>
+        <label class="send-type-option" data-type="semanal" style="margin:0">
+          <input type="radio" name="editSendType" value="semanal" onchange="editSendTypeChanged()">
+          <div class="send-type-content"><strong>Semanal</strong><span>Mesmo dia</span></div>
+        </label>
+      </div>
+      <div class="form-row">
+        <div class="form-group" id="editDateGroup"><label>Data</label><input type="date" id="editDate"></div>
+        <div class="form-group"><label>Horario</label><input type="time" id="editTime"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-secondary btn-sm" onclick="closeEditModal()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="saveEdit()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let currentPar = null;
+let pares = [];
+let botsList = [];
+let schedules = [];
+let schedFilter = 'all';
+let selectedMsgs = new Set();
+let mediaBlock = null;
+
+const titles = { dashboard: 'Dashboard', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+
+// ── API ─────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch('/api' + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  return res.json();
+}
+
+// ── Init ────────────────────────────────────────
+async function init() {
+  pares = await api('/pares');
+  renderParSelect();
+  if (pares.length > 0) {
+    currentPar = pares[0];
+    document.getElementById('parSelect').value = currentPar.id;
+    switchPar();
+  }
+  loadBots();
+  loadDashboard();
+}
+
+function renderParSelect() {
+  const opts = pares.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+  document.getElementById('parSelect').innerHTML = opts || '<option>Nenhum par</option>';
+}
+
+async function switchPar() {
+  const id = Number(document.getElementById('parSelect').value);
+  const par = pares.find(p => p.id === id);
+  if (!par) return;
+  if (currentPar) socket.emit('leave_par', currentPar.id);
+  currentPar = par;
+  socket.emit('join_par', currentPar.id);
+  await Promise.all([loadFeed(), loadSchedules(), loadDashboard()]);
+}
+
+// ── Feed ────────────────────────────────────────
+async function loadFeed() {
+  if (!currentPar) return;
+  const msgs = await api(`/messages?par_id=${currentPar.id}`);
+  const list = document.getElementById('msgList');
+  if (msgs.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>';
+  } else {
+    list.innerHTML = msgs.map(renderMsg).join('');
+  }
+  document.getElementById('msgCount').textContent = `${msgs.length} mensagens`;
+  selectedMsgs.clear();
+  updateSelBtn();
+}
+
+function renderMsg(m) {
+  const badges = { text:'badge-text', photo:'badge-photo', video:'badge-video', document:'badge-text' };
+  const labels = { text:'texto', photo:'imagem', video:'video', document:'doc' };
+  const time = m.created_at ? m.created_at.slice(11, 16) : '';
+  const fileId = m.file_id || '';
+  const isUrl = fileId.startsWith('http');
+
+  let mediaHtml = '';
+  if (m.message_type === 'photo' && fileId) {
+    mediaHtml = isUrl
+      ? `<img src="${esc(fileId)}" style="max-width:200px;max-height:140px;border-radius:6px;margin-bottom:6px;display:block" onerror="this.style.display='none'">`
+      : `<div style="background:var(--surface3);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:var(--muted)">&#128247; Imagem</div>`;
+  } else if (m.message_type === 'video' && fileId) {
+    mediaHtml = isUrl
+      ? `<video src="${esc(fileId)}" style="max-width:200px;max-height:140px;border-radius:6px;margin-bottom:6px;display:block" controls></video>`
+      : `<div style="background:var(--surface3);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:var(--muted)">&#127909; Video</div>`;
+  }
+
+  return `<div class="msg-item">
+    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(m.text||'')}" data-fileid="${esc(fileId)}" onchange="toggleMsg(this)">
+    <div class="msg-body">
+      ${mediaHtml}
+      ${m.text ? `<div class="msg-text">${esc(m.text)}</div>` : (!fileId ? '<div class="msg-text" style="color:var(--muted)">[vazio]</div>' : '')}
+      <div class="msg-meta">
+        <span class="badge ${badges[m.message_type]||'badge-text'}">${labels[m.message_type]||m.message_type}</span>
+        <span>${esc(m.from_user)}</span><span>${time}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function toggleMsg(cb) { const id = Number(cb.dataset.id); if (cb.checked) selectedMsgs.add(id); else selectedMsgs.delete(id); updateSelBtn(); }
+function updateSelBtn() {
+  const btn = document.getElementById('btnAgendarSel');
+  btn.disabled = selectedMsgs.size === 0;
+  btn.textContent = selectedMsgs.size > 0 ? `Agendar selecionadas (${selectedMsgs.size})` : 'Agendar selecionadas';
+}
+
+// ── Schedule modal (feed) ───────────────────────
+function openScheduleModal() {
+  if (selectedMsgs.size === 0) return;
+  document.getElementById('schedModalSummary').textContent = `${selectedMsgs.size} mensagem(ns) selecionada(s)`;
+  const now = new Date();
+  document.getElementById('modalDate').value = now.toISOString().slice(0, 10);
+  document.getElementById('modalTime').value = now.toTimeString().slice(0, 5);
+  modalModeChanged('agora');
+  document.querySelector('input[name="modalMode"][value="agora"]').checked = true;
+  document.getElementById('schedModal').classList.remove('hidden');
+}
+function closeScheduleModal() { document.getElementById('schedModal').classList.add('hidden'); }
+
+function modalModeChanged(mode) {
+  document.querySelectorAll('#schedModal .send-type-option').forEach(el => el.classList.remove('selected'));
+  document.querySelector(`#schedModal .send-type-option[data-type="${mode}"]`).classList.add('selected');
+  document.getElementById('modalSchedFields').style.display = mode === 'agendar' ? 'block' : 'none';
+  document.getElementById('modalConfirmBtn').textContent = mode === 'agora' ? 'Enviar agora' : 'Agendar';
+  if (mode === 'agendar') modalRecChanged();
+}
+
+function modalRecChanged() {
+  const rec = document.getElementById('modalRec').value;
+  document.getElementById('modalDateGroup').style.display = (rec === 'diario' || rec === 'diasuteis') ? 'none' : '';
+}
+
+async function confirmScheduleSelected() {
+  const mode = document.querySelector('input[name="modalMode"]:checked')?.value || 'agora';
+  const checkboxes = document.querySelectorAll('#msgList input[type="checkbox"]:checked');
+  if (checkboxes.length === 0) return;
+
+  let scheduled_at, recurrence = null;
+  if (mode === 'agendar') {
+    const rec = document.getElementById('modalRec').value || '';
+    const date = document.getElementById('modalDate').value;
+    const time = document.getElementById('modalTime').value;
+    if (!time) return alert('Informe o horario');
+    if ((rec === '' || rec === 'semanal') && !date) return alert('Informe a data');
+    recurrence = rec || null;
+    scheduled_at = calcScheduledAt(rec || 'unico', date, time);
+  } else {
+    scheduled_at = new Date().toISOString().slice(0, 19);
+  }
+
+  const btn = document.getElementById('modalConfirmBtn');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  try {
+    for (const cb of checkboxes) {
+      const fileId = cb.dataset.fileid || null;
+      const isUrl = fileId && fileId.startsWith('http');
+      const sched = await api('/schedules', { method: 'POST', body: {
+        par_id: currentPar.id, origem: 'grupo',
+        content_type: cb.dataset.type || 'text',
+        content_text: cb.dataset.text || null,
+        content_file_id: fileId && !isUrl ? fileId : null,
+        content_media_url: isUrl ? fileId : null,
+        scheduled_at, recurrence,
+      }});
+
+      if (mode === 'agora' && sched.id) {
+        await api(`/schedules/${sched.id}/send`, { method: 'POST' });
+      }
+    }
+    closeScheduleModal(); selectedMsgs.clear(); updateSelBtn(); loadSchedules(); loadDashboard();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = mode === 'agora' ? 'Enviar agora' : 'Agendar';
+  }
+}
+
+async function sendNow(id) {
+  if (!confirm('Enviar agora?')) return;
+  try {
+    await api(`/schedules/${id}/send`, { method: 'POST' });
+    loadSchedules(); loadDashboard();
+  } catch (err) {
+    alert('Erro ao enviar');
+    loadSchedules();
+  }
+}
+
+// ── Schedules ───────────────────────────────────
+async function loadSchedules() {
+  schedules = await api('/schedules');
+  populateBotFilter();
+  renderSchedules();
+}
+
+function populateBotFilter() {
+  const sel = document.getElementById('schedBotFilter');
+  const current = sel.value;
+  const bots = new Map();
+  schedules.forEach(s => {
+    if (s.sendpulse_bot_nome) bots.set(s.sendpulse_bot_id || s.sendpulse_bot_nome, s.sendpulse_bot_nome);
+  });
+  sel.innerHTML = '<option value="">Todos os bots</option>' + [...bots.entries()].map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('');
+  sel.value = current;
+}
+
+function filterSched(f, btn) {
+  schedFilter = f;
+  document.querySelectorAll('#schedFilters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderSchedules();
+}
+
+function renderSchedules() {
+  let list = schedules;
+  const botFilter = document.getElementById('schedBotFilter').value;
+  if (['pendente','enviado','erro'].includes(schedFilter)) list = list.filter(s => s.status === schedFilter);
+  if (botFilter) list = list.filter(s => (s.sendpulse_bot_id || s.sendpulse_bot_nome) === botFilter);
+  const el = document.getElementById('schedList');
+  if (list.length === 0) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128197;</div><p>Nenhum registro encontrado.</p></div>'; return; }
+  el.innerHTML = list.map(s => {
+    const dt = s.scheduled_at ? s.scheduled_at.replace('T', ' ').slice(0, 16) : '';
+    const recBadge = s.recurrence ? `<span class="badge badge-rec">${s.recurrence}</span>` : '';
+    const botLabel = s.sendpulse_bot_nome ? `<span style="color:var(--primary);font-size:11px">${esc(s.sendpulse_bot_nome)}</span>` : '';
+    const typeBadge = s.content_type !== 'text' ? `<span class="badge badge-${s.content_type}">${s.content_type}</span>` : '';
+    const text = s.content_text || `[${s.content_type}]`;
+    const actions = [];
+    if (s.status === 'pendente') {
+      actions.push(`<button onclick="sendNow(${s.id})" style="background:var(--primary);color:#fff;border-color:var(--primary)">Enviar agora</button>`);
+      actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
+      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+      actions.push(`<button onclick="cancelSchedule(${s.id})">Cancelar</button>`);
+    }
+    if (s.status === 'erro') {
+      actions.push(`<button onclick="sendNow(${s.id})" style="background:var(--primary);color:#fff;border-color:var(--primary)">Enviar agora</button>`);
+      actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
+      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+    }
+    if (s.status === 'enviado') {
+      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+    }
+    return `<div class="sched-item"><div class="sched-info">
+      <div class="sched-text">${esc(text.slice(0,150))}</div>
+      <div class="sched-meta">
+        <span class="badge badge-${s.status}">${s.status}</span> ${typeBadge} ${recBadge} ${botLabel} <span>${dt}</span>
+        ${s.error_msg ? `<span style="color:var(--red);font-size:11px">${esc(s.error_msg.slice(0,80))}</span>` : ''}
+      </div></div><div class="sched-actions">${actions.join('')}</div></div>`;
+  }).join('');
+}
+
+async function cancelSchedule(id) { if (!confirm('Cancelar?')) return; await api(`/schedules/${id}`,{method:'DELETE'}); loadSchedules(); loadDashboard(); }
+async function duplicateSchedule(id) {
+  const s = schedules.find(x => x.id === id); if (!s) return;
+  await api('/schedules',{method:'POST',body:{par_id:s.par_id,sendpulse_bot_id:s.sendpulse_bot_id,sendpulse_bot_nome:s.sendpulse_bot_nome,origem:s.origem,content_type:s.content_type,content_text:s.content_text,content_file_id:s.content_file_id,content_media_url:s.content_media_url,buttons:s.buttons?JSON.parse(s.buttons):null,scheduled_at:new Date().toISOString().slice(0,16)+':00',recurrence:s.recurrence}});
+  loadSchedules(); loadDashboard();
+}
+async function retrySchedule(id) {
+  const now = new Date(); now.setMinutes(now.getMinutes()+1);
+  await api(`/schedules/${id}`,{method:'PUT',body:{status:'pendente',scheduled_at:now.toISOString().slice(0,19)}});
+  loadSchedules(); loadDashboard();
+}
+
+// ── Edit modal (full composer) ──────────────────
+function editSchedule(id) {
+  const s = schedules.find(x => x.id === id); if (!s) return;
+  document.getElementById('editId').value = s.id;
+
+  // Bot
+  const botSel = document.getElementById('editBot');
+  botSel.innerHTML = botsList.map(b => `<option value="${b.id}">@${b.username || b.name} (${b.subscribers} inscritos)</option>`).join('');
+  botSel.value = s.sendpulse_bot_id || '';
+
+  // Type
+  document.getElementById('editType').value = s.content_type || 'text';
+  editTypeChanged();
+
+  // Media
+  document.getElementById('editMediaUrl').value = s.content_media_url || '';
+  const editPreview = document.getElementById('editUploadPreview');
+  const editZone = document.getElementById('editUploadZone');
+  editPreview.innerHTML = '';
+  editZone.style.display = '';
+  if (s.content_media_url) {
+    editZone.style.display = 'none';
+    const isImg = s.content_type === 'photo';
+    editPreview.innerHTML = `<div class="upload-preview">
+      ${isImg ? `<img src="${esc(s.content_media_url)}">` : `<video src="${esc(s.content_media_url)}" controls style="max-height:180px"></video>`}
+      <button class="up-remove" onclick="editClearUpload()">&times;</button>
+    </div>`;
+  }
+
+  // Text
+  document.getElementById('editText').value = s.content_text || '';
+
+  // Buttons
+  const editor = document.getElementById('editBtnEditor');
+  editor.innerHTML = '';
+  const btns = s.buttons ? JSON.parse(s.buttons) : [];
+  if (btns.length === 0) btns.push({ text: '', url: '' });
+  btns.forEach(b => {
+    const row = document.createElement('div'); row.className = 'btn-row';
+    row.innerHTML = `<input type="text" placeholder="Texto do botao" class="btn-label" value="${esc(b.text || '')}"><input type="url" placeholder="https://..." class="btn-url" value="${esc(b.url || '')}"><button class="btn-row-remove" onclick="editRemoveBtnRow(this)">&times;</button>`;
+    editor.appendChild(row);
+  });
+  document.getElementById('editAddBtnBtn').style.display = btns.length >= 3 ? 'none' : '';
+
+  // Send type
+  const sendType = s.recurrence || 'unico';
+  const radio = document.querySelector(`input[name="editSendType"][value="${sendType}"]`);
+  if (radio) radio.checked = true;
+  editSendTypeChanged();
+
+  // Date/Time
+  if (s.scheduled_at) {
+    document.getElementById('editDate').value = s.scheduled_at.slice(0, 10);
+    document.getElementById('editTime').value = s.scheduled_at.slice(11, 16);
+  }
+
+  document.getElementById('editModal').classList.remove('hidden');
+}
+
+function editTypeChanged() {
+  const t = document.getElementById('editType').value;
+  document.getElementById('editMediaGroup').style.display = t === 'text' ? 'none' : 'block';
+  document.getElementById('editTextLabel').textContent = t !== 'text' ? 'Legenda' : 'Texto';
+  if (t === 'text') { document.getElementById('editMediaUrl').value = ''; document.getElementById('editUploadPreview').innerHTML = ''; }
+}
+
+async function handleEditUpload(file) {
+  if (!file) return;
+  const type = document.getElementById('editType').value;
+  const maxSize = type === 'photo' ? 2*1024*1024 : 20*1024*1024;
+  if (file.size > maxSize) return alert('Arquivo muito grande. Max: ' + (maxSize/1024/1024) + ' MB');
+
+  const progressEl = document.getElementById('editUploadProgress');
+  const bar = progressEl?.querySelector('.bar');
+  if (progressEl) { progressEl.style.display = 'block'; bar.style.width = '0%'; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && bar) bar.style.width = Math.round(e.loaded/e.total*100) + '%'; };
+    const result = await new Promise((resolve, reject) => {
+      xhr.onload = () => { if (xhr.status === 200) resolve(JSON.parse(xhr.responseText)); else reject(new Error('Upload falhou')); };
+      xhr.onerror = () => reject(new Error('Erro de rede'));
+      xhr.open('POST', '/api/upload');
+      xhr.send(formData);
+    });
+    document.getElementById('editMediaUrl').value = result.url;
+    document.getElementById('editUploadZone').style.display = 'none';
+    const isImg = type === 'photo';
+    document.getElementById('editUploadPreview').innerHTML = `<div class="upload-preview">
+      ${isImg ? `<img src="${result.url}">` : `<video src="${result.url}" controls style="max-height:180px"></video>`}
+      <button class="up-remove" onclick="editClearUpload()">&times;</button>
+    </div>`;
+  } catch (err) { alert('Erro no upload: ' + err.message); }
+  finally { if (progressEl) progressEl.style.display = 'none'; }
+}
+
+function editClearUpload() {
+  document.getElementById('editMediaUrl').value = '';
+  document.getElementById('editUploadPreview').innerHTML = '';
+  document.getElementById('editUploadZone').style.display = '';
+}
+
+function editSendTypeChanged() {
+  const type = document.querySelector('input[name="editSendType"]:checked')?.value || 'unico';
+  document.querySelectorAll('#editModal .send-type-option').forEach(el => el.classList.remove('selected'));
+  const opt = document.querySelector(`#editModal .send-type-option[data-type="${type}"]`);
+  if (opt) opt.classList.add('selected');
+  document.getElementById('editDateGroup').style.display = (type === 'diario' || type === 'diasuteis') ? 'none' : '';
+}
+
+function editAddBtnRow() {
+  const editor = document.getElementById('editBtnEditor');
+  if (editor.querySelectorAll('.btn-row').length >= 3) return;
+  const row = document.createElement('div'); row.className = 'btn-row';
+  row.innerHTML = `<input type="text" placeholder="Texto do botao" class="btn-label"><input type="url" placeholder="https://..." class="btn-url"><button class="btn-row-remove" onclick="editRemoveBtnRow(this)">&times;</button>`;
+  editor.appendChild(row);
+  if (editor.querySelectorAll('.btn-row').length >= 3) document.getElementById('editAddBtnBtn').style.display = 'none';
+}
+
+function editRemoveBtnRow(btn) {
+  const editor = document.getElementById('editBtnEditor');
+  if (editor.querySelectorAll('.btn-row').length > 1) btn.parentElement.remove();
+  else { btn.parentElement.querySelector('.btn-label').value = ''; btn.parentElement.querySelector('.btn-url').value = ''; }
+  document.getElementById('editAddBtnBtn').style.display = '';
+}
+
+function editGetButtons() {
+  const btns = [];
+  document.querySelectorAll('#editBtnEditor .btn-row').forEach(r => {
+    const text = r.querySelector('.btn-label').value.trim();
+    const url = r.querySelector('.btn-url').value.trim();
+    if (text && url) btns.push({ text, type: 'web_url', url });
+  });
+  return btns.length > 0 ? btns : null;
+}
+
+function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
+
+async function saveEdit() {
+  const id = document.getElementById('editId').value;
+  const time = document.getElementById('editTime').value;
+  if (!time) return alert('Informe o horario');
+  const date = document.getElementById('editDate').value;
+  const sendType = document.querySelector('input[name="editSendType"]:checked')?.value || 'unico';
+  if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
+
+  const botSel = document.getElementById('editBot');
+  const scheduled_at = calcScheduledAt(sendType, date, time);
+
+  await api(`/schedules/${id}`, { method: 'PUT', body: {
+    sendpulse_bot_id: botSel.value,
+    sendpulse_bot_nome: botSel.options[botSel.selectedIndex]?.text?.split(' (')[0] || '',
+    content_type: document.getElementById('editType').value,
+    content_text: document.getElementById('editText').value || null,
+    content_media_url: document.getElementById('editMediaUrl').value || null,
+    buttons: editGetButtons(),
+    scheduled_at,
+    recurrence: sendType === 'unico' ? null : sendType,
+    status: 'pendente',
+  }});
+  closeEditModal(); loadSchedules();
+}
+
+// ── Dashboard ───────────────────────────────────
+async function loadDashboard() {
+  // Load all schedules for dashboard
+  const all = await api('/schedules');
+  const enviados = all.filter(s => s.status === 'enviado');
+  const pendentes = all.filter(s => s.status === 'pendente');
+  const erros = all.filter(s => s.status === 'erro');
+  const today = new Date().toISOString().slice(0, 10);
+  const agendadosHoje = pendentes.filter(s => s.scheduled_at && s.scheduled_at.startsWith(today));
+
+  // Counters
+  document.getElementById('dashCounters').innerHTML = `
+    <div class="stat-card stat-green"><div class="stat-val">${enviados.length}</div><div class="stat-label">Enviados</div></div>
+    <div class="stat-card stat-orange"><div class="stat-val">${pendentes.length}</div><div class="stat-label">Pendentes</div></div>
+    <div class="stat-card stat-orange"><div class="stat-val">${agendadosHoje.length}</div><div class="stat-label">Agendados hoje</div></div>
+    <div class="stat-card stat-red"><div class="stat-val">${erros.length}</div><div class="stat-label">Erros</div></div>`;
+
+  // Ultimos enviados
+  const sentEl = document.getElementById('dashSent');
+  if (enviados.length === 0) {
+    sentEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Nenhum envio ainda.</div>';
+  } else {
+    sentEl.innerHTML = enviados.slice(-10).reverse().map(s => {
+      const dt = s.scheduled_at ? s.scheduled_at.replace('T',' ').slice(0,16) : '';
+      const bot = s.sendpulse_bot_nome || '';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
+          <span class="badge badge-enviado" style="flex-shrink:0">enviado</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${bot} &middot; ${dt}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Pendentes
+  const pendEl = document.getElementById('dashPending');
+  if (pendentes.length === 0) {
+    pendEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Nenhum pendente.</div>';
+  } else {
+    pendEl.innerHTML = pendentes.map(s => {
+      const dt = s.scheduled_at ? s.scheduled_at.replace('T',' ').slice(0,16) : '';
+      const bot = s.sendpulse_bot_nome || '';
+      const rec = s.recurrence ? `<span class="badge badge-rec" style="margin-left:4px">${s.recurrence}</span>` : '';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
+          <div style="flex-shrink:0">
+            <span class="badge badge-pendente">pendente</span>${rec}
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${bot} &middot; ${dt}
+          <button onclick="sendNow(${s.id})" style="margin-left:8px;background:var(--primary);color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">Enviar</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Erros
+  const errEl = document.getElementById('dashErrors');
+  const errCard = document.getElementById('dashErrorsCard');
+  if (erros.length === 0) {
+    if (errCard) errCard.style.display = 'none';
+  } else {
+    if (errCard) errCard.style.display = '';
+    errEl.innerHTML = erros.slice(-5).reverse().map(s => {
+      const dt = s.scheduled_at ? s.scheduled_at.replace('T',' ').slice(0,16) : '';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
+          <span class="badge badge-erro" style="flex-shrink:0">erro</span>
+        </div>
+        <div style="font-size:11px;color:var(--red);margin-top:2px">${esc((s.error_msg||'').slice(0,100))}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${dt}
+          <button onclick="sendNow(${s.id})" style="margin-left:8px;background:var(--primary);color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">Retentar</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+// ── Composer ────────────────────────────────────
+function getSendType() { return document.querySelector('input[name="sendType"]:checked')?.value || 'unico'; }
+
+function sendTypeChanged() {
+  const type = getSendType();
+  document.querySelectorAll('.send-type-option').forEach(el => el.classList.remove('selected'));
+  document.querySelector(`.send-type-option[data-type="${type}"]`).classList.add('selected');
+
+  const dateGroup = document.getElementById('dateGroup');
+  const hint = document.getElementById('schedHint');
+
+  if (type === 'unico') {
+    dateGroup.style.display = '';
+    hint.textContent = 'Escolha a data e horario do envio.';
+  } else if (type === 'diario') {
+    dateGroup.style.display = 'none';
+    hint.textContent = 'O primeiro envio sera hoje (ou amanha se o horario ja passou). Depois, todos os dias no mesmo horario.';
+  } else if (type === 'diasuteis') {
+    dateGroup.style.display = 'none';
+    hint.textContent = 'O primeiro envio sera no proximo dia util no horario escolhido. Depois, segunda a sexta no mesmo horario.';
+  } else if (type === 'semanal') {
+    dateGroup.style.display = '';
+    hint.textContent = 'A data define o dia da semana. O envio se repete toda semana nesse dia e horario.';
+  }
+}
+
+function calcScheduledAt(type, date, time) {
+  if (type === 'unico' || type === 'semanal') {
+    return `${date}T${time}:00`;
+  }
+  // diario / diasuteis: calculate next valid date at given time
+  const now = new Date();
+  const [h, m] = time.split(':').map(Number);
+  let target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+
+  if (target <= now) target.setDate(target.getDate() + 1); // if time already passed, start tomorrow
+
+  if (type === 'diasuteis') {
+    while (target.getDay() === 0 || target.getDay() === 6) target.setDate(target.getDate() + 1);
+  }
+  const y = target.getFullYear();
+  const mo = String(target.getMonth() + 1).padStart(2, '0');
+  const d = String(target.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}T${time}:00`;
+}
+
+function addMediaBlock(type) {
+  if (mediaBlock) return;
+  mediaBlock = { type, url: '' };
+  const accept = type === 'photo' ? '.jpg,.jpeg,.png,.webp' : '.mp4,.webm,.gif';
+  const hint = type === 'photo' ? 'JPG ou PNG, max 2 MB' : 'MP4, max 20 MB';
+  const blocks = document.getElementById('msgBlocks');
+  const html = `<div class="msg-block" data-block="${type}" id="mediaBlockEl">
+    <div class="msg-block-header">
+      <span class="msg-block-type">${type === 'photo' ? '&#128247; Imagem' : '&#127909; Video'}</span>
+      <button class="msg-block-remove" onclick="removeMediaBlock()">&times;</button>
+    </div>
+    <div class="upload-zone" id="compUploadZone"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="event.preventDefault();this.classList.remove('dragover');handleUpload(event.dataTransfer.files[0],'comp')">
+      <input type="file" accept="${accept}" onchange="handleUpload(this.files[0],'comp')">
+      <div class="uz-icon">${type === 'photo' ? '&#128247;' : '&#127909;'}</div>
+      <div class="uz-text">Arraste o arquivo ou <strong>clique para selecionar</strong></div>
+      <div class="uz-hint">${hint}</div>
+    </div>
+    <div id="compUploadPreview"></div>
+    <div id="compUploadProgress" class="upload-progress" style="display:none"><div class="bar" style="width:0%"></div></div>
+    <input type="hidden" id="compMediaUrl" value="">
+  </div>`;
+  blocks.insertAdjacentHTML('afterbegin', html);
+  document.getElementById('addPhotoBtn').style.display = 'none';
+  document.getElementById('addVideoBtn').style.display = 'none';
+  updatePreview();
+}
+
+function removeMediaBlock() {
+  const el = document.getElementById('mediaBlockEl'); if (el) el.remove();
+  mediaBlock = null;
+  document.getElementById('addPhotoBtn').style.display = '';
+  document.getElementById('addVideoBtn').style.display = '';
+  updatePreview();
+}
+
+async function handleUpload(file, ctx) {
+  if (!file) return;
+  const maxSize = mediaBlock?.type === 'photo' ? 2*1024*1024 : 20*1024*1024;
+  if (file.size > maxSize) return alert('Arquivo muito grande. Max: ' + (maxSize/1024/1024) + ' MB');
+
+  const progressEl = document.getElementById(ctx + 'UploadProgress');
+  const bar = progressEl?.querySelector('.bar');
+  const previewEl = document.getElementById(ctx + 'UploadPreview');
+  const zoneEl = document.getElementById(ctx + 'UploadZone');
+
+  if (progressEl) { progressEl.style.display = 'block'; bar.style.width = '0%'; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && bar) bar.style.width = Math.round(e.loaded/e.total*100) + '%';
+    };
+    const result = await new Promise((resolve, reject) => {
+      xhr.onload = () => { if (xhr.status === 200) resolve(JSON.parse(xhr.responseText)); else reject(new Error('Upload falhou')); };
+      xhr.onerror = () => reject(new Error('Erro de rede'));
+      xhr.open('POST', '/api/upload');
+      xhr.send(formData);
+    });
+
+    // Set URL
+    const urlInput = document.getElementById(ctx + 'MediaUrl');
+    if (urlInput) urlInput.value = result.url;
+    if (mediaBlock) mediaBlock.url = result.url;
+
+    // Show preview
+    if (zoneEl) zoneEl.style.display = 'none';
+    if (previewEl) {
+      const isImg = mediaBlock?.type === 'photo';
+      previewEl.innerHTML = `<div class="upload-preview">
+        ${isImg ? `<img src="${result.url}">` : `<video src="${result.url}" controls style="max-height:180px"></video>`}
+        <button class="up-remove" onclick="clearUpload('${ctx}')">&times;</button>
+      </div>`;
+    }
+    updatePreview();
+  } catch (err) {
+    alert('Erro no upload: ' + err.message);
+  } finally {
+    if (progressEl) progressEl.style.display = 'none';
+  }
+}
+
+function clearUpload(ctx) {
+  const previewEl = document.getElementById(ctx + 'UploadPreview');
+  const zoneEl = document.getElementById(ctx + 'UploadZone');
+  const urlInput = document.getElementById(ctx + 'MediaUrl');
+  if (previewEl) previewEl.innerHTML = '';
+  if (zoneEl) zoneEl.style.display = '';
+  if (urlInput) urlInput.value = '';
+  if (mediaBlock) mediaBlock.url = '';
+  updatePreview();
+}
+
+function updateCharCount() { document.getElementById('charCount').textContent = document.getElementById('compText').value.length; }
+
+function addBtnRow() {
+  const rows = document.querySelectorAll('#btnEditor .btn-row').length;
+  if (rows >= 3) return;
+  const row = document.createElement('div'); row.className = 'btn-row';
+  row.innerHTML = `<input type="text" placeholder="Texto do botao" class="btn-label" oninput="updatePreview()"><input type="url" placeholder="https://..." class="btn-url" oninput="updatePreview()"><button class="btn-row-remove" onclick="removeBtnRow(this)">&times;</button>`;
+  document.getElementById('btnEditor').appendChild(row);
+  if (rows + 1 >= 3) document.getElementById('addBtnBtn').style.display = 'none';
+}
+
+function removeBtnRow(btn) {
+  const editor = document.getElementById('btnEditor');
+  if (editor.querySelectorAll('.btn-row').length > 1) btn.parentElement.remove();
+  else { btn.parentElement.querySelector('.btn-label').value = ''; btn.parentElement.querySelector('.btn-url').value = ''; }
+  document.getElementById('addBtnBtn').style.display = '';
+  updatePreview();
+}
+
+function getButtons() {
+  const btns = [];
+  document.querySelectorAll('#btnEditor .btn-row').forEach(r => {
+    const text = r.querySelector('.btn-label').value.trim();
+    const url = r.querySelector('.btn-url').value.trim();
+    if (text && url) btns.push({ text, type: 'web_url', url });
+  });
+  return btns.length > 0 ? btns : null;
+}
+
+function updatePreview() {
+  const text = document.getElementById('compText').value;
+  const mediaUrl = document.getElementById('compMediaUrl')?.value || '';
+  const btns = getButtons();
+  const body = document.getElementById('previewBody');
+  let html = '';
+  if (mediaBlock || text || btns) {
+    html += '<div class="preview-bubble">';
+    if (mediaBlock) {
+      if (mediaUrl && mediaBlock.type === 'photo') html += `<img src="${esc(mediaUrl)}" onerror="this.style.display='none'" style="max-height:140px;object-fit:cover;width:100%;border-radius:8px">`;
+      else html += `<div class="preview-media-placeholder">${mediaBlock.type === 'photo' ? '&#128247;' : '&#127909;'}</div>`;
+    }
+    if (text) html += `<div class="preview-caption">${esc(text)}</div>`;
+    if (btns) { html += '<div class="preview-btn-row">'; btns.forEach(b => { html += `<a class="preview-inline-btn" href="#">${esc(b.text)}</a>`; }); html += '</div>'; }
+    html += '</div>';
+    html += `<div class="preview-time">${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>`;
+  } else {
+    html = '<div class="preview-label">A mensagem aparecera aqui</div>';
+  }
+  body.innerHTML = html;
+  // Bot name in preview
+  const botSel = document.getElementById('compBot');
+  const name = botSel.options[botSel.selectedIndex]?.text || 'Bot';
+  document.getElementById('previewBotName').textContent = name.split(' (')[0]; // strip subscriber count
+}
+
+function resetComposer() {
+  document.getElementById('compText').value = '';
+  removeMediaBlock();
+  document.querySelectorAll('#btnEditor .btn-row').forEach((r, i) => { if (i > 0) r.remove(); else { r.querySelector('.btn-label').value = ''; r.querySelector('.btn-url').value = ''; } });
+  document.getElementById('compDate').value = '';
+  document.getElementById('compTime').value = '';
+  document.querySelector('input[name="sendType"][value="unico"]').checked = true;
+  sendTypeChanged();
+  document.getElementById('addBtnBtn').style.display = '';
+  updateCharCount();
+  updatePreview();
+}
+
+async function submitComposer(immediate) {
+  const botSel = document.getElementById('compBot');
+  const botId = botSel.value;
+  const botNome = botSel.options[botSel.selectedIndex]?.text || '';
+  if (!botId) return alert('Selecione um bot');
+
+  const text = document.getElementById('compText').value || null;
+  const mediaUrl = document.getElementById('compMediaUrl')?.value || null;
+  if (!text && !mediaUrl) return alert('Adicione texto ou midia');
+
+  let scheduled_at, recurrence = null;
+  if (immediate) {
+    scheduled_at = new Date().toISOString().slice(0, 19);
+  } else {
+    const sendType = getSendType();
+    const time = document.getElementById('compTime').value;
+    if (!time) return alert('Informe o horario');
+    const date = document.getElementById('compDate').value;
+    if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
+    scheduled_at = calcScheduledAt(sendType, date, time);
+    recurrence = sendType === 'unico' ? null : sendType;
+  }
+
+  const body = {
+    sendpulse_bot_id: botId,
+    sendpulse_bot_nome: botNome.split(' (')[0],
+    origem: 'manual',
+    content_type: mediaBlock ? mediaBlock.type : 'text',
+    content_text: text,
+    content_media_url: mediaUrl,
+    buttons: getButtons(),
+    scheduled_at,
+    recurrence,
+  };
+  const sched = await api('/schedules', { method: 'POST', body });
+
+  if (immediate && sched.id) {
+    await api(`/schedules/${sched.id}/send`, { method: 'POST' });
+    alert('Enviado!');
+  } else {
+    alert('Campanha agendada!');
+  }
+  resetComposer();
+  loadSchedules();
+  loadDashboard();
+}
+
+// ── Config / Bots ───────────────────────────────
+async function loadBots() {
+  try {
+    botsList = await api('/sendpulse/bots');
+    if (!Array.isArray(botsList)) botsList = [];
+  } catch { botsList = []; }
+
+  const optHtml = botsList.length > 0
+    ? botsList.map(b => `<option value="${b.id}">@${b.username || b.name} (${b.subscribers} inscritos)</option>`).join('')
+    : '<option value="">Nenhum bot encontrado</option>';
+
+  document.getElementById('compBot').innerHTML = optHtml;
+  document.getElementById('cfgBotSelect').innerHTML = optHtml;
+  updatePreview();
+}
+
+function renderPares() {
+  const el = document.getElementById('paresList');
+  if (pares.length === 0) { el.innerHTML = '<div class="empty-state"><p>Nenhum par cadastrado.</p></div>'; return; }
+  el.innerHTML = pares.map(p => `<div class="par-card"><div>
+    <div class="par-name">${esc(p.nome)}</div>
+    <div class="par-detail">Grupo: ${esc(p.telegram_group_id)} &middot; Bot: ${esc(p.sendpulse_bot_nome || p.sendpulse_bot_id)}</div>
+  </div><button class="btn btn-danger btn-sm" onclick="deletePar(${p.id})">Desativar</button></div>`).join('');
+}
+
+async function createPar() {
+  const nome = document.getElementById('cfgNome').value.trim();
+  const groupId = document.getElementById('cfgGroupId').value.trim();
+  const sel = document.getElementById('cfgBotSelect');
+  if (!nome || !groupId || !sel.value) return alert('Preencha todos os campos');
+  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: sel.value, sendpulse_bot_nome: sel.options[sel.selectedIndex]?.text || '' }});
+  document.getElementById('cfgNome').value = '';
+  document.getElementById('cfgGroupId').value = '';
+  pares = await api('/pares');
+  renderParSelect(); renderPares();
+}
+
+async function deletePar(id) {
+  if (!confirm('Desativar este par?')) return;
+  await api(`/pares/${id}`, { method: 'DELETE' });
+  pares = await api('/pares');
+  renderParSelect(); renderPares();
+}
+
+// ── Panels ──────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const panel = document.getElementById(`panel-${name}`);
+  if (panel) panel.classList.add('active');
+  const nav = document.querySelector(`.nav-item[data-tab="${name}"]`);
+  if (nav) nav.classList.add('active');
+  document.getElementById('topbarTitle').textContent = titles[name] || '';
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'config') renderPares();
+  if (name === 'schedules') loadSchedules();
+  if (name === 'composer') updatePreview();
+}
+
+// ── Socket ──────────────────────────────────────
+socket.on('new_message', (msg) => {
+  if (!currentPar || msg.par_id !== currentPar.id) return;
+  const list = document.getElementById('msgList');
+  if (list.querySelector('.empty-state')) list.innerHTML = '';
+  list.insertAdjacentHTML('afterbegin', renderMsg(msg));
+  loadDashboard();
+});
+socket.on('schedule_update', () => { loadSchedules(); loadDashboard(); });
+socket.on('dispatch_fired', () => { loadDashboard(); });
+
+// ── Boot ────────────────────────────────────────
+init();
+sendTypeChanged();
+setInterval(updatePreview, 2000);
+</script>
+</body>
+</html>

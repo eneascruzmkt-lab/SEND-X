@@ -67,6 +67,12 @@ function startTelegraf() {
             publicMediaUrl = result.publicUrl;
           } catch (e) {
             console.error('[feed] download error:', e.message);
+            // For large videos (>20MB), use t.me link from the public channel directly
+            const channelUsername = (par.channel_username || process.env.MEDIA_CHANNEL_USERNAME || '').replace('@', '');
+            if (channelUsername && msg.message_id) {
+              publicMediaUrl = `https://t.me/${channelUsername}/${msg.message_id}`;
+              console.log('[feed] large media — using channel link:', publicMediaUrl);
+            }
           }
         }
 
@@ -78,6 +84,8 @@ function startTelegraf() {
           // file_id = local path for UI preview; store telegram URL in a data attribute
           file_id: localPreview || fileId || null,
           telegram_media_url: publicMediaUrl || null,
+          telegram_message_id: msg.message_id || null,
+          telegram_chat_id: groupId,
         };
 
         // Dedup by message_id
@@ -130,23 +138,47 @@ async function downloadTelegramFile(ctx, fileId, type) {
     }).on('error', reject);
   });
 
-  // Upload to freeimage.host for public URL (SendPulse needs publicly accessible URL)
+  // Upload to public host (SendPulse needs publicly accessible URL)
+  // Telegra.ph only supports images; for video use catbox.moe
   let publicUrl = telegramUrl; // fallback
   try {
     const form = new FormData();
-    form.append('source', fs.createReadStream(localPath));
-    form.append('type', 'file');
-    form.append('action', 'upload');
-    const res = await axios.post(
-      'https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5',
-      form, { headers: form.getHeaders(), timeout: 30000 }
-    );
-    if (res.data?.image?.url) {
-      publicUrl = res.data.image.url;
-      console.log('[feed] image uploaded:', publicUrl);
+    if (type === 'video') {
+      // catbox.moe supports video up to 200MB, no expiration (retry once)
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const vForm = new FormData();
+          vForm.append('reqtype', 'fileupload');
+          vForm.append('fileToUpload', fs.createReadStream(localPath));
+          const res = await axios.post(
+            'https://catbox.moe/user/api.php',
+            vForm, { headers: vForm.getHeaders(), timeout: 120000, maxContentLength: 200 * 1024 * 1024 }
+          );
+          if (res.data && typeof res.data === 'string' && res.data.startsWith('https://')) {
+            publicUrl = res.data.trim();
+            console.log('[feed] video uploaded to catbox:', publicUrl);
+            break;
+          }
+          console.error(`[feed] catbox unexpected response (attempt ${attempt}):`, res.data);
+        } catch (uploadErr) {
+          console.error(`[feed] catbox upload attempt ${attempt} failed:`, uploadErr.message);
+          if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    } else {
+      // Telegra.ph for images (fast, reliable)
+      form.append('file', fs.createReadStream(localPath));
+      const res = await axios.post(
+        'https://telegra.ph/upload',
+        form, { headers: form.getHeaders(), timeout: 30000 }
+      );
+      if (Array.isArray(res.data) && res.data[0]?.src) {
+        publicUrl = 'https://telegra.ph' + res.data[0].src;
+        console.log('[feed] image uploaded to telegra.ph:', publicUrl);
+      }
     }
   } catch (e) {
-    console.error('[feed] freeimage upload failed, using telegram URL:', e.message);
+    console.error(`[feed] public upload failed (${type}), using telegram URL:`, e.message);
   }
 
   return { localPath: `/uploads/${filename}`, publicUrl };

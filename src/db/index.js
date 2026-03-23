@@ -60,16 +60,22 @@ CREATE TABLE IF NOT EXISTS logs (
 try { db.exec('ALTER TABLE schedules ADD COLUMN sendpulse_bot_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE schedules ADD COLUMN sendpulse_bot_nome TEXT'); } catch {}
 try { db.exec('ALTER TABLE messages ADD COLUMN telegram_media_url TEXT'); } catch {}
+try { db.exec('ALTER TABLE messages ADD COLUMN telegram_message_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE messages ADD COLUMN telegram_chat_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE schedules ADD COLUMN telegram_message_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE schedules ADD COLUMN telegram_chat_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE pares ADD COLUMN channel_username TEXT'); } catch {}
 
 // ── Pares ───────────────────────────────────────────────
 const insertPar = db.prepare(`
-  INSERT INTO pares (nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome)
-  VALUES (@nome, @telegram_group_id, @sendpulse_bot_id, @sendpulse_bot_nome)
+  INSERT INTO pares (nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome, channel_username)
+  VALUES (@nome, @telegram_group_id, @sendpulse_bot_id, @sendpulse_bot_nome, @channel_username)
 `);
 
 const updatePar = db.prepare(`
   UPDATE pares SET nome=@nome, telegram_group_id=@telegram_group_id,
-    sendpulse_bot_id=@sendpulse_bot_id, sendpulse_bot_nome=@sendpulse_bot_nome
+    sendpulse_bot_id=@sendpulse_bot_id, sendpulse_bot_nome=@sendpulse_bot_nome,
+    channel_username=@channel_username
   WHERE id=@id
 `);
 
@@ -103,6 +109,8 @@ module.exports = {
     const cols = ['par_id', 'text', 'from_user', 'message_type', 'file_id'];
     if (msg.created_at) cols.push('created_at');
     if (msg.telegram_media_url) cols.push('telegram_media_url');
+    if (msg.telegram_message_id) cols.push('telegram_message_id');
+    if (msg.telegram_chat_id) cols.push('telegram_chat_id');
     const placeholders = cols.map(c => '@' + c).join(', ');
     const stmt = db.prepare(`INSERT INTO messages (${cols.join(', ')}) VALUES (${placeholders})`);
     const info = stmt.run(msg);
@@ -121,20 +129,20 @@ module.exports = {
   getSchedules(parId, status) {
     if (status) {
       return db.prepare(
-        'SELECT * FROM schedules WHERE par_id=? AND status=? ORDER BY scheduled_at ASC'
+        'SELECT * FROM schedules WHERE par_id=? AND status=? ORDER BY scheduled_at DESC'
       ).all(parId, status);
     }
     return db.prepare(
-      'SELECT * FROM schedules WHERE par_id=? ORDER BY scheduled_at ASC'
+      'SELECT * FROM schedules WHERE par_id=? ORDER BY scheduled_at DESC'
     ).all(parId);
   },
   getAllSchedules(status) {
     if (status) {
       return db.prepare(
-        'SELECT * FROM schedules WHERE status=? ORDER BY scheduled_at ASC'
+        'SELECT * FROM schedules WHERE status=? ORDER BY scheduled_at DESC'
       ).all(status);
     }
-    return db.prepare('SELECT * FROM schedules ORDER BY scheduled_at ASC').all();
+    return db.prepare('SELECT * FROM schedules ORDER BY scheduled_at DESC').all();
   },
   getScheduleById(id) {
     return db.prepare('SELECT * FROM schedules WHERE id=?').get(id);
@@ -147,9 +155,11 @@ module.exports = {
   createSchedule(data) {
     const stmt = db.prepare(`
       INSERT INTO schedules (par_id, sendpulse_bot_id, sendpulse_bot_nome, origem, content_type,
-        content_text, content_file_id, content_media_url, buttons, scheduled_at, recurrence)
+        content_text, content_file_id, content_media_url, buttons, scheduled_at, recurrence,
+        telegram_message_id, telegram_chat_id)
       VALUES (@par_id, @sendpulse_bot_id, @sendpulse_bot_nome, @origem, @content_type,
-        @content_text, @content_file_id, @content_media_url, @buttons, @scheduled_at, @recurrence)
+        @content_text, @content_file_id, @content_media_url, @buttons, @scheduled_at, @recurrence,
+        @telegram_message_id, @telegram_chat_id)
     `);
     const info = stmt.run({
       par_id: data.par_id || null,
@@ -163,6 +173,8 @@ module.exports = {
       buttons: data.buttons ? JSON.stringify(data.buttons) : null,
       scheduled_at: data.scheduled_at,
       recurrence: data.recurrence || null,
+      telegram_message_id: data.telegram_message_id || null,
+      telegram_chat_id: data.telegram_chat_id || null,
     });
     return this.getScheduleById(info.lastInsertRowid);
   },

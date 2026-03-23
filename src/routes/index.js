@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB max (catbox limit)
   fileFilter: (req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.mp4', '.gif', '.webm', '.webp'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -37,6 +37,33 @@ router.post('/upload', upload.single('file'), (req, res) => {
   res.json({ url, filename: req.file.filename, size: req.file.size });
 });
 
+// Upload media for an existing feed message (large videos that couldn't be downloaded)
+router.post('/messages/:id/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  const msg = db.raw.prepare('SELECT * FROM messages WHERE id=?').get(req.params.id);
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+
+  const localUrl = `/uploads/${req.file.filename}`;
+  const mediaType = req.file.mimetype.startsWith('video') ? 'video' : 'photo';
+
+  // Upload to public host (catbox for video, telegra.ph for image)
+  let publicUrl = null;
+  try {
+    publicUrl = await sendpulse.__resolveMediaUrl(localUrl, mediaType);
+  } catch (e) {
+    console.error('[upload] public upload failed:', e.message);
+  }
+
+  // Update the message record
+  db.raw.prepare('UPDATE messages SET file_id=?, telegram_media_url=? WHERE id=?')
+    .run(localUrl, publicUrl || null, msg.id);
+
+  const io = req.app.get('io');
+  if (io && msg.par_id) io.to(`par_${msg.par_id}`).emit('messages_updated');
+
+  res.json({ ok: true, localUrl, publicUrl });
+});
+
 // ── Pares ──────────────────────────────────────────────
 router.get('/pares', (req, res) => {
   res.json(db.getAllPares());
@@ -44,7 +71,7 @@ router.get('/pares', (req, res) => {
 
 router.post('/pares', (req, res) => {
   try {
-    const { nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome } = req.body;
+    const { nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome, channel_username } = req.body;
     if (!nome || !telegram_group_id || !sendpulse_bot_id) {
       return res.status(400).json({ error: 'nome, telegram_group_id e sendpulse_bot_id são obrigatórios' });
     }
@@ -53,6 +80,7 @@ router.post('/pares', (req, res) => {
       telegram_group_id,
       sendpulse_bot_id,
       sendpulse_bot_nome: sendpulse_bot_nome || null,
+      channel_username: channel_username ? channel_username.replace('@', '') : null,
     });
     res.status(201).json(par);
   } catch (err) {
@@ -71,6 +99,9 @@ router.put('/pares/:id', (req, res) => {
     telegram_group_id: req.body.telegram_group_id || par.telegram_group_id,
     sendpulse_bot_id: req.body.sendpulse_bot_id || par.sendpulse_bot_id,
     sendpulse_bot_nome: req.body.sendpulse_bot_nome ?? par.sendpulse_bot_nome,
+    channel_username: req.body.channel_username !== undefined
+      ? (req.body.channel_username ? req.body.channel_username.replace('@', '') : null)
+      : (par.channel_username || null),
   });
   res.json(updated);
 });

@@ -539,6 +539,10 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
             <label>Bot SendPulse</label>
             <select id="cfgBotSelect"><option value="">Carregando bots...</option></select>
           </div>
+          <div class="form-group">
+            <label>Username do canal (opcional)</label>
+            <input type="text" id="cfgChannelUsername" placeholder="Ex: nucleartraderoficial">
+          </div>
           <button class="btn btn-primary" onclick="createPar()">Criar par</button>
         </div>
       </div>
@@ -745,7 +749,7 @@ async function submitSetup() {
   const botNome = sel.options[sel.selectedIndex]?.text || '';
   if (!nome || !groupId || !botId) return alert('Preencha todos os campos');
 
-  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: botId, sendpulse_bot_nome: botNome }});
+  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: botId, sendpulse_bot_nome: botNome, channel_username: null }});
   pares = await api('/pares');
   renderParSelect();
   if (pares.length > 0) {
@@ -778,12 +782,24 @@ function renderMsg(m) {
   const isLocal = fileId.startsWith('/uploads/');
 
   let mediaHtml = '';
+  const needsUpload = (m.message_type === 'video' || m.message_type === 'photo') && fileId && !isLocal;
   if (m.message_type === 'photo' && fileId) {
-    const src = isLocal ? fileId : esc(fileId);
-    mediaHtml = `<img src="${src}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
+    if (isLocal) {
+      mediaHtml = `<img src="${fileId}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
+    }
   } else if (m.message_type === 'video' && fileId) {
-    const src = isLocal ? fileId : esc(fileId);
-    mediaHtml = `<video src="${src}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block" controls></video>`;
+    if (isLocal) {
+      mediaHtml = `<video src="${fileId}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block" controls></video>`;
+    }
+  }
+  if (needsUpload) {
+    mediaHtml = `<div style="background:var(--bg-dark);border-radius:6px;padding:8px;margin-bottom:6px;text-align:center">
+      <div style="font-size:11px;color:var(--warning);margin-bottom:4px">Video grande - upload necessario</div>
+      <label style="display:inline-block;padding:4px 12px;background:var(--primary);color:#fff;border-radius:4px;cursor:pointer;font-size:11px">
+        Fazer upload
+        <input type="file" accept="video/*,image/*" style="display:none" onchange="uploadMsgMedia(${m.id}, this)">
+      </label>
+    </div>`;
   }
 
   const uid = 'msg_' + m.id;
@@ -803,7 +819,7 @@ function renderMsg(m) {
   }
 
   return `<div class="msg-item">
-    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||fileId)}" onchange="toggleMsg(this)">
+    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||fileId)}" data-tgmsgid="${m.telegram_message_id||''}" data-tgchatid="${esc(m.telegram_chat_id||'')}" onchange="toggleMsg(this)">
     <div class="msg-body">
       ${mediaHtml}
       ${textHtml}
@@ -829,6 +845,27 @@ function toggleExpand(uid, btn) {
   } else {
     el.textContent = fullText.slice(0, 120) + '...';
     btn.textContent = 'Ver mais';
+  }
+}
+
+async function uploadMsgMedia(msgId, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const label = input.closest('label');
+  const origText = label.textContent;
+  label.textContent = 'Enviando...';
+  label.style.opacity = '0.6';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`/api/messages/${msgId}/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro no upload');
+    loadFeed();
+  } catch (err) {
+    alert('Erro no upload: ' + err.message);
+    label.textContent = origText;
+    label.style.opacity = '1';
   }
 }
 
@@ -889,11 +926,15 @@ async function confirmScheduleSelected() {
   try {
     for (const cb of checkboxes) {
       const mediaUrl = cb.dataset.mediaurl || null;
+      const fileId = cb.dataset.fileid || null;
       const sched = await api('/schedules', { method: 'POST', body: {
         par_id: currentPar.id, origem: 'grupo',
         content_type: cb.dataset.type || 'text',
         content_text: cb.dataset.text || null,
+        content_file_id: fileId,
         content_media_url: mediaUrl || null,
+        telegram_message_id: cb.dataset.tgmsgid || null,
+        telegram_chat_id: cb.dataset.tgchatid || null,
         scheduled_at, recurrence,
       }});
 
@@ -1475,6 +1516,7 @@ async function submitComposer(immediate) {
   }
 
   const body = {
+    par_id: currentPar ? currentPar.id : null,
     sendpulse_bot_id: botId,
     sendpulse_bot_nome: botNome.split(' (')[0],
     origem: 'manual',
@@ -1519,7 +1561,7 @@ function renderPares() {
   if (pares.length === 0) { el.innerHTML = '<div class="empty-state"><p>Nenhum par cadastrado.</p></div>'; return; }
   el.innerHTML = pares.map(p => `<div class="par-card"><div>
     <div class="par-name">${esc(p.nome)}</div>
-    <div class="par-detail">Grupo: ${esc(p.telegram_group_id)} &middot; Bot: ${esc(p.sendpulse_bot_nome || p.sendpulse_bot_id)}</div>
+    <div class="par-detail">Grupo: ${esc(p.telegram_group_id)} &middot; Bot: ${esc(p.sendpulse_bot_nome || p.sendpulse_bot_id)}${p.channel_username ? ' &middot; Canal: @' + esc(p.channel_username) : ''}</div>
   </div><button class="btn btn-danger btn-sm" onclick="deletePar(${p.id})">Desativar</button></div>`).join('');
 }
 
@@ -1527,10 +1569,12 @@ async function createPar() {
   const nome = document.getElementById('cfgNome').value.trim();
   const groupId = document.getElementById('cfgGroupId').value.trim();
   const sel = document.getElementById('cfgBotSelect');
+  const channelUsername = document.getElementById('cfgChannelUsername').value.trim();
   if (!nome || !groupId || !sel.value) return alert('Preencha todos os campos');
-  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: sel.value, sendpulse_bot_nome: sel.options[sel.selectedIndex]?.text || '' }});
+  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: sel.value, sendpulse_bot_nome: sel.options[sel.selectedIndex]?.text || '', channel_username: channelUsername || null }});
   document.getElementById('cfgNome').value = '';
   document.getElementById('cfgGroupId').value = '';
+  document.getElementById('cfgChannelUsername').value = '';
   pares = await api('/pares');
   renderParSelect(); renderPares();
 }
@@ -1566,6 +1610,7 @@ socket.on('new_message', (msg) => {
   list.insertAdjacentHTML('afterbegin', renderMsg(msg));
   loadDashboard();
 });
+socket.on('messages_updated', () => { loadFeed(); });
 socket.on('schedule_update', () => { loadSchedules(); loadDashboard(); });
 socket.on('dispatch_fired', () => { loadDashboard(); });
 

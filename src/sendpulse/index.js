@@ -63,7 +63,14 @@ async function dispatch(schedule, par) {
     throw new Error('Nenhum inscrito direto encontrado neste bot');
   }
 
-  const message = buildMessage(schedule);
+  const message = await buildMessage(schedule);
+
+  // If media couldn't be resolved (fell back to text), give clear error
+  const type = schedule.content_type || 'text';
+  if (message.type === 'text' && type !== 'text') {
+    throw new Error('Video/imagem sem URL publica. Faca upload do arquivo pelo feed antes de enviar.');
+  }
+
   const errors = [];
 
   for (const contact of subscribers) {
@@ -85,19 +92,76 @@ async function dispatch(schedule, par) {
 }
 
 // Resolve local /uploads/... paths to full public URL
-function resolveMediaUrl(url) {
+// If WEBHOOK_DOMAIN is set, uses it. Otherwise, uploads local files to a public host.
+async function resolveMediaUrl(url, mediaType, localFallback) {
   if (!url) return '';
-  if (url.startsWith('http')) return url;
-  // Local upload — needs public URL via WEBHOOK_DOMAIN or localhost
-  const domain = process.env.WEBHOOK_DOMAIN || `http://localhost:${process.env.PORT || 3000}`;
-  return domain.replace(/\/$/, '') + url;
+
+  // Public URLs (t.me links, telegra.ph, etc) — use directly
+  if (url.startsWith('http') && !url.startsWith('https://api.telegram.org/file/')) return url;
+
+  // Local /uploads/ path — need to get a public URL
+  let localRef = null;
+  if (url.startsWith('/uploads/')) {
+    localRef = url;
+  } else if (localFallback && localFallback.startsWith('/uploads/')) {
+    const path = require('path');
+    const fs = require('fs');
+    if (fs.existsSync(path.join(__dirname, '..', '..', 'public', localFallback))) {
+      localRef = localFallback;
+    }
+  }
+
+  if (!localRef) {
+    console.error('[sendpulse] no usable media source for:', url.slice(0, 50));
+    return '';
+  }
+
+  // If WEBHOOK_DOMAIN is set, use it directly
+  const domain = process.env.WEBHOOK_DOMAIN;
+  if (domain) return domain.replace(/\/$/, '') + localRef;
+
+  // Upload local file to public host
+  const path = require('path');
+  const fs = require('fs');
+  const FormData = require('form-data');
+  const localPath = path.join(__dirname, '..', '..', 'public', localRef);
+
+  if (!fs.existsSync(localPath)) {
+    console.error('[sendpulse] local file not found:', localPath);
+    return '';
+  }
+
+  try {
+    if (mediaType === 'photo') {
+      // Telegra.ph for images
+      const form = new FormData();
+      form.append('file', fs.createReadStream(localPath));
+      const res = await axios.post('https://telegra.ph/upload', form, {
+        headers: form.getHeaders(), timeout: 30000,
+      });
+      if (Array.isArray(res.data) && res.data[0]?.src) {
+        const pubUrl = 'https://telegra.ph' + res.data[0].src;
+        console.log('[sendpulse] image uploaded to telegra.ph:', pubUrl);
+        return pubUrl;
+      }
+    }
+    // Videos: no external hosting works with Telegram/SendPulse
+    // Videos must use t.me/ links from the public channel (set automatically at capture time)
+    if (mediaType === 'video') {
+      console.warn('[sendpulse] video sem URL t.me — envie um novo video no canal publico');
+    }
+  } catch (e) {
+    console.error(`[sendpulse] public upload failed (${mediaType}):`, e.message);
+  }
+
+  return '';
 }
 
 // Estrutura de mensagem para /contacts/send:
 // text:  { type: "text", text: "...", reply_markup: {...} }
 // photo: { type: "photo", photo: "URL", caption: "...", reply_markup: {...} }
 // video: { type: "video", video: "URL", caption: "...", reply_markup: {...} }
-function buildMessage(schedule) {
+async function buildMessage(schedule) {
   const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
   const replyMarkup = buttons && buttons.length > 0
     ? { inline_keyboard: [buttons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }
@@ -105,20 +169,30 @@ function buildMessage(schedule) {
 
   const type = schedule.content_type || 'text';
 
+  const localFallback = schedule.content_file_id || null;
+
   if (type === 'photo') {
-    const msg = { type: 'photo' };
-    msg.photo = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '');
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    return msg;
+    const photoUrl = await resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', 'photo', localFallback);
+    if (photoUrl) {
+      const msg = { type: 'photo', photo: photoUrl };
+      if (schedule.content_text) msg.caption = schedule.content_text;
+      if (replyMarkup) msg.reply_markup = replyMarkup;
+      return msg;
+    }
+    // Fallback to text if media URL could not be resolved
+    console.warn('[sendpulse] photo URL not resolved, falling back to text');
   }
 
   if (type === 'video') {
-    const msg = { type: 'video' };
-    msg.video = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '');
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    return msg;
+    const videoUrl = await resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', 'video', localFallback);
+    if (videoUrl) {
+      const msg = { type: 'video', video: videoUrl };
+      if (schedule.content_text) msg.caption = schedule.content_text;
+      if (replyMarkup) msg.reply_markup = replyMarkup;
+      return msg;
+    }
+    // Fallback to text if media URL could not be resolved
+    console.warn('[sendpulse] video URL not resolved, falling back to text');
   }
 
   // text
@@ -127,4 +201,4 @@ function buildMessage(schedule) {
   return msg;
 }
 
-module.exports = { getToken, listBots, listContacts, dispatch };
+module.exports = { getToken, listBots, listContacts, dispatch, __resolveMediaUrl: resolveMediaUrl };

@@ -515,7 +515,7 @@ tailwind.config = {
         <input type="file" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.gif" onchange="handleEditUpload(this.files[0])" class="absolute inset-0 opacity-0 cursor-pointer">
         <div class="text-2xl mb-1 opacity-40">&#128206;</div>
         <div class="text-xs text-gray-500">Arraste ou <strong class="text-green-400">clique para selecionar</strong></div>
-        <div class="text-[11px] text-gray-600 mt-1">JPG, PNG (2MB) ou MP4 (20MB)</div>
+        <div class="text-[11px] text-gray-600 mt-1">JPG, PNG (10MB) ou MP4 (50MB)</div>
       </div>
       <div id="editUploadPreview"></div>
       <div id="editUploadProgress" class="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden" style="display:none"><div class="bar h-full bg-green-500 transition-all duration-200" style="width:0%"></div></div>
@@ -1085,7 +1085,7 @@ function editTypeChanged() {
 async function handleEditUpload(file) {
   if (!file) return;
   const type = document.getElementById('editType').value;
-  const maxSize = type === 'photo' ? 2*1024*1024 : 20*1024*1024;
+  const maxSize = type === 'photo' ? 10*1024*1024 : 50*1024*1024;
   if (file.size > maxSize) return alert('Arquivo muito grande. Max: ' + (maxSize/1024/1024) + ' MB');
 
   const progressEl = document.getElementById('editUploadProgress');
@@ -1308,7 +1308,7 @@ function addMediaBlock(type) {
   if (mediaBlock) return;
   mediaBlock = { type, url: '' };
   const accept = type === 'photo' ? '.jpg,.jpeg,.png,.webp' : '.mp4,.webm,.gif';
-  const hint = type === 'photo' ? 'JPG ou PNG, max 2 MB' : 'MP4, max 20 MB';
+  const hint = type === 'photo' ? 'JPG ou PNG, max 10 MB' : 'MP4, max 50 MB';
   const blocks = document.getElementById('msgBlocks');
   const html = `<div class="border border-border/60 rounded-lg p-3.5 bg-surface-2" data-block="${type}" id="mediaBlockEl">
     <div class="flex items-center justify-between mb-2.5">
@@ -1344,7 +1344,7 @@ function removeMediaBlock() {
 
 async function handleUpload(file, ctx) {
   if (!file) return;
-  const maxSize = mediaBlock?.type === 'photo' ? 2*1024*1024 : 20*1024*1024;
+  const maxSize = mediaBlock?.type === 'photo' ? 10*1024*1024 : 50*1024*1024;
   if (file.size > maxSize) return alert('Arquivo muito grande. Max: ' + (maxSize/1024/1024) + ' MB');
 
   const progressEl = document.getElementById(ctx + 'UploadProgress');

@@ -65,6 +65,7 @@ async function dispatch(schedule, par, credentials) {
   }
 
   const message = buildMessage(schedule, credentials.webhook_domain);
+  console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
   const errors = [];
 
   for (const contact of subscribers) {
@@ -74,6 +75,7 @@ async function dispatch(schedule, par, credentials) {
         message,
       }, { headers: headers(token) });
     } catch (err) {
+      console.error('[sendpulse] send error:', contact.id, err.response?.data || err.message);
       errors.push(`${contact.id}: ${err.response?.data?.message || err.message}`);
     }
   }
@@ -88,8 +90,11 @@ async function dispatch(schedule, par, credentials) {
 function resolveMediaUrl(url, webhookDomain) {
   if (!url) return '';
   if (url.startsWith('http')) return url;
-  const domain = webhookDomain || `http://localhost:${process.env.PORT || 3000}`;
-  return domain.replace(/\/$/, '') + url;
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+  const domain = webhookDomain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
+  const resolved = domain.replace(/\/$/, '') + url;
+  console.log('[sendpulse] resolveMediaUrl:', url, '->', resolved);
+  return resolved;
 }
 
 function buildMessage(schedule, webhookDomain) {

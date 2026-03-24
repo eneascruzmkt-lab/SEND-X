@@ -3,50 +3,82 @@ const db = require('../db');
 
 let io = null;
 let pollingInterval = null;
-let telegrafBot = null;
-const lastSeenMsg = {}; // par_id -> last message id
+const lastSeenMsg = {};
+
+// Per-user Telegraf instances: { [userId]: Telegraf }
+const userBots = {};
 
 function start(socketIo) {
   io = socketIo;
 
-  // Method 1: Telegraf (if TELEGRAM_TOKEN is set) — captures ALL messages including media
-  if (process.env.TELEGRAM_TOKEN) {
-    startTelegraf();
-  }
+  // Start bots for all users with telegram tokens
+  refreshAllBots();
 
-  // Method 2: SendPulse API polling — fallback for text messages
+  // SendPulse API polling fallback (for users without Telegraf)
   pollingInterval = setInterval(async () => {
     try {
-      const pares = db.getAllPares();
-      for (const par of pares) {
-        await pollParMessages(par);
+      // Get all active pares from all users
+      const usersWithSP = db.raw.prepare(`
+        SELECT DISTINCT p.user_id FROM pares p
+        JOIN user_settings us ON us.user_id = p.user_id
+        WHERE p.ativo=1 AND us.sendpulse_id IS NOT NULL AND us.sendpulse_secret IS NOT NULL
+      `).all();
+
+      for (const { user_id } of usersWithSP) {
+        // Skip users that have a running Telegraf bot
+        if (userBots[user_id]) continue;
+
+        const settings = db.getUserSettings(user_id);
+        const credentials = {
+          sendpulse_id: settings.sendpulse_id,
+          sendpulse_secret: settings.sendpulse_secret,
+        };
+        const pares = db.getAllPares(user_id);
+        for (const par of pares) {
+          await pollParMessages(par, credentials);
+        }
       }
     } catch (err) {
       console.error('[feed] polling error:', err.message);
     }
   }, 15000);
 
-  setTimeout(async () => {
-    const pares = db.getAllPares();
-    for (const par of pares) {
-      await pollParMessages(par);
-    }
-  }, 3000);
-
-  console.log('[feed] polling SendPulse iniciado (15s)');
+  console.log('[feed] bot manager iniciado');
 }
 
-// ── Telegraf listener ───────────────────────────
-function startTelegraf() {
+function refreshAllBots() {
+  const users = db.getUsersWithTelegram();
+  for (const { id, telegram_token } of users) {
+    startUserBot(id, telegram_token);
+  }
+}
+
+function refreshUser(userId) {
+  // Stop existing bot
+  if (userBots[userId]) {
+    try { userBots[userId].stop(); } catch {}
+    delete userBots[userId];
+  }
+  // Restart if token exists
+  const settings = db.getUserSettings(userId);
+  if (settings.telegram_token) {
+    startUserBot(userId, settings.telegram_token);
+  }
+}
+
+function startUserBot(userId, telegramToken) {
+  if (userBots[userId]) return; // already running
+
   try {
     const { Telegraf } = require('telegraf');
-    telegrafBot = new Telegraf(process.env.TELEGRAM_TOKEN);
+    const bot = new Telegraf(telegramToken);
 
-    // 'message' for groups, 'channel_post' for channels
-    telegrafBot.on(['message', 'channel_post'], async (ctx) => {
+    bot.on(['message', 'channel_post'], async (ctx) => {
       try {
         const groupId = String(ctx.chat.id);
-        const par = db.getParByGroupId(groupId);
+        // Find matching pares for this user
+        const pares = db.getAllPares(userId);
+        const par = pares.find(p => p.telegram_group_id === groupId);
         if (!par || !par.ativo) return;
 
         const msg = ctx.message || ctx.channelPost || ctx.update?.channel_post;
@@ -56,13 +88,11 @@ function startTelegraf() {
         const fileId = extractTelegrafFileId(msg);
         const text = msg.text || msg.caption || null;
 
-
-        // Download media to local uploads + get telegram public URL
         let localPreview = null;
         let publicMediaUrl = null;
         if (fileId && (msgType === 'photo' || msgType === 'video')) {
           try {
-            const result = await downloadTelegramFile(ctx, fileId, msgType);
+            const result = await downloadTelegramFile(ctx, fileId, msgType, telegramToken);
             localPreview = result.localPath;
             publicMediaUrl = result.publicUrl;
           } catch (e) {
@@ -75,12 +105,11 @@ function startTelegraf() {
           text,
           from_user: ctx.from?.username || ctx.from?.first_name || ctx.chat?.title || 'canal',
           message_type: msgType,
-          // file_id = local path for UI preview; store telegram URL in a data attribute
           file_id: localPreview || fileId || null,
           telegram_media_url: publicMediaUrl || null,
         };
 
-        // Dedup by message_id
+        // Dedup
         const existing = db.getMessages(par.id, 30);
         const isDup = existing.some(e =>
           e.text === msgData.text &&
@@ -98,14 +127,15 @@ function startTelegraf() {
       }
     });
 
-    telegrafBot.launch({ dropPendingUpdates: true });
-    console.log('[feed] Telegraf bot iniciado — captura de midia ativa');
+    bot.launch({ dropPendingUpdates: true });
+    userBots[userId] = bot;
+    console.log(`[feed] Telegraf bot iniciado para user ${userId}`);
   } catch (err) {
-    console.error('[feed] Telegraf error:', err.message);
+    console.error(`[feed] Telegraf error (user ${userId}):`, err.message);
   }
 }
 
-async function downloadTelegramFile(ctx, fileId, type) {
+async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
   const fs = require('fs');
   const path = require('path');
   const crypto = require('crypto');
@@ -119,9 +149,8 @@ async function downloadTelegramFile(ctx, fileId, type) {
   const filename = crypto.randomBytes(12).toString('hex') + ext;
   const localPath = path.join(__dirname, '..', '..', 'public', 'uploads', filename);
 
-  const telegramUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${filePath}`;
+  const telegramUrl = `https://api.telegram.org/file/bot${telegramToken}/${filePath}`;
 
-  // Download locally for UI preview
   await new Promise((resolve, reject) => {
     const file = fs.createWriteStream(localPath);
     https.get(telegramUrl, (res) => {
@@ -130,8 +159,7 @@ async function downloadTelegramFile(ctx, fileId, type) {
     }).on('error', reject);
   });
 
-  // Upload to freeimage.host for public URL (SendPulse needs publicly accessible URL)
-  let publicUrl = telegramUrl; // fallback
+  let publicUrl = telegramUrl;
   try {
     const form = new FormData();
     form.append('source', fs.createReadStream(localPath));
@@ -143,7 +171,6 @@ async function downloadTelegramFile(ctx, fileId, type) {
     );
     if (res.data?.image?.url) {
       publicUrl = res.data.image.url;
-      console.log('[feed] image uploaded:', publicUrl);
     }
   } catch (e) {
     console.error('[feed] freeimage upload failed, using telegram URL:', e.message);
@@ -156,7 +183,7 @@ function detectTelegrafType(message) {
   if (message.photo && message.photo.length > 0) return 'photo';
   if (message.video) return 'video';
   if (message.document) return 'document';
-  if (message.animation) return 'photo'; // GIFs
+  if (message.animation) return 'photo';
   return 'text';
 }
 
@@ -168,17 +195,13 @@ function extractTelegrafFileId(message) {
   return null;
 }
 
-// ── SendPulse API polling (text fallback) ───────
-async function pollParMessages(par) {
-  // Skip if Telegraf is active for this group — it handles everything
-  if (telegrafBot) return;
-
+async function pollParMessages(par, credentials) {
   try {
-    const contacts = await sendpulse.listContacts(par.sendpulse_bot_id);
+    const contacts = await sendpulse.listContacts(par.sendpulse_bot_id, credentials);
     const groupContact = contacts.find(c => c.type === 3);
     if (!groupContact) return;
 
-    const token = await sendpulse.getToken();
+    const token = await sendpulse.getToken(credentials);
     const axios = require('axios');
     const res = await axios.get(
       `https://api.sendpulse.com/telegram/chats/messages?contact_id=${groupContact.id}&size=20&order=desc`,
@@ -246,7 +269,9 @@ function extractMedia(data) {
 
 function stop() {
   if (pollingInterval) clearInterval(pollingInterval);
-  if (telegrafBot) telegrafBot.stop();
+  for (const userId of Object.keys(userBots)) {
+    try { userBots[userId].stop(); } catch {}
+  }
 }
 
-module.exports = { start, stop };
+module.exports = { start, stop, refreshUser };

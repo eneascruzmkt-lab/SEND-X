@@ -29,6 +29,7 @@ function scheduleNextOccurrence(schedule) {
   }
 
   db.createSchedule({
+    user_id: schedule.user_id,
     par_id: schedule.par_id,
     sendpulse_bot_id: schedule.sendpulse_bot_id,
     sendpulse_bot_nome: schedule.sendpulse_bot_nome,
@@ -50,7 +51,25 @@ function start(socketIo) {
   cron.schedule('* * * * *', async () => {
     const pendentes = db.getSchedulesDue();
     for (const s of pendentes) {
-      // Resolve bot_id: direto no schedule ou via par
+      // Get user credentials for this schedule
+      const userId = s.user_id;
+      if (!userId) {
+        db.updateScheduleStatus(s.id, 'erro', 'Usuário não encontrado');
+        continue;
+      }
+
+      const settings = db.getUserSettings(userId);
+      if (!settings.sendpulse_id || !settings.sendpulse_secret) {
+        db.updateScheduleStatus(s.id, 'erro', 'Credenciais SendPulse não configuradas');
+        continue;
+      }
+
+      const credentials = {
+        sendpulse_id: settings.sendpulse_id,
+        sendpulse_secret: settings.sendpulse_secret,
+        webhook_domain: settings.webhook_domain,
+      };
+
       const par = s.par_id ? db.getParById(s.par_id) : null;
       if (!s.sendpulse_bot_id && par) {
         s.sendpulse_bot_id = par.sendpulse_bot_id;
@@ -61,7 +80,7 @@ function start(socketIo) {
       }
 
       try {
-        await sendpulse.dispatch(s, par);
+        await sendpulse.dispatch(s, par, credentials);
         db.updateScheduleStatus(s.id, 'enviado');
         db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado' });
         if (s.recurrence) scheduleNextOccurrence(s);

@@ -18,8 +18,9 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Share io with routes
+// Share io and botManager with routes
 app.set('io', io);
+app.set('botManager', feed);
 
 // Routes
 app.use('/api', routes);

@@ -2,23 +2,25 @@ const axios = require('axios');
 
 const BASE = 'https://api.sendpulse.com';
 
-// Cache do token OAuth2 (55 min TTL)
-let tokenCache = { value: null, expiresAt: 0 };
+// Per-user token cache: { [userId]: { value, expiresAt } }
+const tokenCache = {};
 
-async function getToken() {
-  if (tokenCache.value && Date.now() < tokenCache.expiresAt) {
-    return tokenCache.value;
+async function getToken(credentials) {
+  const key = credentials.sendpulse_id;
+  const cached = tokenCache[key];
+  if (cached && cached.value && Date.now() < cached.expiresAt) {
+    return cached.value;
   }
   const res = await axios.post(`${BASE}/oauth/access_token`, {
     grant_type: 'client_credentials',
-    client_id: process.env.SENDPULSE_ID,
-    client_secret: process.env.SENDPULSE_SECRET,
+    client_id: credentials.sendpulse_id,
+    client_secret: credentials.sendpulse_secret,
   });
-  tokenCache = {
+  tokenCache[key] = {
     value: res.data.access_token,
     expiresAt: Date.now() + (55 * 60 * 1000),
   };
-  return tokenCache.value;
+  return tokenCache[key].value;
 }
 
 function headers(token) {
@@ -26,8 +28,8 @@ function headers(token) {
 }
 
 // GET /telegram/bots
-async function listBots() {
-  const token = await getToken();
+async function listBots(credentials) {
+  const token = await getToken(credentials);
   const res = await axios.get(`${BASE}/telegram/bots`, { headers: headers(token) });
   const raw = res.data.data || res.data;
   return raw.map(b => ({
@@ -40,8 +42,8 @@ async function listBots() {
 }
 
 // GET /telegram/contacts — lista contatos de um bot
-async function listContacts(botId) {
-  const token = await getToken();
+async function listContacts(botId, credentials) {
+  const token = await getToken(credentials);
   const res = await axios.get(`${BASE}/telegram/contacts?bot_id=${botId}`, {
     headers: headers(token),
   });
@@ -49,21 +51,19 @@ async function listContacts(botId) {
 }
 
 // Disparo seguro: envia SOMENTE para inscritos diretos (type != 3)
-// Usa POST /contacts/send para cada contato individualmente
-async function dispatch(schedule, par) {
-  const token = await getToken();
+async function dispatch(schedule, par, credentials) {
+  const token = await getToken(credentials);
   const botId = schedule.sendpulse_bot_id || (par && par.sendpulse_bot_id);
   if (!botId) throw new Error('Bot ID não encontrado');
 
-  // Buscar contatos e filtrar — type 3 = grupo/canal
-  const contacts = await listContacts(botId);
+  const contacts = await listContacts(botId, credentials);
   const subscribers = contacts.filter(c => c.type !== 3 && c.status === 1);
 
   if (subscribers.length === 0) {
     throw new Error('Nenhum inscrito direto encontrado neste bot');
   }
 
-  const message = buildMessage(schedule);
+  const message = buildMessage(schedule, credentials.webhook_domain);
   const errors = [];
 
   for (const contact of subscribers) {
@@ -84,20 +84,14 @@ async function dispatch(schedule, par) {
   console.log(`[sendpulse] Enviado para ${subscribers.length - errors.length}/${subscribers.length} inscritos`);
 }
 
-// Resolve local /uploads/... paths to full public URL
-function resolveMediaUrl(url) {
+function resolveMediaUrl(url, webhookDomain) {
   if (!url) return '';
   if (url.startsWith('http')) return url;
-  // Local upload — needs public URL via WEBHOOK_DOMAIN or localhost
-  const domain = process.env.WEBHOOK_DOMAIN || `http://localhost:${process.env.PORT || 3000}`;
+  const domain = webhookDomain || `http://localhost:${process.env.PORT || 3000}`;
   return domain.replace(/\/$/, '') + url;
 }
 
-// Estrutura de mensagem para /contacts/send:
-// text:  { type: "text", text: "...", reply_markup: {...} }
-// photo: { type: "photo", photo: "URL", caption: "...", reply_markup: {...} }
-// video: { type: "video", video: "URL", caption: "...", reply_markup: {...} }
-function buildMessage(schedule) {
+function buildMessage(schedule, webhookDomain) {
   const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
   const replyMarkup = buttons && buttons.length > 0
     ? { inline_keyboard: [buttons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }
@@ -107,7 +101,7 @@ function buildMessage(schedule) {
 
   if (type === 'photo') {
     const msg = { type: 'photo' };
-    msg.photo = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '');
+    msg.photo = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain);
     if (schedule.content_text) msg.caption = schedule.content_text;
     if (replyMarkup) msg.reply_markup = replyMarkup;
     return msg;
@@ -115,7 +109,7 @@ function buildMessage(schedule) {
 
   if (type === 'video') {
     const msg = { type: 'video' };
-    msg.video = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '');
+    msg.video = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain);
     if (schedule.content_text) msg.caption = schedule.content_text;
     if (replyMarkup) msg.reply_markup = replyMarkup;
     return msg;

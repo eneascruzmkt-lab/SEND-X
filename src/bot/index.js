@@ -17,23 +17,22 @@ function start(socketIo) {
   // SendPulse API polling fallback (for users without Telegraf)
   pollingInterval = setInterval(async () => {
     try {
-      // Get all active pares from all users
-      const usersWithSP = db.raw.prepare(`
+      const usersWithSP = await db.query(`
         SELECT DISTINCT p.user_id FROM pares p
         JOIN user_settings us ON us.user_id = p.user_id
         WHERE p.ativo=1 AND us.sendpulse_id IS NOT NULL AND us.sendpulse_secret IS NOT NULL
-      `).all();
+      `);
 
       for (const { user_id } of usersWithSP) {
         // Skip users that have a running Telegraf bot
         if (userBots[user_id]) continue;
 
-        const settings = db.getUserSettings(user_id);
+        const settings = await db.getUserSettings(user_id);
         const credentials = {
           sendpulse_id: settings.sendpulse_id,
           sendpulse_secret: settings.sendpulse_secret,
         };
-        const pares = db.getAllPares(user_id);
+        const pares = await db.getAllPares(user_id);
         for (const par of pares) {
           await pollParMessages(par, credentials);
         }
@@ -46,27 +45,27 @@ function start(socketIo) {
   console.log('[feed] bot manager iniciado');
 }
 
-function refreshAllBots() {
-  const users = db.getUsersWithTelegram();
+async function refreshAllBots() {
+  const users = await db.getUsersWithTelegram();
   for (const { id, telegram_token } of users) {
-    startUserBot(id, telegram_token);
+    await startUserBot(id, telegram_token);
   }
 }
 
-function refreshUser(userId) {
+async function refreshUser(userId) {
   // Stop existing bot
   if (userBots[userId]) {
     try { userBots[userId].stop(); } catch {}
     delete userBots[userId];
   }
   // Restart if token exists
-  const settings = db.getUserSettings(userId);
+  const settings = await db.getUserSettings(userId);
   if (settings.telegram_token) {
-    startUserBot(userId, settings.telegram_token);
+    await startUserBot(userId, settings.telegram_token);
   }
 }
 
-function startUserBot(userId, telegramToken) {
+async function startUserBot(userId, telegramToken) {
   if (userBots[userId]) return; // already running
 
   try {
@@ -77,7 +76,7 @@ function startUserBot(userId, telegramToken) {
       try {
         const groupId = String(ctx.chat.id);
         // Find matching pares for this user
-        const pares = db.getAllPares(userId);
+        const pares = await db.getAllPares(userId);
         const par = pares.find(p => p.telegram_group_id === groupId);
         if (!par || !par.ativo) return;
 
@@ -110,7 +109,7 @@ function startUserBot(userId, telegramToken) {
         };
 
         // Dedup
-        const existing = db.getMessages(par.id, 30);
+        const existing = await db.getMessages(par.id, 30);
         const isDup = existing.some(e =>
           e.text === msgData.text &&
           e.file_id === msgData.file_id &&
@@ -120,7 +119,7 @@ function startUserBot(userId, telegramToken) {
         );
         if (isDup) return;
 
-        const saved = db.insertMessage(msgData);
+        const saved = await db.insertMessage(msgData);
         if (io) io.to(`par_${par.id}`).emit('new_message', saved);
       } catch (err) {
         console.error('[feed/telegraf] error:', err.message);
@@ -230,7 +229,7 @@ async function pollParMessages(par, credentials) {
         created_at: m.created_at ? m.created_at.replace('+00:00', '').replace('T', ' ') : undefined,
       };
 
-      const existing = db.getMessages(par.id, 50);
+      const existing = await db.getMessages(par.id, 50);
       const isDuplicate = existing.some(e =>
         e.text === msgData.text &&
         e.file_id === msgData.file_id &&
@@ -239,7 +238,7 @@ async function pollParMessages(par, credentials) {
       );
       if (isDuplicate) continue;
 
-      const saved = db.insertMessage(msgData);
+      const saved = await db.insertMessage(msgData);
       if (io) io.to(`par_${par.id}`).emit('new_message', saved);
     }
   } catch (err) {

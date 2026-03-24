@@ -1,6 +1,5 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const db = require('../db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sendx-secret-change-me';
 

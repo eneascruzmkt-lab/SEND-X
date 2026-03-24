@@ -33,7 +33,7 @@ const upload = multer({
 });
 
 // ── Auth routes (public) ─────────────────────────────
-router.post('/auth/register', (req, res) => {
+router.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -46,11 +46,11 @@ router.post('/auth/register', (req, res) => {
     if (password.length < 6) {
       return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
     }
-    const existing = db.getUserByEmail(email);
+    const existing = await db.getUserByEmail(email);
     if (existing) {
       return res.status(409).json({ error: 'Email já cadastrado' });
     }
-    const user = db.createUser({ name, email, password_hash: hashPassword(password) });
+    const user = await db.createUser({ name, email, password_hash: hashPassword(password) });
     const token = generateToken(user);
     res.status(201).json({ user, token });
   } catch (err) {
@@ -58,13 +58,13 @@ router.post('/auth/register', (req, res) => {
   }
 });
 
-router.post('/auth/login', (req, res) => {
+router.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
-    const user = db.getUserByEmail(email);
+    const user = await db.getUserByEmail(email);
     if (!user || !comparePassword(password, user.password_hash)) {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
@@ -75,8 +75,8 @@ router.post('/auth/login', (req, res) => {
   }
 });
 
-router.get('/auth/me', auth, (req, res) => {
-  const user = db.getUserById(req.userId);
+router.get('/auth/me', auth, async (req, res) => {
+  const user = await db.getUserById(req.userId);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
   res.json(user);
 });
@@ -92,9 +92,8 @@ router.post('/upload', upload.single('file'), (req, res) => {
 });
 
 // ── User Settings ────────────────────────────────────
-router.get('/settings', (req, res) => {
-  const settings = db.getUserSettings(req.userId);
-  // Mask secrets for display
+router.get('/settings', async (req, res) => {
+  const settings = await db.getUserSettings(req.userId);
   res.json({
     sendpulse_id: settings.sendpulse_id || '',
     sendpulse_secret: settings.sendpulse_secret ? '••••••••' : '',
@@ -105,11 +104,11 @@ router.get('/settings', (req, res) => {
   });
 });
 
-router.put('/settings', (req, res) => {
+router.put('/settings', async (req, res) => {
   const { sendpulse_id, sendpulse_secret, telegram_token, webhook_domain } = req.body;
-  const current = db.getUserSettings(req.userId);
+  const current = await db.getUserSettings(req.userId);
 
-  const updated = db.upsertUserSettings(req.userId, {
+  const updated = await db.upsertUserSettings(req.userId, {
     sendpulse_id: sendpulse_id ?? current.sendpulse_id ?? null,
     sendpulse_secret: (sendpulse_secret && sendpulse_secret !== '••••••••') ? sendpulse_secret : (current.sendpulse_secret ?? null),
     telegram_token: (telegram_token && telegram_token !== '••••••••') ? telegram_token : (current.telegram_token ?? null),
@@ -131,8 +130,8 @@ router.put('/settings', (req, res) => {
 });
 
 // Helper: get user's sendpulse credentials
-function getCredentials(req) {
-  const settings = db.getUserSettings(req.userId);
+async function getCredentials(req) {
+  const settings = await db.getUserSettings(req.userId);
   if (!settings.sendpulse_id || !settings.sendpulse_secret) {
     return null;
   }
@@ -144,17 +143,17 @@ function getCredentials(req) {
 }
 
 // ── Pares ──────────────────────────────────────────────
-router.get('/pares', (req, res) => {
-  res.json(db.getAllPares(req.userId));
+router.get('/pares', async (req, res) => {
+  res.json(await db.getAllPares(req.userId));
 });
 
-router.post('/pares', (req, res) => {
+router.post('/pares', async (req, res) => {
   try {
     const { nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome } = req.body;
     if (!nome || !telegram_group_id || !sendpulse_bot_id) {
       return res.status(400).json({ error: 'nome, telegram_group_id e sendpulse_bot_id são obrigatórios' });
     }
-    const par = db.createPar({
+    const par = await db.createPar({
       user_id: req.userId,
       nome,
       telegram_group_id,
@@ -163,17 +162,17 @@ router.post('/pares', (req, res) => {
     });
     res.status(201).json(par);
   } catch (err) {
-    if (err.message.includes('UNIQUE')) {
+    if (err.message.includes('unique') || err.message.includes('duplicate')) {
       return res.status(409).json({ error: 'telegram_group_id já cadastrado para este usuário' });
     }
     res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/pares/:id', (req, res) => {
-  const par = db.getParById(req.params.id);
+router.put('/pares/:id', async (req, res) => {
+  const par = await db.getParById(req.params.id);
   if (!par || par.user_id !== req.userId) return res.status(404).json({ error: 'Par não encontrado' });
-  const updated = db.updatePar(req.params.id, {
+  const updated = await db.updatePar(req.params.id, {
     nome: req.body.nome || par.nome,
     telegram_group_id: req.body.telegram_group_id || par.telegram_group_id,
     sendpulse_bot_id: req.body.sendpulse_bot_id || par.sendpulse_bot_id,
@@ -182,46 +181,46 @@ router.put('/pares/:id', (req, res) => {
   res.json(updated);
 });
 
-router.delete('/pares/:id', (req, res) => {
-  const par = db.getParById(req.params.id);
+router.delete('/pares/:id', async (req, res) => {
+  const par = await db.getParById(req.params.id);
   if (!par || par.user_id !== req.userId) return res.status(404).json({ error: 'Par não encontrado' });
-  db.deactivatePar(req.params.id);
+  await db.deactivatePar(req.params.id);
   res.json({ ok: true });
 });
 
 // ── Messages ───────────────────────────────────────────
-router.get('/messages', (req, res) => {
+router.get('/messages', async (req, res) => {
   const { par_id } = req.query;
   if (!par_id) return res.status(400).json({ error: 'par_id obrigatório' });
-  const par = db.getParById(Number(par_id));
+  const par = await db.getParById(Number(par_id));
   if (!par || par.user_id !== req.userId) return res.status(403).json({ error: 'Acesso negado' });
-  res.json(db.getMessages(Number(par_id)));
+  res.json(await db.getMessages(Number(par_id)));
 });
 
 // ── Schedules ──────────────────────────────────────────
-router.get('/schedules', (req, res) => {
+router.get('/schedules', async (req, res) => {
   const { par_id, status } = req.query;
   if (par_id) {
-    const par = db.getParById(Number(par_id));
+    const par = await db.getParById(Number(par_id));
     if (!par || par.user_id !== req.userId) return res.status(403).json({ error: 'Acesso negado' });
-    res.json(db.getSchedules(Number(par_id), status || null));
+    res.json(await db.getSchedules(Number(par_id), status || null));
   } else {
-    res.json(db.getAllSchedules(status || null, req.userId));
+    res.json(await db.getAllSchedules(status || null, req.userId));
   }
 });
 
-router.post('/schedules', (req, res) => {
+router.post('/schedules', async (req, res) => {
   try {
     let { par_id, sendpulse_bot_id } = req.body;
     if (!req.body.scheduled_at) {
       return res.status(400).json({ error: 'scheduled_at é obrigatório' });
     }
     if (par_id) {
-      const par = db.getParById(par_id);
+      const par = await db.getParById(par_id);
       if (!par || par.user_id !== req.userId) return res.status(403).json({ error: 'Acesso negado' });
     }
     if (!sendpulse_bot_id && par_id) {
-      const par = db.getParById(par_id);
+      const par = await db.getParById(par_id);
       if (par) {
         req.body.sendpulse_bot_id = par.sendpulse_bot_id;
         req.body.sendpulse_bot_nome = req.body.sendpulse_bot_nome || par.sendpulse_bot_nome;
@@ -237,7 +236,7 @@ router.post('/schedules', (req, res) => {
       return res.status(400).json({ error: 'Botões não permitidos para mensagens do grupo' });
     }
     req.body.user_id = req.userId;
-    const schedule = db.createSchedule(req.body);
+    const schedule = await db.createSchedule(req.body);
     const io = req.app.get('io');
     if (io && par_id) io.to(`par_${par_id}`).emit('schedule_update', schedule);
     res.status(201).json(schedule);
@@ -247,64 +246,64 @@ router.post('/schedules', (req, res) => {
 });
 
 router.post('/schedules/:id/send', async (req, res) => {
-  const schedule = db.getScheduleById(req.params.id);
+  const schedule = await db.getScheduleById(req.params.id);
   if (!schedule || schedule.user_id !== req.userId) return res.status(404).json({ error: 'Agendamento não encontrado' });
 
-  const credentials = getCredentials(req);
+  const credentials = await getCredentials(req);
   if (!credentials) return res.status(400).json({ error: 'Configure suas credenciais SendPulse em Configurações' });
 
   let botId = schedule.sendpulse_bot_id;
-  const par = schedule.par_id ? db.getParById(schedule.par_id) : null;
+  const par = schedule.par_id ? await db.getParById(schedule.par_id) : null;
   if (!botId && par) botId = par.sendpulse_bot_id;
   if (!botId) return res.status(400).json({ error: 'Bot ID não encontrado' });
 
   try {
     const s = { ...schedule, sendpulse_bot_id: botId };
     await sendpulse.dispatch(s, par, credentials);
-    db.updateScheduleStatus(schedule.id, 'enviado');
-    db.insertLog({ schedule_id: schedule.id, par_id: schedule.par_id, status: 'enviado' });
+    await db.updateScheduleStatus(schedule.id, 'enviado');
+    await db.insertLog({ schedule_id: schedule.id, par_id: schedule.par_id, status: 'enviado' });
     res.json({ ok: true, status: 'enviado' });
   } catch (err) {
     const errMsg = err.response?.data?.message || err.message;
-    db.updateScheduleStatus(schedule.id, 'erro', errMsg);
-    db.insertLog({ schedule_id: schedule.id, par_id: schedule.par_id, status: 'erro', sendpulse_response: JSON.stringify(err.response?.data || err.message) });
+    await db.updateScheduleStatus(schedule.id, 'erro', errMsg);
+    await db.insertLog({ schedule_id: schedule.id, par_id: schedule.par_id, status: 'erro', sendpulse_response: JSON.stringify(err.response?.data || err.message) });
     res.status(500).json({ error: errMsg });
   }
 });
 
-router.put('/schedules/:id', (req, res) => {
-  const existing = db.getScheduleById(req.params.id);
+router.put('/schedules/:id', async (req, res) => {
+  const existing = await db.getScheduleById(req.params.id);
   if (!existing || existing.user_id !== req.userId) return res.status(404).json({ error: 'Agendamento não encontrado' });
   if (req.body.buttons && req.body.buttons.length > 3) {
     return res.status(400).json({ error: 'Máximo 3 botões permitidos' });
   }
-  const updated = db.updateSchedule(req.params.id, req.body);
+  const updated = await db.updateSchedule(req.params.id, req.body);
   const io = req.app.get('io');
   if (io) io.to(`par_${updated.par_id}`).emit('schedule_update', updated);
   res.json(updated);
 });
 
-router.delete('/schedules/:id', (req, res) => {
-  const existing = db.getScheduleById(req.params.id);
+router.delete('/schedules/:id', async (req, res) => {
+  const existing = await db.getScheduleById(req.params.id);
   if (!existing || existing.user_id !== req.userId) return res.status(404).json({ error: 'Agendamento não encontrado' });
-  db.deleteSchedule(req.params.id);
+  await db.deleteSchedule(req.params.id);
   const io = req.app.get('io');
   if (io) io.to(`par_${existing.par_id}`).emit('schedule_update', { id: existing.id, deleted: true });
   res.json({ ok: true });
 });
 
 // ── Dashboard ──────────────────────────────────────────
-router.get('/dashboard', (req, res) => {
+router.get('/dashboard', async (req, res) => {
   const { par_id } = req.query;
   if (!par_id) return res.status(400).json({ error: 'par_id obrigatório' });
-  const par = db.getParById(Number(par_id));
+  const par = await db.getParById(Number(par_id));
   if (!par || par.user_id !== req.userId) return res.status(403).json({ error: 'Acesso negado' });
-  res.json(db.getDashboard(Number(par_id)));
+  res.json(await db.getDashboard(Number(par_id)));
 });
 
 // ── SendPulse Bots ─────────────────────────────────────
 router.get('/sendpulse/bots', async (req, res) => {
-  const credentials = getCredentials(req);
+  const credentials = await getCredentials(req);
   if (!credentials) {
     return res.status(400).json({ error: 'Configure suas credenciais SendPulse em Configurações', needs_setup: true });
   }

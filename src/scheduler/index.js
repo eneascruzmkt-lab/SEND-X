@@ -4,7 +4,7 @@ const sendpulse = require('../sendpulse');
 
 let io = null;
 
-function scheduleNextOccurrence(schedule) {
+async function scheduleNextOccurrence(schedule) {
   const current = new Date(schedule.scheduled_at);
   let next;
 
@@ -28,7 +28,7 @@ function scheduleNextOccurrence(schedule) {
       return;
   }
 
-  db.createSchedule({
+  await db.createSchedule({
     user_id: schedule.user_id,
     par_id: schedule.par_id,
     sendpulse_bot_id: schedule.sendpulse_bot_id,
@@ -49,18 +49,17 @@ function start(socketIo) {
 
   // Fire pending schedules every minute
   cron.schedule('* * * * *', async () => {
-    const pendentes = db.getSchedulesDue();
+    const pendentes = await db.getSchedulesDue();
     for (const s of pendentes) {
-      // Get user credentials for this schedule
       const userId = s.user_id;
       if (!userId) {
-        db.updateScheduleStatus(s.id, 'erro', 'Usuário não encontrado');
+        await db.updateScheduleStatus(s.id, 'erro', 'Usuário não encontrado');
         continue;
       }
 
-      const settings = db.getUserSettings(userId);
+      const settings = await db.getUserSettings(userId);
       if (!settings.sendpulse_id || !settings.sendpulse_secret) {
-        db.updateScheduleStatus(s.id, 'erro', 'Credenciais SendPulse não configuradas');
+        await db.updateScheduleStatus(s.id, 'erro', 'Credenciais SendPulse não configuradas');
         continue;
       }
 
@@ -70,35 +69,37 @@ function start(socketIo) {
         webhook_domain: settings.webhook_domain,
       };
 
-      const par = s.par_id ? db.getParById(s.par_id) : null;
+      const par = s.par_id ? await db.getParById(s.par_id) : null;
       if (!s.sendpulse_bot_id && par) {
         s.sendpulse_bot_id = par.sendpulse_bot_id;
       }
       if (!s.sendpulse_bot_id) {
-        db.updateScheduleStatus(s.id, 'erro', 'Bot ID não encontrado');
+        await db.updateScheduleStatus(s.id, 'erro', 'Bot ID não encontrado');
         continue;
       }
 
       try {
         await sendpulse.dispatch(s, par, credentials);
-        db.updateScheduleStatus(s.id, 'enviado');
-        db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado' });
-        if (s.recurrence) scheduleNextOccurrence(s);
+        await db.updateScheduleStatus(s.id, 'enviado');
+        await db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado' });
+        if (s.recurrence) await scheduleNextOccurrence(s);
         if (io && s.par_id) {
-          io.to(`par_${s.par_id}`).emit('schedule_update', db.getScheduleById(s.id));
+          const updated = await db.getScheduleById(s.id);
+          io.to(`par_${s.par_id}`).emit('schedule_update', updated);
           io.to(`par_${s.par_id}`).emit('dispatch_fired', {
             par_id: s.par_id, schedule_id: s.id, status: 'enviado',
           });
         }
       } catch (err) {
         const errMsg = err.response?.data?.message || err.message;
-        db.updateScheduleStatus(s.id, 'erro', errMsg);
-        db.insertLog({
+        await db.updateScheduleStatus(s.id, 'erro', errMsg);
+        await db.insertLog({
           schedule_id: s.id, par_id: s.par_id, status: 'erro',
           sendpulse_response: JSON.stringify(err.response?.data || err.message),
         });
         if (io && s.par_id) {
-          io.to(`par_${s.par_id}`).emit('schedule_update', db.getScheduleById(s.id));
+          const updated = await db.getScheduleById(s.id);
+          io.to(`par_${s.par_id}`).emit('schedule_update', updated);
           io.to(`par_${s.par_id}`).emit('dispatch_fired', {
             par_id: s.par_id, schedule_id: s.id, status: 'erro',
           });
@@ -108,8 +109,8 @@ function start(socketIo) {
   });
 
   // Midnight cleanup
-  cron.schedule('0 0 * * *', () => {
-    db.clearMessages();
+  cron.schedule('0 0 * * *', async () => {
+    await db.clearMessages();
     console.log('[cron] messages apagadas —', new Date().toISOString());
   });
 

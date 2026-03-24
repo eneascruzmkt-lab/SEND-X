@@ -5,6 +5,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 
+const db = require('./src/db');
 const routes = require('./src/routes');
 const { setup: setupSocket } = require('./src/socket');
 const feed = require('./src/bot');
@@ -28,14 +29,20 @@ app.use('/api', routes);
 // Socket.io
 setupSocket(io);
 
-// Feed — polls SendPulse API for incoming group messages
-feed.start(io);
-
-// Scheduler
-scheduler.start(io);
-
-// Start server
+// Init DB, then start everything
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`[server] rodando em http://localhost:${PORT}`);
+
+db.init().then(() => {
+  // Feed — polls SendPulse API for incoming group messages
+  feed.start(io);
+
+  // Scheduler
+  scheduler.start(io);
+
+  server.listen(PORT, () => {
+    console.log(`[server] rodando em http://localhost:${PORT}`);
+  });
+}).catch(err => {
+  console.error('[db] Falha ao inicializar PostgreSQL:', err.message);
+  process.exit(1);
 });

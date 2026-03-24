@@ -90,11 +90,17 @@ async function dispatch(schedule, par, credentials) {
 function resolveMediaUrl(url, webhookDomain) {
   if (!url) return '';
   if (url.startsWith('http')) return url;
-  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
-  const domain = webhookDomain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
-  const resolved = domain.replace(/\/$/, '') + url;
-  console.log('[sendpulse] resolveMediaUrl:', url, '->', resolved);
-  return resolved;
+  // Local upload paths start with /
+  if (url.startsWith('/')) {
+    const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+    const domain = webhookDomain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
+    const resolved = domain.replace(/\/$/, '') + url;
+    console.log('[sendpulse] resolveMediaUrl:', url, '->', resolved);
+    return resolved;
+  }
+  // Anything else (e.g. Telegram file_id) — not a valid URL
+  console.log('[sendpulse] resolveMediaUrl: skipping non-URL value:', url.slice(0, 40));
+  return '';
 }
 
 function buildMessage(schedule, webhookDomain) {
@@ -106,19 +112,27 @@ function buildMessage(schedule, webhookDomain) {
   const type = schedule.content_type || 'text';
 
   if (type === 'photo') {
-    const msg = { type: 'photo' };
-    msg.photo = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain);
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    return msg;
+    const photoUrl = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain);
+    if (photoUrl) {
+      const msg = { type: 'photo', photo: photoUrl };
+      if (schedule.content_text) msg.caption = schedule.content_text;
+      if (replyMarkup) msg.reply_markup = replyMarkup;
+      return msg;
+    }
+    // Fallback to text if no valid URL
+    console.log('[sendpulse] photo sem URL valida, enviando como texto');
   }
 
   if (type === 'video') {
-    const msg = { type: 'video' };
-    msg.video = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain);
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    return msg;
+    const videoUrl = resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain);
+    if (videoUrl) {
+      const msg = { type: 'video', video: videoUrl };
+      if (schedule.content_text) msg.caption = schedule.content_text;
+      if (replyMarkup) msg.reply_markup = replyMarkup;
+      return msg;
+    }
+    // Fallback to text if no valid URL
+    console.log('[sendpulse] video sem URL valida, enviando como texto');
   }
 
   // text

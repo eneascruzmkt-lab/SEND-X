@@ -310,8 +310,10 @@ router.get('/sendpulse/bots', async (req, res) => {
   }
   try {
     const bots = await sendpulse.listBots(credentials);
+    console.log('[sendpulse/bots] resultado:', JSON.stringify(bots).slice(0, 500));
     res.json(bots);
   } catch (err) {
+    console.error('[sendpulse/bots] erro:', err.response?.data || err.message);
     res.status(500).json({ error: 'Erro ao buscar bots: ' + err.message });
   }
 });

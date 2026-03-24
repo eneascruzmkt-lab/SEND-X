@@ -31,7 +31,8 @@ function headers(token) {
 async function listBots(credentials) {
   const token = await getToken(credentials);
   const res = await axios.get(`${BASE}/telegram/bots`, { headers: headers(token) });
-  const raw = res.data.data || res.data;
+  console.log('[listBots] raw response:', JSON.stringify(res.data).slice(0, 500));
+  const raw = Array.isArray(res.data) ? res.data : (res.data.data || res.data.result || []);
   return raw.map(b => ({
     id: b.id,
     name: b.channel_data?.name || b.channel_data?.full_name || b.id,

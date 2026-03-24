@@ -126,7 +126,15 @@ async function startUserBot(userId, telegramToken) {
       }
     });
 
-    bot.launch({ dropPendingUpdates: true });
+    bot.catch((err) => {
+      console.error(`[feed] Telegraf runtime error (user ${userId}):`, err.message);
+    });
+
+    bot.launch({ dropPendingUpdates: true }).catch((err) => {
+      console.error(`[feed] Telegraf launch error (user ${userId}):`, err.message);
+      delete userBots[userId];
+    });
+
     userBots[userId] = bot;
     console.log(`[feed] Telegraf bot iniciado para user ${userId}`);
   } catch (err) {

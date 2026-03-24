@@ -1,12 +1,21 @@
 const { Pool } = require('pg');
 
+const dbUrl = process.env.DATABASE_URL;
+console.log('[db] DATABASE_URL presente:', !!dbUrl);
+
+if (!dbUrl) {
+  console.error('[db] ERRO: DATABASE_URL não está definida. Configure nas variáveis do Railway.');
+  process.exit(1);
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('railway') ? { rejectUnauthorized: false } : false,
+  connectionString: dbUrl,
+  ssl: { rejectUnauthorized: false },
 });
 
 // ── Schema ──────────────────────────────────────────────
 async function init() {
+  console.log('[db] Conectando ao PostgreSQL...');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id            SERIAL PRIMARY KEY,

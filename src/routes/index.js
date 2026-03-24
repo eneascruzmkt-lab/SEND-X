@@ -39,6 +39,10 @@ router.post('/auth/register', (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Formato de email inválido' });
+    }
     if (password.length < 6) {
       return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
     }

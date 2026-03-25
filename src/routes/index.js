@@ -143,7 +143,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
         }
       }
     } catch (err) {
-      console.error('[upload] telegram upload failed:', err.message);
+      console.error('[upload] telegram upload failed:', err.message, err.response?.data || '');
     }
   }
 

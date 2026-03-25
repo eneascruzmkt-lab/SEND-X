@@ -84,58 +84,37 @@ async function getMediaUrl(botId, credentials, messageText) {
   return null;
 }
 
-// Disparo seguro: envia SOMENTE para inscritos diretos (type != 3)
+// Disparo via campanha SendPulse — envia para todos os inscritos do bot de uma vez
 async function dispatch(schedule, par, credentials) {
   const token = await getToken(credentials);
   const botId = schedule.sendpulse_bot_id || (par && par.sendpulse_bot_id);
   if (!botId) throw new Error('Bot ID não encontrado');
 
-  const contacts = await listContacts(botId, credentials);
-  const subscribers = contacts.filter(c => c.type !== 3 && c.status === 1);
-
-  if (subscribers.length === 0) {
-    throw new Error('Nenhum inscrito direto encontrado neste bot');
-  }
-
-  const message = buildMessage(schedule, credentials.webhook_domain);
+  const message = buildCampaignMessage(schedule, credentials.webhook_domain);
   const type = schedule.content_type || 'text';
   console.log('[dispatch] type:', type, 'media_url:', schedule.content_media_url?.slice?.(0, 60), 'file_id:', schedule.content_file_id?.slice?.(0, 40));
 
-  // Try SendPulse API first for all message types (text, photo, video)
-  console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
-  const errors = [];
-  for (const contact of subscribers) {
-    try {
-      await axios.post(`${BASE}/telegram/contacts/send`, {
-        contact_id: contact.id,
-        message,
-      }, { headers: headers(token) });
-    } catch (err) {
-      console.error('[sendpulse] send error:', contact.id, err.response?.data || err.message);
-      errors.push(`${contact.id}: ${err.response?.data?.message || err.message}`);
-    }
+  const title = `dispatch-${schedule.id || Date.now()}`;
+  const body = {
+    title,
+    bot_id: botId,
+    messages: [message],
+  };
+
+  console.log('[sendpulse] campaign body:', JSON.stringify(body).slice(0, 500));
+
+  try {
+    const res = await axios.post(`${BASE}/telegram/campaigns/send`, body, {
+      headers: headers(token),
+    });
+    console.log('[sendpulse] campaign response:', JSON.stringify(res.data).slice(0, 300));
+  } catch (err) {
+    const errData = err.response?.data;
+    console.error('[sendpulse] campaign error:', JSON.stringify(errData || err.message).slice(0, 500));
+    throw new Error(errData?.message || err.message);
   }
 
-  // If SendPulse failed for all and we have media, try Telegram Bot API as fallback
-  if (errors.length === subscribers.length && (type === 'video' || type === 'photo')) {
-    console.log('[dispatch] SendPulse failed for all, trying telegram-direct fallback...');
-    const localFilePath = schedule.content_media_url?.startsWith?.('/uploads/')
-      ? require('path').join(__dirname, '..', '..', 'public', schedule.content_media_url)
-      : null;
-    const fileId = schedule.content_file_id && isTelegramFileId(schedule.content_file_id)
-      ? schedule.content_file_id
-      : null;
-
-    if (localFilePath || fileId) {
-      return await dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message, fileId);
-    }
-  }
-
-  if (errors.length === subscribers.length) {
-    throw new Error(`Falha em todos os envios: ${errors[0]}`);
-  }
-
-  console.log(`[sendpulse] Enviado para ${subscribers.length - errors.length}/${subscribers.length} inscritos`);
+  console.log(`[sendpulse] Campanha "${title}" enviada para bot ${botId}`);
 }
 
 function resolveMediaUrl(url, webhookDomain) {
@@ -150,7 +129,9 @@ function resolveMediaUrl(url, webhookDomain) {
   return '';
 }
 
-function buildMessage(schedule, webhookDomain) {
+// Constrói mensagem no formato de campanha SendPulse
+// Formato: { type: "text|photo|video", message: { ... } }
+function buildCampaignMessage(schedule, webhookDomain) {
   const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
   const validButtons = buttons?.filter(b => b.text && b.url && /^https?:\/\/.+/i.test(b.url));
   const replyMarkup = validButtons && validButtons.length > 0
@@ -158,119 +139,30 @@ function buildMessage(schedule, webhookDomain) {
     : undefined;
 
   const type = schedule.content_type || 'text';
-
-  // Prefer Telegram file_id (always works) over external URLs
-  const fileId = schedule.content_file_id || '';
-  const isTelegramFileId = fileId && !fileId.startsWith('/') && !fileId.startsWith('http');
-
-  if ((type === 'video' || type === 'photo') && isTelegramFileId) {
-    const msg = { type, [type]: fileId };
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    console.log(`[sendpulse] buildMessage ${type} (file_id):`, fileId.slice(0, 40) + '...');
-    return msg;
-  }
-
-  // Fallback to URL
-  const mediaValue = schedule.content_media_url || fileId || '';
+  const mediaValue = schedule.content_media_url || '';
   const resolvedMedia = resolveMediaUrl(mediaValue, webhookDomain);
-  console.log('[sendpulse] buildMessage input:', { type, mediaValue: mediaValue?.slice?.(0, 80) || mediaValue, resolvedMedia: resolvedMedia?.slice?.(0, 80) || resolvedMedia });
+
+  console.log('[sendpulse] buildCampaignMessage:', { type, resolvedMedia: resolvedMedia?.slice?.(0, 80) });
 
   if (type === 'photo' && resolvedMedia) {
-    const msg = { type: 'photo', photo: resolvedMedia };
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    return msg;
+    const inner = { photo: resolvedMedia };
+    if (schedule.content_text) inner.caption = schedule.content_text;
+    if (replyMarkup) inner.reply_markup = replyMarkup;
+    return { type: 'photo', message: inner };
   }
 
   if (type === 'video' && resolvedMedia) {
-    const msg = { type: 'video', video: resolvedMedia };
-    if (schedule.content_text) msg.caption = schedule.content_text;
-    if (replyMarkup) msg.reply_markup = replyMarkup;
-    return msg;
+    const inner = { video: resolvedMedia };
+    if (schedule.content_text) inner.caption = schedule.content_text;
+    if (replyMarkup) inner.reply_markup = replyMarkup;
+    return { type: 'video', message: inner };
   }
 
   // text (or fallback when no media)
-  const msg = { type: 'text', text: schedule.content_text || '' };
-  if (replyMarkup) msg.reply_markup = replyMarkup;
-  return msg;
+  const inner = { text: schedule.content_text || '' };
+  if (replyMarkup) inner.reply_markup = replyMarkup;
+  return { type: 'text', message: inner };
 }
 
-function isTelegramFileId(val) {
-  return val && typeof val === 'string' && !val.startsWith('/') && !val.startsWith('http') && val.length > 20;
-}
-
-async function dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message, existingFileId) {
-  const fs = require('fs');
-  const FormData = require('form-data');
-
-  if (localFilePath && !fs.existsSync(localFilePath)) {
-    throw new Error('Arquivo local não encontrado: ' + localFilePath);
-  }
-
-  const db = require('../db');
-  const settings = await db.getUserSettings(schedule.user_id);
-  if (!settings.telegram_token) {
-    throw new Error('Token do Telegram não configurado');
-  }
-
-  const botUrl = `https://api.telegram.org/bot${settings.telegram_token}`;
-  const type = schedule.content_type || message.type;
-  const method = type === 'video' ? 'sendVideo' : 'sendPhoto';
-  const field = type === 'video' ? 'video' : 'photo';
-  const caption = schedule.content_text || message.caption || undefined;
-  const errors = [];
-  let fileId = existingFileId || null;
-
-  console.log(`[telegram-direct] starting: type=${type}, fileId=${fileId?.slice?.(0, 30) || 'none'}, localFile=${!!localFilePath}`);
-
-  for (const contact of subscribers) {
-    const chatId = contact.channel_data?.id;
-    if (!chatId) {
-      console.error('[telegram-direct] no chat_id for contact:', contact.id);
-      errors.push(`${contact.id}: no telegram chat_id`);
-      continue;
-    }
-
-    try {
-      let result;
-      if (fileId) {
-        // Send using file_id (fast, no re-upload)
-        const body = { chat_id: chatId, [field]: fileId };
-        if (caption) body.caption = caption;
-        const res = await axios.post(`${botUrl}/${method}`, body);
-        result = res.data?.result;
-      } else if (localFilePath) {
-        // First send: upload the file
-        const form = new FormData();
-        form.append('chat_id', String(chatId));
-        form.append(field, fs.createReadStream(localFilePath));
-        if (caption) form.append('caption', caption);
-
-        const res = await axios.post(`${botUrl}/${method}`, form, {
-          headers: form.getHeaders(),
-          timeout: 120000,
-          maxContentLength: 210 * 1024 * 1024,
-        });
-        result = res.data?.result;
-
-        // Extract file_id for subsequent sends
-        if (result?.video?.file_id) fileId = result.video.file_id;
-        else if (result?.photo?.length > 0) fileId = result.photo[result.photo.length - 1].file_id;
-        console.log('[telegram-direct] got file_id:', fileId?.slice?.(0, 30));
-      }
-      console.log('[telegram-direct] sent to:', chatId);
-    } catch (err) {
-      console.error('[telegram-direct] send error:', chatId, err.response?.data?.description || err.message);
-      errors.push(`${chatId}: ${err.response?.data?.description || err.message}`);
-    }
-  }
-
-  if (errors.length === subscribers.length) {
-    throw new Error(`Falha em todos os envios: ${errors[0]}`);
-  }
-
-  console.log(`[telegram-direct] Enviado para ${subscribers.length - errors.length}/${subscribers.length} inscritos`);
-}
 
 module.exports = { getToken, listBots, listContacts, dispatch, getMediaUrl };

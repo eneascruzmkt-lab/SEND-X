@@ -88,91 +88,15 @@ router.use(auth);
 router.post('/upload', auth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
   const localUrl = `/uploads/${req.file.filename}`;
-  const localPath = req.file.path;
-  const ext = path.extname(req.file.originalname).toLowerCase();
-  const isVideo = ['.mp4', '.webm', '.gif'].includes(ext);
-  const isPhoto = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
 
-  let telegramFileId = null;
-  let previewUrl = localUrl;
+  // Serve from Railway public domain (Telegram can fetch this)
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+  const settings = await db.getUserSettings(req.userId);
+  const domain = settings.webhook_domain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
+  const publicUrl = domain.replace(/\/$/, '') + localUrl;
 
-  // Upload to Telegram Bot API to get permanent file_id
-  if (isVideo || isPhoto) {
-    try {
-      const settings = await db.getUserSettings(req.userId);
-      if (settings.telegram_token) {
-        const FormData = require('form-data');
-        const fstream = require('fs');
-        const axios = require('axios');
-        const botUrl = `https://api.telegram.org/bot${settings.telegram_token}`;
-
-        // Find a paired group to use as temporary upload target
-        const pares = await db.getAllPares(req.userId);
-        const activePar = pares.find(p => p.ativo && p.telegram_group_id);
-
-        if (activePar) {
-          const method = isVideo ? 'sendVideo' : 'sendPhoto';
-          const field = isVideo ? 'video' : 'photo';
-          const form = new FormData();
-          form.append('chat_id', activePar.telegram_group_id);
-          form.append(field, fstream.createReadStream(localPath));
-          form.append('disable_notification', 'true');
-
-          const tgRes = await axios.post(`${botUrl}/${method}`, form, {
-            headers: form.getHeaders(),
-            timeout: 120000,
-            maxContentLength: 210 * 1024 * 1024,
-          });
-
-          if (tgRes.data?.ok && tgRes.data?.result) {
-            const result = tgRes.data.result;
-            if (isVideo && result.video) {
-              telegramFileId = result.video.file_id;
-            } else if (isPhoto && result.photo?.length > 0) {
-              telegramFileId = result.photo[result.photo.length - 1].file_id;
-            }
-            // Delete the temporary message
-            try {
-              await axios.post(`${botUrl}/deleteMessage`, {
-                chat_id: activePar.telegram_group_id,
-                message_id: result.message_id,
-              });
-            } catch {}
-            console.log('[upload] telegram file_id:', telegramFileId?.slice(0, 40) + '...');
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[upload] telegram upload failed:', err.message, err.response?.data || '');
-    }
-  }
-
-  // Upload to catbox for preview URL (browser display)
-  try {
-    const FormData = require('form-data');
-    const fstream = require('fs');
-    const form = new FormData();
-    form.append('reqtype', 'fileupload');
-    form.append('fileToUpload', fstream.createReadStream(localPath));
-
-    const catRes = await require('axios').post('https://catbox.moe/user/api.php', form, {
-      headers: form.getHeaders(),
-      timeout: 120000,
-      maxContentLength: 210 * 1024 * 1024,
-    });
-
-    if (catRes.data && catRes.data.startsWith('https://')) {
-      previewUrl = catRes.data.trim();
-      console.log('[upload] catbox preview URL:', previewUrl);
-    }
-  } catch (err) {
-    console.error('[upload] catbox upload failed, using local:', err.message);
-  }
-
-  // Clean up local file
-  try { fs.unlinkSync(localPath); } catch {}
-
-  res.json({ url: previewUrl, file_id: telegramFileId, filename: req.file.filename, size: req.file.size });
+  console.log('[upload] serving from:', publicUrl);
+  res.json({ url: publicUrl, filename: req.file.filename, size: req.file.size });
 });
 
 // ── User Settings ────────────────────────────────────

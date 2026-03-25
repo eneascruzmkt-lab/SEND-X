@@ -93,17 +93,34 @@ tailwind.config = {
 .preview-time { @apply text-[10px] text-gray-600 text-right mt-0.5; }
 .preview-label { @apply text-center text-[11px] text-gray-600 p-2; }
 
+/* Hist toggle */
+.hist-toggle-btn { @apply bg-transparent border border-transparent text-gray-500 text-xs font-semibold py-1.5 px-4 rounded-lg flex items-center gap-1.5 transition-all duration-150 cursor-pointer; font-family: inherit; }
+.hist-toggle-btn.active { @apply bg-green-500/10 text-green-400 border-green-500/30; }
+.hist-toggle-btn:not(.active):hover { @apply text-gray-200 bg-white/[0.03]; }
+
 /* Week Grid */
-.wg-col { @apply flex flex-col gap-1 min-h-[120px]; }
+.wg-col { @apply flex flex-col gap-1 min-h-[140px]; }
 .wg-col-header { @apply text-center text-[11px] font-semibold uppercase tracking-wide py-2 rounded-t-lg; }
 .wg-col-header.today { @apply text-green-400 bg-green-500/5; }
 .wg-col-header.other { @apply text-gray-500; }
 .wg-col-body { @apply flex flex-col gap-1 flex-1 p-1; }
-.wg-card { @apply bg-surface-2 border border-border/60 rounded-lg p-2 text-[11px] leading-relaxed transition-all hover:border-green-500/40; }
-.wg-card.projected { @apply opacity-50 border-dashed; }
-.wg-card-time { @apply text-green-400 font-bold; }
+.wg-card { @apply bg-surface-2 border border-border/60 rounded-lg p-2 text-[11px] leading-relaxed transition-all hover:border-green-500/40 relative; }
+.wg-card.projected { @apply opacity-45 border-dashed; }
+.wg-card.wg-erro { @apply border-red-500/40 bg-red-500/[0.04]; }
+.wg-card.wg-erro:hover { @apply border-red-500/60; }
+.wg-card.rec-diario { border-left: 3px solid #22c55e; }
+.wg-card.rec-diasuteis { border-left: 3px solid #3b82f6; }
+.wg-card.rec-semanal { border-left: 3px solid #f59e0b; }
+.wg-card-time { @apply text-green-400 font-bold text-xs; }
+.wg-card-next { @apply text-green-400/70 text-[10px] font-medium; }
 .wg-card-text { @apply text-gray-300 mt-0.5 line-clamp-2 break-words; }
+.wg-card-bot { @apply text-green-400 text-[10px] mt-0.5 truncate; }
 .wg-card-meta { @apply flex flex-wrap gap-1 mt-1 items-center; }
+.wg-card-error { @apply text-red-400 text-[10px] mt-1 line-clamp-1; }
+.wg-card-actions { @apply flex gap-1 mt-1.5; }
+.wg-card-actions button { @apply bg-surface border border-border/60 text-gray-400 px-2 py-1 rounded text-[10px] font-medium transition-all hover:border-green-500/40 hover:text-green-400 cursor-pointer; font-family: inherit; }
+.wg-card-actions button.wg-btn-danger { @apply hover:border-red-500/40 hover:text-red-400; }
+.wg-card-actions button.wg-btn-retry { @apply hover:border-green-500/40 hover:text-green-400; }
 </style>
 </head>
 <body class="bg-[#0c0f0c] text-gray-200 font-sans text-sm leading-normal min-h-screen">
@@ -222,21 +239,6 @@ tailwind.config = {
           <div class="p-5 max-h-48 overflow-y-auto" id="dashErrors"></div>
         </div>
 
-        <!-- Grade Semanal -->
-        <div class="bg-surface border border-border-light/60 rounded-xl shadow-sm mt-4">
-          <div class="p-4 px-5 border-b border-border-light/40 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-gray-200">Agenda da Semana</h3>
-            <div class="flex items-center gap-2">
-              <button onclick="weekGridNav(-1)" class="bg-surface-2 border border-border/60 text-gray-400 w-7 h-7 rounded-md text-sm flex items-center justify-center hover:border-green-500/50 hover:text-green-400 transition-all">&#9664;</button>
-              <button onclick="weekGridNav(0)" class="bg-surface-2 border border-border/60 text-gray-400 px-3 h-7 rounded-md text-xs font-medium hover:border-green-500/50 hover:text-green-400 transition-all">Hoje</button>
-              <button onclick="weekGridNav(1)" class="bg-surface-2 border border-border/60 text-gray-400 w-7 h-7 rounded-md text-sm flex items-center justify-center hover:border-green-500/50 hover:text-green-400 transition-all">&#9654;</button>
-              <span class="text-xs text-gray-500 ml-2" id="weekGridLabel"></span>
-            </div>
-          </div>
-          <div class="p-4 overflow-x-auto">
-            <div class="grid grid-cols-7 gap-2 min-w-[700px]" id="weekGrid"></div>
-          </div>
-        </div>
       </div>
 
       <!-- Feed -->
@@ -289,18 +291,49 @@ tailwind.config = {
 
       <!-- Historico -->
       <div class="panel" id="panel-schedules">
-        <div class="flex gap-3 items-center mb-4 flex-wrap">
-          <div class="flex gap-1.5" id="schedFilters">
-            <button class="filter-btn active" onclick="filterSched('all',this)">Todos</button>
-            <button class="filter-btn" onclick="filterSched('pendente',this)">Pendentes</button>
-            <button class="filter-btn" onclick="filterSched('enviado',this)">Enviados</button>
-            <button class="filter-btn" onclick="filterSched('erro',this)">Erros</button>
+        <!-- Toggle Lista / Programacao -->
+        <div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+          <div class="flex items-center gap-4 flex-wrap">
+            <div class="flex gap-0.5 bg-surface border border-border/60 rounded-[10px] p-[3px]" id="histViewToggle">
+              <button class="hist-toggle-btn active" onclick="switchHistView('list')">
+                <span class="text-sm">&#9776;</span> Lista
+              </button>
+              <button class="hist-toggle-btn" onclick="switchHistView('calendar')">
+                <span class="text-sm">&#128197;</span> <span id="histCalLabel">Programacao</span>
+              </button>
+            </div>
+            <div class="flex gap-1.5 items-center" id="schedFilters">
+              <button class="filter-btn active" onclick="filterSched('all',this)">Todos</button>
+              <button class="filter-btn" onclick="filterSched('pendente',this)">Pendentes</button>
+              <button class="filter-btn" onclick="filterSched('enviado',this)">Enviados</button>
+              <button class="filter-btn" onclick="filterSched('erro',this)">Erros</button>
+            </div>
+            <select id="schedBotFilter" onchange="renderSchedules()" class="py-1.5 px-3 rounded-full border border-border/60 bg-surface text-gray-300 text-xs focus:outline-none focus:border-green-500/50">
+              <option value="">Todos os bots</option>
+            </select>
           </div>
-          <select id="schedBotFilter" onchange="renderSchedules()" class="py-1.5 px-3 rounded-full border border-border/60 bg-surface text-gray-300 text-xs focus:outline-none focus:border-green-500/50">
-            <option value="">Todos os bots</option>
-          </select>
         </div>
-        <div id="schedList"></div>
+
+        <!-- Vista Lista -->
+        <div id="schedListView">
+          <div id="schedList"></div>
+        </div>
+
+        <!-- Vista Programacao (calendario semanal de recorrentes) -->
+        <div id="schedCalView" style="display:none">
+          <div class="flex items-center gap-3 mb-4">
+            <button onclick="histCalNav(-1)" class="bg-surface border border-border/60 text-gray-400 w-8 h-8 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-sm">&#8249;</button>
+            <span class="text-[13px] font-semibold text-gray-200 min-w-[140px] text-center" id="histWeekLabel"></span>
+            <button onclick="histCalNav(1)" class="bg-surface border border-border/60 text-gray-400 w-8 h-8 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-sm">&#8250;</button>
+            <button onclick="histCalNav(0)" class="bg-surface border border-border/60 text-gray-400 h-8 px-3 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-[11px] font-semibold">Hoje</button>
+          </div>
+          <div class="grid grid-cols-7 gap-1.5" id="histWeekGrid"></div>
+          <div class="flex gap-4 items-center text-[11px] text-gray-500 mt-3.5 pt-3.5 border-t border-border-light/40">
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-green-500"></div> Diario</div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-blue-500"></div> Dias uteis</div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-amber-500"></div> Semanal</div>
+          </div>
+        </div>
       </div>
 
       <!-- Composer -->
@@ -984,10 +1017,27 @@ async function sendNow(id) {
 }
 
 // ── Schedules ───────────────────────────────────
+let histViewInitialized = false;
 async function loadSchedules() {
   schedules = await api('/schedules');
   populateBotFilter();
   renderSchedules();
+
+  // Atualizar contador de recorrentes no toggle
+  const recCount = schedules.filter(s => s.recurrence && (s.status === 'pendente' || s.status === 'erro')).length;
+  const label = document.getElementById('histCalLabel');
+  if (label) label.textContent = recCount > 0 ? `Programacao (${recCount})` : 'Programacao';
+
+  // Visao padrao inteligente (so na primeira vez)
+  if (!histViewInitialized) {
+    histViewInitialized = true;
+    if (recCount > 0) {
+      switchHistView('calendar');
+    }
+  }
+
+  // Se ja esta na view calendar, re-renderizar
+  if (currentHistView === 'calendar') renderHistCalendar(schedules);
 }
 
 function populateBotFilter() {
@@ -1289,17 +1339,30 @@ async function loadDashboard() {
     }).join('');
   }
 
-  // Render week grid
-  renderWeekGrid(pendentes);
 }
 
-// ── Week Grid ────────────────────────────────────
-let weekGridOffset = 0;
+// ── Hist Calendar (Programacao) ──────────────────
+let histCalOffset = 0;
+let currentHistView = 'list'; // 'list' or 'calendar'
 
-function weekGridNav(dir) {
-  if (dir === 0) weekGridOffset = 0;
-  else weekGridOffset += dir;
-  loadDashboard();
+function switchHistView(view) {
+  currentHistView = view;
+  const btns = document.querySelectorAll('#histViewToggle .hist-toggle-btn');
+  btns.forEach(b => b.classList.remove('active'));
+  btns[view === 'list' ? 0 : 1].classList.add('active');
+
+  document.getElementById('schedListView').style.display = view === 'list' ? '' : 'none';
+  document.getElementById('schedCalView').style.display = view === 'calendar' ? '' : 'none';
+  document.getElementById('schedFilters').style.display = view === 'list' ? 'flex' : 'none';
+  document.getElementById('schedBotFilter').style.display = view === 'list' ? '' : 'none';
+
+  if (view === 'calendar') renderHistCalendar(schedules);
+}
+
+function histCalNav(dir) {
+  if (dir === 0) histCalOffset = 0;
+  else histCalOffset += dir;
+  renderHistCalendar(schedules);
 }
 
 function getWeekDays(offset) {
@@ -1324,22 +1387,13 @@ function projectRecurrents(allSchedules, weekDays) {
   const items = [];
   const weekStart = fmtDateISO(weekDays[0]);
   const weekEnd = fmtDateISO(weekDays[6]);
-  const dayNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
 
   allSchedules.forEach(s => {
-    if (!s.scheduled_at) return;
+    if (!s.recurrence || !s.scheduled_at) return;
+    if (s.status !== 'pendente' && s.status !== 'erro') return;
+
     const schedDate = s.scheduled_at.slice(0, 10);
     const schedTime = s.scheduled_at.slice(11, 16);
-
-    if (!s.recurrence) {
-      // Non-recurring: show only if falls within this week
-      if (schedDate >= weekStart && schedDate <= weekEnd) {
-        items.push({ ...s, displayDate: schedDate, projected: false });
-      }
-      return;
-    }
-
-    // Recurring: project onto each applicable day of the week
     const origDate = new Date(s.scheduled_at);
     const origDayOfWeek = origDate.getDay();
 
@@ -1348,17 +1402,14 @@ function projectRecurrents(allSchedules, weekDays) {
       const dow = day.getDay();
 
       if (s.recurrence === 'diario') {
-        // Show on every day at or after the original schedule date
         if (dayStr >= schedDate) {
           items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
         }
       } else if (s.recurrence === 'diasuteis') {
-        // Show on weekdays (Mon-Fri) at or after the original schedule date
         if (dow >= 1 && dow <= 5 && dayStr >= schedDate) {
           items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
         }
       } else if (s.recurrence === 'semanal') {
-        // Show on the same day of the week at or after the original schedule date
         if (dow === origDayOfWeek && dayStr >= schedDate) {
           items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
         }
@@ -1369,21 +1420,32 @@ function projectRecurrents(allSchedules, weekDays) {
   return items;
 }
 
-function renderWeekGrid(allSchedules) {
-  const weekDays = getWeekDays(weekGridOffset);
+function getNextSendLabel(scheduledTime) {
+  const now = new Date();
+  const [h, m] = scheduledTime.split(':').map(Number);
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+  const diff = target - now;
+  if (diff <= 0) return null;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `em ${mins}min`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `em ${hrs}h${remMins}min` : `em ${hrs}h`;
+}
+
+function renderHistCalendar(allSchedules) {
+  const weekDays = getWeekDays(histCalOffset);
   const todayStr = fmtDateISO(new Date());
   const dayLabels = ['Seg','Ter','Qua','Qui','Sex','Sab','Dom'];
-
-  // Update label
-  const d0 = weekDays[0], d6 = weekDays[6];
   const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  document.getElementById('weekGridLabel').textContent =
+
+  const d0 = weekDays[0], d6 = weekDays[6];
+  document.getElementById('histWeekLabel').textContent =
     `${d0.getDate()} ${months[d0.getMonth()]} — ${d6.getDate()} ${months[d6.getMonth()]}`;
 
-  // Project all items
   const items = projectRecurrents(allSchedules, weekDays);
 
-  const grid = document.getElementById('weekGrid');
+  const grid = document.getElementById('histWeekGrid');
   grid.innerHTML = weekDays.map((day, i) => {
     const dayStr = fmtDateISO(day);
     const isToday = dayStr === todayStr;
@@ -1396,20 +1458,39 @@ function renderWeekGrid(allSchedules) {
       });
 
     const cardsHtml = dayItems.length === 0
-      ? '<div class="text-[10px] text-gray-600 text-center py-4">Sem disparos</div>'
+      ? '<div class="text-[10px] text-gray-600 text-center py-6">—</div>'
       : dayItems.map(s => {
           const time = (s.scheduled_at_display || s.scheduled_at || '').slice(11, 16);
           const text = s.content_text || `[${s.content_type}]`;
-          const typeBadge = s.content_type !== 'text' ? `<span class="badge-${s.content_type}">${s.content_type}</span>` : '';
-          const statusBadge = `<span class="badge-${s.status}">${s.status}</span>`;
-          const recBadge = s.recurrence ? `<span class="badge-rec">${s.recurrence}</span>` : '';
-          const botName = s.sendpulse_bot_nome ? `<div class="text-green-400 text-[10px] mt-0.5 truncate">${esc(s.sendpulse_bot_nome)}</div>` : '';
-          const projClass = s.projected ? ' projected' : '';
-          return `<div class="wg-card${projClass}">
+          const recClass = s.recurrence ? `rec-${s.recurrence}` : '';
+          const erroClass = s.status === 'erro' ? 'wg-erro' : '';
+          const projClass = s.projected ? 'projected' : '';
+          const botName = s.sendpulse_bot_nome ? `<div class="wg-card-bot">${esc(s.sendpulse_bot_nome)}</div>` : '';
+          const recBadge = s.recurrence ? `<span class="badge-rec" style="font-size:10px;padding:1px 6px">${s.recurrence}</span>` : '';
+          const errMsg = s.status === 'erro' && s.error_msg ? `<div class="wg-card-error">${esc(s.error_msg.slice(0, 50))}</div>` : '';
+
+          // Indicador proximo envio (so para hoje, se horario nao passou)
+          let nextLabel = '';
+          if (isToday && s.status === 'pendente') {
+            const lbl = getNextSendLabel(time);
+            if (lbl) nextLabel = `<div class="wg-card-next">${lbl}</div>`;
+          }
+
+          // Acoes
+          let actions = `<button onclick="editSchedule(${s.id})">Editar</button>`;
+          if (s.status === 'erro') {
+            actions += `<button class="wg-btn-retry" onclick="sendNow(${s.id})">Retentar</button>`;
+          }
+          actions += `<button class="wg-btn-danger" onclick="deleteRecSchedule(${s.id})">Excluir</button>`;
+
+          return `<div class="wg-card ${recClass} ${erroClass} ${projClass}">
             <div class="wg-card-time">${time}</div>
+            ${nextLabel}
             <div class="wg-card-text">${esc(text.slice(0, 30))}</div>
             ${botName}
-            <div class="wg-card-meta">${statusBadge} ${typeBadge} ${recBadge}</div>
+            <div class="wg-card-meta">${s.status === 'erro' ? '<span class="badge-erro" style="font-size:10px;padding:1px 6px">erro</span>' : ''} ${recBadge}</div>
+            ${errMsg}
+            <div class="wg-card-actions">${actions}</div>
           </div>`;
         }).join('');
 
@@ -1420,6 +1501,13 @@ function renderWeekGrid(allSchedules) {
       <div class="wg-col-body ${isToday ? 'bg-green-500/[0.03] rounded-b-lg border border-green-500/10 border-t-0' : ''}">${cardsHtml}</div>
     </div>`;
   }).join('');
+}
+
+async function deleteRecSchedule(id) {
+  if (!confirm('Excluir esta programacao recorrente? Todos os envios futuros serao cancelados.')) return;
+  await api(`/schedules/${id}`, { method: 'DELETE' });
+  loadSchedules();
+  loadDashboard();
 }
 
 // ── Composer ────────────────────────────────────

@@ -1151,7 +1151,10 @@ function editGetButtons() {
   document.querySelectorAll('#editBtnEditor .btn-row').forEach(r => {
     const text = r.querySelector('.btn-label').value.trim();
     const url = r.querySelector('.btn-url').value.trim();
-    if (text && url) btns.push({ text, type: 'web_url', url });
+    if (text && url) {
+      if (!/^https?:\/\/.+/i.test(url)) { alert('URL do botão inválida: deve começar com http:// ou https://'); return null; }
+      btns.push({ text, type: 'web_url', url });
+    }
   });
   return btns.length > 0 ? btns : null;
 }
@@ -1426,7 +1429,10 @@ function getButtons() {
   document.querySelectorAll('#btnEditor .btn-row').forEach(r => {
     const text = r.querySelector('.btn-label').value.trim();
     const url = r.querySelector('.btn-url').value.trim();
-    if (text && url) btns.push({ text, type: 'web_url', url });
+    if (text && url) {
+      if (!/^https?:\/\/.+/i.test(url)) { alert('URL do botão inválida: deve começar com http:// ou https://'); return null; }
+      btns.push({ text, type: 'web_url', url });
+    }
   });
   return btns.length > 0 ? btns : null;
 }

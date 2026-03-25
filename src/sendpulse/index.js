@@ -134,8 +134,9 @@ function resolveMediaUrl(url, webhookDomain) {
 
 function buildMessage(schedule, webhookDomain) {
   const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
-  const replyMarkup = buttons && buttons.length > 0
-    ? { inline_keyboard: [buttons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }
+  const validButtons = buttons?.filter(b => b.text && b.url && /^https?:\/\/.+/i.test(b.url));
+  const replyMarkup = validButtons && validButtons.length > 0
+    ? { inline_keyboard: [validButtons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }
     : undefined;
 
   const type = schedule.content_type || 'text';

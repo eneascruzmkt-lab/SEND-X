@@ -98,22 +98,26 @@ async function dispatch(schedule, par, credentials) {
   }
 
   const message = buildMessage(schedule, credentials.webhook_domain);
-  console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
+  const type = schedule.content_type || 'text';
+  console.log('[dispatch] type:', type, 'media_url:', schedule.content_media_url?.slice?.(0, 60), 'file_id:', schedule.content_file_id?.slice?.(0, 40));
 
-  // Check if we need to send file directly via Telegram Bot API
-  const needsDirectSend = (message.type === 'video' || message.type === 'photo') &&
-    !message[message.type]?.startsWith?.('http') &&
-    !isTelegramFileId(message[message.type]);
+  // For video/photo: always use Telegram Bot API directly
+  // SendPulse rejects file_ids and external URLs are blocked by Telegram
+  if (type === 'video' || type === 'photo') {
+    const localFilePath = schedule.content_media_url?.startsWith?.('/uploads/')
+      ? require('path').join(__dirname, '..', '..', 'public', schedule.content_media_url)
+      : null;
+    const fileId = schedule.content_file_id && isTelegramFileId(schedule.content_file_id)
+      ? schedule.content_file_id
+      : null;
 
-  const localFilePath = schedule.content_media_url?.startsWith?.('/uploads/')
-    ? require('path').join(__dirname, '..', '..', 'public', schedule.content_media_url)
-    : null;
-
-  if (needsDirectSend && localFilePath) {
-    // Send directly via Telegram Bot API (bypasses URL hosting issues)
-    return await dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message);
+    if (localFilePath || fileId) {
+      return await dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message, fileId);
+    }
   }
 
+  // Text messages (and fallback): use SendPulse API
+  console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
   const errors = [];
   for (const contact of subscribers) {
     try {
@@ -196,15 +200,14 @@ function isTelegramFileId(val) {
   return val && typeof val === 'string' && !val.startsWith('/') && !val.startsWith('http') && val.length > 20;
 }
 
-async function dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message) {
+async function dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message, existingFileId) {
   const fs = require('fs');
   const FormData = require('form-data');
 
-  if (!fs.existsSync(localFilePath)) {
+  if (localFilePath && !fs.existsSync(localFilePath)) {
     throw new Error('Arquivo local não encontrado: ' + localFilePath);
   }
 
-  // Get Telegram bot token from user settings
   const db = require('../db');
   const settings = await db.getUserSettings(schedule.user_id);
   if (!settings.telegram_token) {
@@ -212,12 +215,15 @@ async function dispatchViaTelegram(schedule, subscribers, contacts, credentials,
   }
 
   const botUrl = `https://api.telegram.org/bot${settings.telegram_token}`;
-  const method = message.type === 'video' ? 'sendVideo' : 'sendPhoto';
-  const field = message.type === 'video' ? 'video' : 'photo';
+  const type = schedule.content_type || message.type;
+  const method = type === 'video' ? 'sendVideo' : 'sendPhoto';
+  const field = type === 'video' ? 'video' : 'photo';
+  const caption = schedule.content_text || message.caption || undefined;
   const errors = [];
-  let fileId = null; // Reuse file_id after first upload
+  let fileId = existingFileId || null;
 
-  // Get Telegram chat_ids from SendPulse contacts
+  console.log(`[telegram-direct] starting: type=${type}, fileId=${fileId?.slice?.(0, 30) || 'none'}, localFile=${!!localFilePath}`);
+
   for (const contact of subscribers) {
     const chatId = contact.channel_data?.id;
     if (!chatId) {
@@ -229,19 +235,17 @@ async function dispatchViaTelegram(schedule, subscribers, contacts, credentials,
     try {
       let result;
       if (fileId) {
-        // Reuse file_id from first upload (faster, no re-upload)
+        // Send using file_id (fast, no re-upload)
         const body = { chat_id: chatId, [field]: fileId };
-        if (message.caption) body.caption = message.caption;
-        if (message.reply_markup) body.reply_markup = JSON.stringify(message.reply_markup);
+        if (caption) body.caption = caption;
         const res = await axios.post(`${botUrl}/${method}`, body);
         result = res.data?.result;
-      } else {
+      } else if (localFilePath) {
         // First send: upload the file
         const form = new FormData();
         form.append('chat_id', String(chatId));
         form.append(field, fs.createReadStream(localFilePath));
-        if (message.caption) form.append('caption', message.caption);
-        if (message.reply_markup) form.append('reply_markup', JSON.stringify(message.reply_markup));
+        if (caption) form.append('caption', caption);
 
         const res = await axios.post(`${botUrl}/${method}`, form, {
           headers: form.getHeaders(),
@@ -253,6 +257,7 @@ async function dispatchViaTelegram(schedule, subscribers, contacts, credentials,
         // Extract file_id for subsequent sends
         if (result?.video?.file_id) fileId = result.video.file_id;
         else if (result?.photo?.length > 0) fileId = result.photo[result.photo.length - 1].file_id;
+        console.log('[telegram-direct] got file_id:', fileId?.slice?.(0, 30));
       }
       console.log('[telegram-direct] sent to:', chatId);
     } catch (err) {

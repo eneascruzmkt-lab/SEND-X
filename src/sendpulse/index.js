@@ -51,6 +51,48 @@ async function listContacts(botId, credentials) {
   return res.data.data || res.data;
 }
 
+// Upload video/photo to Telegram via Bot API and get file_id
+async function uploadToTelegram(filePath, type, credentials) {
+  const db = require('../db');
+  const FormData = require('form-data');
+  const fs = require('fs');
+  const path = require('path');
+
+  const users = await db.getUsersWithTelegram();
+  if (users.length === 0) return null;
+  const telegramToken = users[0].telegram_token;
+
+  // We need a chat_id to send to — use the bot's own saved messages or a dummy
+  // Instead, get the bot's chat_id by calling getMe
+  const meRes = await axios.get(`https://api.telegram.org/bot${telegramToken}/getMe`);
+  const botChatId = meRes.data.result.id;
+
+  const localFile = path.join(__dirname, '..', '..', 'public', filePath);
+  if (!fs.existsSync(localFile)) return null;
+
+  const form = new FormData();
+  form.append('chat_id', botChatId);
+  if (type === 'video') {
+    form.append('video', fs.createReadStream(localFile));
+  } else {
+    form.append('photo', fs.createReadStream(localFile));
+  }
+
+  const method = type === 'video' ? 'sendVideo' : 'sendPhoto';
+  const res = await axios.post(
+    `https://api.telegram.org/bot${telegramToken}/${method}`,
+    form,
+    { headers: form.getHeaders(), timeout: 120000, maxContentLength: 55 * 1024 * 1024 }
+  );
+
+  if (res.data?.ok && res.data.result) {
+    const msg = res.data.result;
+    if (type === 'video' && msg.video) return msg.video.file_id;
+    if (type === 'photo' && msg.photo) return msg.photo[msg.photo.length - 1].file_id;
+  }
+  return null;
+}
+
 // Disparo seguro: envia SOMENTE para inscritos diretos (type != 3)
 async function dispatch(schedule, par, credentials) {
   const token = await getToken(credentials);
@@ -64,7 +106,32 @@ async function dispatch(schedule, par, credentials) {
     throw new Error('Nenhum inscrito direto encontrado neste bot');
   }
 
-  const message = buildMessage(schedule, credentials.webhook_domain);
+  let message = buildMessage(schedule, credentials.webhook_domain);
+
+  // If video/photo from local upload, try to get a Telegram file_id first
+  // This avoids the 20MB URL download limit
+  const mediaUrl = schedule.content_media_url || schedule.content_file_id || '';
+  if (mediaUrl.startsWith('/uploads/') && (schedule.content_type === 'video' || schedule.content_type === 'photo')) {
+    try {
+      console.log('[sendpulse] uploading to Telegram to get file_id...');
+      const fileId = await uploadToTelegram(mediaUrl, schedule.content_type, credentials);
+      if (fileId) {
+        console.log('[sendpulse] got Telegram file_id:', fileId.slice(0, 40));
+        // Rebuild message with file_id instead of URL
+        const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
+        const replyMarkup = buttons && buttons.length > 0
+          ? { inline_keyboard: [buttons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }
+          : undefined;
+        message = { type: schedule.content_type };
+        message[schedule.content_type] = fileId;
+        if (schedule.content_text) message.caption = schedule.content_text;
+        if (replyMarkup) message.reply_markup = replyMarkup;
+      }
+    } catch (err) {
+      console.error('[sendpulse] upload to Telegram failed:', err.message, '— falling back to URL');
+    }
+  }
+
   console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
   const errors = [];
 

@@ -101,22 +101,7 @@ async function dispatch(schedule, par, credentials) {
   const type = schedule.content_type || 'text';
   console.log('[dispatch] type:', type, 'media_url:', schedule.content_media_url?.slice?.(0, 60), 'file_id:', schedule.content_file_id?.slice?.(0, 40));
 
-  // For video/photo: always use Telegram Bot API directly
-  // SendPulse rejects file_ids and external URLs are blocked by Telegram
-  if (type === 'video' || type === 'photo') {
-    const localFilePath = schedule.content_media_url?.startsWith?.('/uploads/')
-      ? require('path').join(__dirname, '..', '..', 'public', schedule.content_media_url)
-      : null;
-    const fileId = schedule.content_file_id && isTelegramFileId(schedule.content_file_id)
-      ? schedule.content_file_id
-      : null;
-
-    if (localFilePath || fileId) {
-      return await dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message, fileId);
-    }
-  }
-
-  // Text messages (and fallback): use SendPulse API
+  // Try SendPulse API first for all message types (text, photo, video)
   console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
   const errors = [];
   for (const contact of subscribers) {
@@ -128,6 +113,21 @@ async function dispatch(schedule, par, credentials) {
     } catch (err) {
       console.error('[sendpulse] send error:', contact.id, err.response?.data || err.message);
       errors.push(`${contact.id}: ${err.response?.data?.message || err.message}`);
+    }
+  }
+
+  // If SendPulse failed for all and we have media, try Telegram Bot API as fallback
+  if (errors.length === subscribers.length && (type === 'video' || type === 'photo')) {
+    console.log('[dispatch] SendPulse failed for all, trying telegram-direct fallback...');
+    const localFilePath = schedule.content_media_url?.startsWith?.('/uploads/')
+      ? require('path').join(__dirname, '..', '..', 'public', schedule.content_media_url)
+      : null;
+    const fileId = schedule.content_file_id && isTelegramFileId(schedule.content_file_id)
+      ? schedule.content_file_id
+      : null;
+
+    if (localFilePath || fileId) {
+      return await dispatchViaTelegram(schedule, subscribers, contacts, credentials, localFilePath, message, fileId);
     }
   }
 

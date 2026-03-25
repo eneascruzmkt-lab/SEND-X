@@ -92,6 +92,18 @@ tailwind.config = {
 .preview-inline-btn { @apply block text-center py-1.5 bg-transparent border border-green-500/60 text-green-400 rounded-md text-xs no-underline font-medium hover:bg-green-500/10; }
 .preview-time { @apply text-[10px] text-gray-600 text-right mt-0.5; }
 .preview-label { @apply text-center text-[11px] text-gray-600 p-2; }
+
+/* Week Grid */
+.wg-col { @apply flex flex-col gap-1 min-h-[120px]; }
+.wg-col-header { @apply text-center text-[11px] font-semibold uppercase tracking-wide py-2 rounded-t-lg; }
+.wg-col-header.today { @apply text-green-400 bg-green-500/5; }
+.wg-col-header.other { @apply text-gray-500; }
+.wg-col-body { @apply flex flex-col gap-1 flex-1 p-1; }
+.wg-card { @apply bg-surface-2 border border-border/60 rounded-lg p-2 text-[11px] leading-relaxed transition-all hover:border-green-500/40; }
+.wg-card.projected { @apply opacity-50 border-dashed; }
+.wg-card-time { @apply text-green-400 font-bold; }
+.wg-card-text { @apply text-gray-300 mt-0.5 line-clamp-2 break-words; }
+.wg-card-meta { @apply flex flex-wrap gap-1 mt-1 items-center; }
 </style>
 </head>
 <body class="bg-[#0c0f0c] text-gray-200 font-sans text-sm leading-normal min-h-screen">
@@ -208,6 +220,22 @@ tailwind.config = {
             <h3 class="text-sm font-semibold text-gray-200">Erros recentes</h3>
           </div>
           <div class="p-5 max-h-48 overflow-y-auto" id="dashErrors"></div>
+        </div>
+
+        <!-- Grade Semanal -->
+        <div class="bg-surface border border-border-light/60 rounded-xl shadow-sm mt-4">
+          <div class="p-4 px-5 border-b border-border-light/40 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-200">Agenda da Semana</h3>
+            <div class="flex items-center gap-2">
+              <button onclick="weekGridNav(-1)" class="bg-surface-2 border border-border/60 text-gray-400 w-7 h-7 rounded-md text-sm flex items-center justify-center hover:border-green-500/50 hover:text-green-400 transition-all">&#9664;</button>
+              <button onclick="weekGridNav(0)" class="bg-surface-2 border border-border/60 text-gray-400 px-3 h-7 rounded-md text-xs font-medium hover:border-green-500/50 hover:text-green-400 transition-all">Hoje</button>
+              <button onclick="weekGridNav(1)" class="bg-surface-2 border border-border/60 text-gray-400 w-7 h-7 rounded-md text-sm flex items-center justify-center hover:border-green-500/50 hover:text-green-400 transition-all">&#9654;</button>
+              <span class="text-xs text-gray-500 ml-2" id="weekGridLabel"></span>
+            </div>
+          </div>
+          <div class="p-4 overflow-x-auto">
+            <div class="grid grid-cols-7 gap-2 min-w-[700px]" id="weekGrid"></div>
+          </div>
         </div>
       </div>
 
@@ -1260,6 +1288,138 @@ async function loadDashboard() {
       </div>`;
     }).join('');
   }
+
+  // Render week grid
+  renderWeekGrid(all);
+}
+
+// ── Week Grid ────────────────────────────────────
+let weekGridOffset = 0;
+
+function weekGridNav(dir) {
+  if (dir === 0) weekGridOffset = 0;
+  else weekGridOffset += dir;
+  loadDashboard();
+}
+
+function getWeekDays(offset) {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + (offset * 7));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+function fmtDateISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function projectRecurrents(allSchedules, weekDays) {
+  const items = [];
+  const weekStart = fmtDateISO(weekDays[0]);
+  const weekEnd = fmtDateISO(weekDays[6]);
+  const dayNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+
+  allSchedules.forEach(s => {
+    if (!s.scheduled_at) return;
+    const schedDate = s.scheduled_at.slice(0, 10);
+    const schedTime = s.scheduled_at.slice(11, 16);
+
+    if (!s.recurrence) {
+      // Non-recurring: show only if falls within this week
+      if (schedDate >= weekStart && schedDate <= weekEnd) {
+        items.push({ ...s, displayDate: schedDate, projected: false });
+      }
+      return;
+    }
+
+    // Recurring: project onto each applicable day of the week
+    const origDate = new Date(s.scheduled_at);
+    const origDayOfWeek = origDate.getDay();
+
+    weekDays.forEach(day => {
+      const dayStr = fmtDateISO(day);
+      const dow = day.getDay();
+
+      if (s.recurrence === 'diario') {
+        // Show on every day at or after the original schedule date
+        if (dayStr >= schedDate) {
+          items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
+        }
+      } else if (s.recurrence === 'diasuteis') {
+        // Show on weekdays (Mon-Fri) at or after the original schedule date
+        if (dow >= 1 && dow <= 5 && dayStr >= schedDate) {
+          items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
+        }
+      } else if (s.recurrence === 'semanal') {
+        // Show on the same day of the week at or after the original schedule date
+        if (dow === origDayOfWeek && dayStr >= schedDate) {
+          items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
+        }
+      }
+    });
+  });
+
+  return items;
+}
+
+function renderWeekGrid(allSchedules) {
+  const weekDays = getWeekDays(weekGridOffset);
+  const todayStr = fmtDateISO(new Date());
+  const dayLabels = ['Seg','Ter','Qua','Qui','Sex','Sab','Dom'];
+
+  // Update label
+  const d0 = weekDays[0], d6 = weekDays[6];
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  document.getElementById('weekGridLabel').textContent =
+    `${d0.getDate()} ${months[d0.getMonth()]} — ${d6.getDate()} ${months[d6.getMonth()]}`;
+
+  // Project all items
+  const items = projectRecurrents(allSchedules, weekDays);
+
+  const grid = document.getElementById('weekGrid');
+  grid.innerHTML = weekDays.map((day, i) => {
+    const dayStr = fmtDateISO(day);
+    const isToday = dayStr === todayStr;
+    const dayItems = items
+      .filter(it => it.displayDate === dayStr)
+      .sort((a, b) => {
+        const tA = (a.scheduled_at_display || a.scheduled_at || '').slice(11, 16);
+        const tB = (b.scheduled_at_display || b.scheduled_at || '').slice(11, 16);
+        return tA.localeCompare(tB);
+      });
+
+    const cardsHtml = dayItems.length === 0
+      ? '<div class="text-[10px] text-gray-600 text-center py-4">Sem disparos</div>'
+      : dayItems.map(s => {
+          const time = (s.scheduled_at_display || s.scheduled_at || '').slice(11, 16);
+          const text = s.content_text || `[${s.content_type}]`;
+          const typeBadge = s.content_type !== 'text' ? `<span class="badge-${s.content_type}">${s.content_type}</span>` : '';
+          const statusBadge = `<span class="badge-${s.status}">${s.status}</span>`;
+          const recBadge = s.recurrence ? `<span class="badge-rec">${s.recurrence}</span>` : '';
+          const botName = s.sendpulse_bot_nome ? `<div class="text-green-400 text-[10px] mt-0.5 truncate">${esc(s.sendpulse_bot_nome)}</div>` : '';
+          const projClass = s.projected ? ' projected' : '';
+          return `<div class="wg-card${projClass}">
+            <div class="wg-card-time">${time}</div>
+            <div class="wg-card-text">${esc(text.slice(0, 30))}</div>
+            ${botName}
+            <div class="wg-card-meta">${statusBadge} ${typeBadge} ${recBadge}</div>
+          </div>`;
+        }).join('');
+
+    return `<div class="wg-col">
+      <div class="wg-col-header ${isToday ? 'today' : 'other'}">
+        ${dayLabels[i]}<br><span class="text-[13px]">${day.getDate()}</span>
+      </div>
+      <div class="wg-col-body ${isToday ? 'bg-green-500/[0.03] rounded-b-lg border border-green-500/10 border-t-0' : ''}">${cardsHtml}</div>
+    </div>`;
+  }).join('');
 }
 
 // ── Composer ────────────────────────────────────

@@ -838,7 +838,7 @@ function renderMsg(m) {
   }
 
   return `<div class="msg-item">
-    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||fileId)}" onchange="toggleMsg(this)" class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
+    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||'')}" onchange="toggleMsg(this)" class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
     <div class="msg-body">
       ${mediaHtml}
       ${textHtml}
@@ -924,11 +924,12 @@ async function confirmScheduleSelected() {
   try {
     for (const cb of checkboxes) {
       const mediaUrl = cb.dataset.mediaurl || null;
+      const hasValidMedia = mediaUrl && mediaUrl.startsWith('http');
       const sched = await api('/schedules', { method: 'POST', body: {
         par_id: currentPar.id, origem: 'grupo',
-        content_type: cb.dataset.type || 'text',
+        content_type: hasValidMedia ? (cb.dataset.type || 'text') : 'text',
         content_text: cb.dataset.text || null,
-        content_media_url: mediaUrl || null,
+        content_media_url: hasValidMedia ? mediaUrl : null,
         scheduled_at, recurrence,
       }});
 

@@ -51,6 +51,39 @@ async function listContacts(botId, credentials) {
   return res.data.data || res.data;
 }
 
+// Fetch media URL from SendPulse chat history (for large files that Bot API can't download)
+async function getMediaUrl(botId, credentials, messageText) {
+  try {
+    const token = await getToken(credentials);
+    const contacts = await listContacts(botId, credentials);
+    const groupContact = contacts.find(c => c.type === 3);
+    if (!groupContact) return null;
+
+    const res = await axios.get(
+      `${BASE}/telegram/chats/messages?contact_id=${groupContact.id}&size=20&order=desc`,
+      { headers: headers(token) }
+    );
+
+    const msgs = res.data.data || res.data;
+    for (const m of msgs) {
+      const data = m.data;
+      if (!data) continue;
+      if (messageText && data.text !== messageText && data.caption !== messageText) continue;
+      if (data.video && typeof data.video === 'string' && data.video.startsWith('http')) return data.video;
+      if (data.video?.url) return data.video.url;
+      if (data.photo && typeof data.photo === 'string' && data.photo.startsWith('http')) return data.photo;
+      if (data.photo?.url) return data.photo.url;
+      if (!messageText) {
+        if (data.video) return typeof data.video === 'string' ? data.video : (data.video.url || null);
+        if (data.photo) return typeof data.photo === 'string' ? data.photo : (data.photo.url || null);
+      }
+    }
+  } catch (err) {
+    console.error('[sendpulse] getMediaUrl error:', err.message);
+  }
+  return null;
+}
+
 // Disparo seguro: envia SOMENTE para inscritos diretos (type != 3)
 async function dispatch(schedule, par, credentials) {
   const token = await getToken(credentials);
@@ -95,8 +128,8 @@ function resolveMediaUrl(url, webhookDomain) {
     const domain = webhookDomain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
     return domain.replace(/\/$/, '') + url;
   }
-  // Return as-is (could be Telegram file_id — SendPulse may accept it)
-  return url;
+  // Telegram file_ids and other non-URL values — reject
+  return '';
 }
 
 function buildMessage(schedule, webhookDomain) {
@@ -131,4 +164,4 @@ function buildMessage(schedule, webhookDomain) {
   return msg;
 }
 
-module.exports = { getToken, listBots, listContacts, dispatch };
+module.exports = { getToken, listBots, listContacts, dispatch, getMediaUrl };

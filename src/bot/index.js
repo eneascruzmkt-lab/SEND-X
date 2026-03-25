@@ -96,6 +96,26 @@ async function startUserBot(userId, telegramToken) {
             publicMediaUrl = result.publicUrl;
           } catch (e) {
             console.error('[feed] download error:', e.message);
+            // Fallback: try to get media URL from SendPulse chat history
+            try {
+              const settings = await db.getUserSettings(userId);
+              if (settings.sendpulse_id && settings.sendpulse_secret) {
+                const caption = msg.text || msg.caption || null;
+                // Wait a moment for SendPulse to process the message
+                await new Promise(r => setTimeout(r, 3000));
+                const spUrl = await sendpulse.getMediaUrl(
+                  par.sendpulse_bot_id,
+                  { sendpulse_id: settings.sendpulse_id, sendpulse_secret: settings.sendpulse_secret },
+                  caption
+                );
+                if (spUrl) {
+                  publicMediaUrl = spUrl;
+                  console.log('[feed] got media URL from SendPulse:', spUrl.slice(0, 80));
+                }
+              }
+            } catch (e2) {
+              console.error('[feed] SendPulse media fallback error:', e2.message);
+            }
           }
         }
 

@@ -43,13 +43,32 @@ tailwind.config = {
 .msg-text { @apply text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-200; }
 .msg-meta { @apply text-xs text-gray-500 mt-1 flex items-center gap-2; }
 
-.sched-item { @apply bg-surface border border-border-light/60 p-3.5 px-4 rounded-lg mb-1.5 flex justify-between items-center gap-4 transition-all duration-150; }
+.sched-date-group { @apply mb-4; }
+.sched-date-label { @apply text-[11px] font-bold uppercase tracking-widest text-gray-600 mb-2 pb-1.5 border-b border-border-light/40 flex items-center gap-2; }
+.sched-date-label.is-today { @apply text-green-500/70 border-green-500/20; }
+.sched-date-count { @apply text-[10px] font-medium text-gray-600 bg-surface-2 rounded-full px-2 py-0.5; }
+
+.sched-item { @apply bg-surface border border-border-light/60 rounded-lg mb-1.5 flex items-stretch gap-0 transition-all duration-150 overflow-hidden; }
 .sched-item:hover { @apply border-green-500/40 shadow-md shadow-green-500/5; }
-.sched-info { @apply flex-1 min-w-0; }
-.sched-text { @apply text-sm mb-1.5 whitespace-pre-wrap overflow-hidden line-clamp-2; }
-.sched-meta { @apply text-xs text-gray-500 flex gap-2 flex-wrap items-center; }
-.sched-actions { @apply flex gap-1 flex-shrink-0; }
-.sched-actions button { @apply bg-surface-2 border border-border/60 text-gray-400 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 hover:border-green-500/50 hover:text-green-400 hover:bg-green-500/5; }
+.sched-item:hover .sched-actions { @apply opacity-100 translate-x-0; }
+.sched-status-bar { @apply w-[3px] shrink-0 rounded-l-lg; }
+.sched-status-bar.st-pendente { @apply bg-amber-500; }
+.sched-status-bar.st-enviado { @apply bg-green-500; }
+.sched-status-bar.st-erro { @apply bg-red-500; }
+
+.sched-date-col { @apply shrink-0 w-16 flex flex-col items-center justify-center py-3 border-r border-border-light/30 text-center; }
+.sched-date-col .sched-hour { @apply text-sm font-bold text-gray-200 leading-tight; }
+.sched-date-col .sched-day { @apply text-[10px] text-gray-500 mt-0.5; }
+
+.sched-body { @apply flex-1 min-w-0 py-3 px-4 flex items-center gap-3; }
+.sched-thumb { @apply w-12 h-12 rounded-lg object-cover shrink-0 bg-surface-2 border border-border/40; }
+.sched-thumb-placeholder { @apply w-12 h-12 rounded-lg shrink-0 bg-surface-2 border border-border/40 flex items-center justify-center text-gray-600 text-lg; }
+.sched-content { @apply flex-1 min-w-0; }
+.sched-text { @apply text-[13px] mb-1 whitespace-pre-wrap overflow-hidden line-clamp-2 leading-snug; }
+.sched-meta { @apply text-[11px] text-gray-500 flex gap-1.5 flex-wrap items-center; }
+
+.sched-actions { @apply flex gap-1 shrink-0 items-center pr-3 opacity-0 translate-x-2 transition-all duration-200; }
+.sched-actions button { @apply bg-surface-2 border border-border/60 text-gray-400 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 hover:border-green-500/50 hover:text-green-400 hover:bg-green-500/5 cursor-pointer; font-family: inherit; }
 
 .filter-btn { @apply px-3.5 py-1.5 rounded-full border border-border/60 bg-surface text-gray-400 text-xs font-medium transition-all duration-150 hover:border-green-500/50 hover:text-green-400; }
 .filter-btn.active { @apply border-green-500/50 text-green-400 bg-green-500/5; }
@@ -1058,6 +1077,20 @@ function filterSched(f, btn) {
   renderSchedules();
 }
 
+function schedDateLabel(dateStr) {
+  if (!dateStr) return 'Sem data';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const d = new Date(dateStr + 'T00:00:00');
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const days = ['Domingo','Segunda','Terca','Quarta','Quinta','Sexta','Sabado'];
+  if (d.getTime() === today.getTime()) return 'Hoje';
+  if (d.getTime() === yesterday.getTime()) return 'Ontem';
+  const diff = today - d;
+  if (diff > 0 && diff < 7 * 86400000) return days[d.getDay()];
+  return `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
 function renderSchedules() {
   let list = schedules;
   const botFilter = document.getElementById('schedBotFilter').value;
@@ -1065,33 +1098,86 @@ function renderSchedules() {
   if (botFilter) list = list.filter(s => (s.sendpulse_bot_id || s.sendpulse_bot_nome) === botFilter);
   const el = document.getElementById('schedList');
   if (list.length === 0) { el.innerHTML = '<div class="empty-state"><div class="text-4xl mb-3 opacity-40">&#128197;</div><p>Nenhum registro encontrado.</p></div>'; return; }
-  el.innerHTML = list.map(s => {
-    const dt = s.scheduled_at ? s.scheduled_at.replace('T', ' ').slice(0, 16) : '';
-    const recBadge = s.recurrence ? `<span class="badge-rec">${s.recurrence}</span>` : '';
-    const botLabel = s.sendpulse_bot_nome ? `<span class="text-green-400 text-[11px]">${esc(s.sendpulse_bot_nome)}</span>` : '';
-    const typeBadge = s.content_type !== 'text' ? `<span class="badge-${s.content_type}">${s.content_type}</span>` : '';
-    const text = s.content_text || `[${s.content_type}]`;
-    const actions = [];
-    if (s.status === 'pendente') {
-      actions.push(`<button onclick="sendNow(${s.id})" class="!bg-green-500 !text-white !border-green-500">Enviar agora</button>`);
-      actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
-      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
-      actions.push(`<button onclick="cancelSchedule(${s.id})">Cancelar</button>`);
-    }
-    if (s.status === 'erro') {
-      actions.push(`<button onclick="sendNow(${s.id})" class="!bg-green-500 !text-white !border-green-500">Enviar agora</button>`);
-      actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
-      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
-    }
-    if (s.status === 'enviado') {
-      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
-    }
-    return `<div class="sched-item"><div class="sched-info">
-      <div class="sched-text">${esc(text.slice(0,150))}</div>
-      <div class="sched-meta">
-        <span class="badge-${s.status}">${s.status}</span> ${typeBadge} ${recBadge} ${botLabel} <span>${dt}</span>
-        ${s.error_msg ? `<span class="text-red-400 text-[11px]">${esc(s.error_msg.slice(0,80))}</span>` : ''}
-      </div></div><div class="sched-actions">${actions.join('')}</div></div>`;
+
+  // Ordenar por data desc
+  list = [...list].sort((a, b) => (b.scheduled_at || '').localeCompare(a.scheduled_at || ''));
+
+  // Agrupar por data
+  const groups = new Map();
+  list.forEach(s => {
+    const dateKey = s.scheduled_at ? s.scheduled_at.slice(0, 10) : 'sem-data';
+    if (!groups.has(dateKey)) groups.set(dateKey, []);
+    groups.get(dateKey).push(s);
+  });
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  el.innerHTML = [...groups.entries()].map(([dateKey, items]) => {
+    const label = schedDateLabel(dateKey === 'sem-data' ? null : dateKey);
+    const isToday = dateKey === todayStr;
+
+    const itemsHtml = items.map(s => {
+      const time = s.scheduled_at ? s.scheduled_at.slice(11, 16) : '--:--';
+      const dayShort = s.scheduled_at ? new Date(s.scheduled_at).toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0,3) : '';
+      const recBadge = s.recurrence ? `<span class="badge-rec">${s.recurrence}</span>` : '';
+      const botLabel = s.sendpulse_bot_nome ? `<span class="text-green-400">${esc(s.sendpulse_bot_nome)}</span>` : '';
+      const typeBadge = s.content_type !== 'text' ? `<span class="badge-${s.content_type}">${s.content_type}</span>` : '';
+      const text = s.content_text || `[${s.content_type}]`;
+
+      // Thumbnail
+      let thumbHtml = '';
+      if (s.content_media_url && s.content_media_url.startsWith('http')) {
+        if (s.content_type === 'photo') {
+          thumbHtml = `<img src="${esc(s.content_media_url)}" class="sched-thumb" alt="">`;
+        } else if (s.content_type === 'video') {
+          thumbHtml = `<div class="sched-thumb-placeholder">&#9654;</div>`;
+        }
+      }
+
+      // Actions
+      const actions = [];
+      if (s.status === 'pendente') {
+        actions.push(`<button onclick="sendNow(${s.id})" class="!bg-green-500 !text-white !border-green-500">Enviar</button>`);
+        actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+        actions.push(`<button onclick="cancelSchedule(${s.id})">Cancelar</button>`);
+      }
+      if (s.status === 'erro') {
+        actions.push(`<button onclick="sendNow(${s.id})" class="!bg-green-500 !text-white !border-green-500">Retentar</button>`);
+        actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+      }
+      if (s.status === 'enviado') {
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+      }
+
+      return `<div class="sched-item">
+        <div class="sched-status-bar st-${s.status}"></div>
+        <div class="sched-date-col">
+          <div class="sched-hour">${time}</div>
+          <div class="sched-day">${dayShort}</div>
+        </div>
+        <div class="sched-body">
+          ${thumbHtml}
+          <div class="sched-content">
+            <div class="sched-text">${esc(text.slice(0,150))}</div>
+            <div class="sched-meta">
+              <span class="badge-${s.status}">${s.status}</span> ${typeBadge} ${recBadge} ${botLabel}
+              ${s.error_msg ? `<span class="text-red-400">${esc(s.error_msg.slice(0,60))}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="sched-actions">${actions.join('')}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="sched-date-group">
+      <div class="sched-date-label ${isToday ? 'is-today' : ''}">
+        ${label}
+        <span class="sched-date-count">${items.length}</span>
+      </div>
+      ${itemsHtml}
+    </div>`;
   }).join('');
 }
 

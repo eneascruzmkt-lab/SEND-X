@@ -88,14 +88,37 @@ router.use(auth);
 router.post('/upload', auth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
   const localUrl = `/uploads/${req.file.filename}`;
+  const localPath = req.file.path;
 
-  // Serve from Railway public domain (Telegram can fetch this)
+  // Upload to 0x0.st (serves raw files, works with Telegram)
+  try {
+    const FormData = require('form-data');
+    const fstream = require('fs');
+    const form = new FormData();
+    form.append('file', fstream.createReadStream(localPath));
+
+    const uploadRes = await require('axios').post('https://0x0.st', form, {
+      headers: form.getHeaders(),
+      timeout: 120000,
+      maxContentLength: 210 * 1024 * 1024,
+    });
+
+    if (uploadRes.data && uploadRes.data.trim().startsWith('http')) {
+      const publicUrl = uploadRes.data.trim();
+      console.log('[upload] 0x0.st URL:', publicUrl);
+      try { fs.unlinkSync(localPath); } catch {}
+      return res.json({ url: publicUrl, filename: req.file.filename, size: req.file.size });
+    }
+  } catch (err) {
+    console.error('[upload] 0x0.st failed:', err.message);
+  }
+
+  // Fallback: serve from Railway
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
   const settings = await db.getUserSettings(req.userId);
   const domain = settings.webhook_domain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
   const publicUrl = domain.replace(/\/$/, '') + localUrl;
-
-  console.log('[upload] serving from:', publicUrl);
+  console.log('[upload] fallback Railway URL:', publicUrl);
   res.json({ url: publicUrl, filename: req.file.filename, size: req.file.size });
 });
 

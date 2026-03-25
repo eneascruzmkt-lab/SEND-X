@@ -810,15 +810,13 @@ function renderMsg(m) {
   const labels = { text:'texto', photo:'imagem', video:'video', document:'doc' };
   const time = m.created_at ? m.created_at.slice(11, 16) : '';
   const fileId = m.file_id || '';
-  const isLocal = fileId.startsWith('/uploads/');
+  const previewSrc = m.telegram_media_url || (fileId.startsWith('/uploads/') ? fileId : '');
 
   let mediaHtml = '';
-  if (m.message_type === 'photo' && fileId) {
-    const src = isLocal ? fileId : esc(fileId);
-    mediaHtml = `<img src="${src}" style="max-width:180px;max-height:120px;border-radius:8px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
-  } else if (m.message_type === 'video' && fileId) {
-    const src = isLocal ? fileId : esc(fileId);
-    mediaHtml = `<video src="${src}" style="max-width:180px;max-height:120px;border-radius:8px;margin-bottom:6px;display:block" controls></video>`;
+  if (m.message_type === 'photo' && previewSrc) {
+    mediaHtml = `<img src="${esc(previewSrc)}" style="max-width:180px;max-height:120px;border-radius:8px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
+  } else if (m.message_type === 'video' && previewSrc) {
+    mediaHtml = `<video src="${esc(previewSrc)}" style="max-width:180px;max-height:120px;border-radius:8px;margin-bottom:6px;display:block" controls></video>`;
   }
 
   const uid = 'msg_' + m.id;
@@ -924,12 +922,14 @@ async function confirmScheduleSelected() {
   try {
     for (const cb of checkboxes) {
       const mediaUrl = cb.dataset.mediaurl || null;
-      const hasValidMedia = mediaUrl && mediaUrl.startsWith('http');
+      const telegramFileId = cb.dataset.fileid || null;
+      const hasMedia = (mediaUrl && mediaUrl.startsWith('http')) || (telegramFileId && !telegramFileId.startsWith('/'));
       const sched = await api('/schedules', { method: 'POST', body: {
         par_id: currentPar.id, origem: 'grupo',
-        content_type: hasValidMedia ? (cb.dataset.type || 'text') : 'text',
+        content_type: hasMedia ? (cb.dataset.type || 'text') : 'text',
         content_text: cb.dataset.text || null,
-        content_media_url: hasValidMedia ? mediaUrl : null,
+        content_media_url: (mediaUrl && mediaUrl.startsWith('http')) ? mediaUrl : null,
+        content_file_id: (telegramFileId && !telegramFileId.startsWith('/')) ? telegramFileId : null,
         scheduled_at, recurrence,
       }});
 
@@ -1376,7 +1376,7 @@ async function handleUpload(file, ctx) {
 
     const urlInput = document.getElementById(ctx + 'MediaUrl');
     if (urlInput) urlInput.value = result.url;
-    if (mediaBlock) mediaBlock.url = result.url;
+    if (mediaBlock) { mediaBlock.url = result.url; mediaBlock.fileId = result.file_id || null; }
 
     if (zoneEl) zoneEl.style.display = 'none';
     if (previewEl) {
@@ -1505,7 +1505,7 @@ async function submitComposer(immediate) {
     content_type: mediaBlock ? mediaBlock.type : 'text',
     content_text: text,
     content_media_url: mediaUrl,
-    content_file_id: null,
+    content_file_id: mediaBlock?.fileId || null,
     buttons: getButtons(),
     scheduled_at,
     recurrence,

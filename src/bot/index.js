@@ -124,8 +124,8 @@ async function startUserBot(userId, telegramToken) {
           text,
           from_user: ctx.from?.username || ctx.from?.first_name || ctx.chat?.title || 'canal',
           message_type: msgType,
-          file_id: localPreview || fileId || null,
-          telegram_media_url: publicMediaUrl || null,
+          file_id: fileId || null,
+          telegram_media_url: publicMediaUrl || localPreview || null,
         };
 
         // Dedup

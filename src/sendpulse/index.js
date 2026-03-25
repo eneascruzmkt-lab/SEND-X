@@ -140,7 +140,21 @@ function buildMessage(schedule, webhookDomain) {
     : undefined;
 
   const type = schedule.content_type || 'text';
-  const mediaValue = schedule.content_media_url || schedule.content_file_id || '';
+
+  // Prefer Telegram file_id (always works) over external URLs
+  const fileId = schedule.content_file_id || '';
+  const isTelegramFileId = fileId && !fileId.startsWith('/') && !fileId.startsWith('http');
+
+  if ((type === 'video' || type === 'photo') && isTelegramFileId) {
+    const msg = { type, [type]: fileId };
+    if (schedule.content_text) msg.caption = schedule.content_text;
+    if (replyMarkup) msg.reply_markup = replyMarkup;
+    console.log(`[sendpulse] buildMessage ${type} (file_id):`, fileId.slice(0, 40) + '...');
+    return msg;
+  }
+
+  // Fallback to URL
+  const mediaValue = schedule.content_media_url || fileId || '';
   const resolvedMedia = resolveMediaUrl(mediaValue, webhookDomain);
   console.log('[sendpulse] buildMessage input:', { type, mediaValue: mediaValue?.slice?.(0, 80) || mediaValue, resolvedMedia: resolvedMedia?.slice?.(0, 80) || resolvedMedia });
 
@@ -148,7 +162,6 @@ function buildMessage(schedule, webhookDomain) {
     const msg = { type: 'photo', photo: resolvedMedia };
     if (schedule.content_text) msg.caption = schedule.content_text;
     if (replyMarkup) msg.reply_markup = replyMarkup;
-    console.log('[sendpulse] buildMessage photo:', resolvedMedia.slice(0, 80));
     return msg;
   }
 
@@ -156,7 +169,6 @@ function buildMessage(schedule, webhookDomain) {
     const msg = { type: 'video', video: resolvedMedia };
     if (schedule.content_text) msg.caption = schedule.content_text;
     if (replyMarkup) msg.reply_markup = replyMarkup;
-    console.log('[sendpulse] buildMessage video:', resolvedMedia.slice(0, 80));
     return msg;
   }
 

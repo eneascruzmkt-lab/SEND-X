@@ -189,18 +189,19 @@ async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
   let publicUrl = telegramUrl;
   try {
     const form = new FormData();
-    form.append('source', fs.createReadStream(localPath));
-    form.append('type', 'file');
-    form.append('action', 'upload');
-    const res = await axios.post(
-      'https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5',
-      form, { headers: form.getHeaders(), timeout: 30000 }
-    );
-    if (res.data?.image?.url) {
-      publicUrl = res.data.image.url;
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', fs.createReadStream(localPath));
+    const res = await axios.post('https://catbox.moe/user/api.php', form, {
+      headers: form.getHeaders(),
+      timeout: 120000,
+      maxContentLength: 210 * 1024 * 1024,
+    });
+    if (res.data && res.data.startsWith('https://')) {
+      publicUrl = res.data.trim();
+      console.log('[feed] catbox.moe URL:', publicUrl);
     }
   } catch (e) {
-    console.error('[feed] freeimage upload failed, using telegram URL:', e.message);
+    console.error('[feed] catbox upload failed, using telegram URL:', e.message);
   }
 
   return { localPath: `/uploads/${filename}`, publicUrl };

@@ -85,10 +85,57 @@ router.get('/auth/me', auth, async (req, res) => {
 router.use(auth);
 
 // ── Upload ───────────────────────────────────────────
-router.post('/upload', upload.single('file'), (req, res) => {
+router.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-  const url = `/uploads/${req.file.filename}`;
-  res.json({ url, filename: req.file.filename, size: req.file.size });
+  const localUrl = `/uploads/${req.file.filename}`;
+  const localPath = req.file.path;
+
+  // Try to upload to Telegram for persistent storage
+  try {
+    const settings = await db.getUserSettings(req.userId);
+    if (settings.telegram_token) {
+      const FormData = require('form-data');
+      const fstream = require('fs');
+      const ext = path.extname(req.file.filename).toLowerCase();
+      const isVideo = ['.mp4', '.webm', '.gif'].includes(ext);
+      const isPhoto = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+
+      if (isVideo || isPhoto) {
+        const form = new FormData();
+        // Send to bot's own chat (Saved Messages)
+        const meRes = await require('axios').get(`https://api.telegram.org/bot${settings.telegram_token}/getMe`);
+        const botId = meRes.data.result.id;
+        form.append('chat_id', botId);
+
+        const method = isVideo ? 'sendVideo' : 'sendPhoto';
+        form.append(isVideo ? 'video' : 'photo', fstream.createReadStream(localPath));
+
+        const tgRes = await require('axios').post(
+          `https://api.telegram.org/bot${settings.telegram_token}/${method}`,
+          form,
+          { headers: form.getHeaders(), timeout: 120000, maxContentLength: 55 * 1024 * 1024 }
+        );
+
+        if (tgRes.data?.ok && tgRes.data.result) {
+          const msg = tgRes.data.result;
+          let fileId = null;
+          if (isVideo && msg.video) fileId = msg.video.file_id;
+          if (isPhoto && msg.photo) fileId = msg.photo[msg.photo.length - 1].file_id;
+
+          if (fileId) {
+            console.log('[upload] saved to Telegram, file_id:', fileId.slice(0, 40));
+            // Clean up local file since we have Telegram storage
+            try { fstream.unlinkSync(localPath); } catch {}
+            return res.json({ url: localUrl, filename: req.file.filename, size: req.file.size, telegram_file_id: fileId });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[upload] Telegram upload failed, using local:', err.message);
+  }
+
+  res.json({ url: localUrl, filename: req.file.filename, size: req.file.size });
 });
 
 // ── User Settings ────────────────────────────────────

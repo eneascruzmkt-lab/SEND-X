@@ -1371,8 +1371,11 @@ async function handleUpload(file, ctx) {
     });
 
     const urlInput = document.getElementById(ctx + 'MediaUrl');
-    if (urlInput) urlInput.value = result.url;
-    if (mediaBlock) mediaBlock.url = result.url;
+    if (urlInput) urlInput.value = result.telegram_file_id || result.url;
+    if (mediaBlock) {
+      mediaBlock.url = result.url;
+      mediaBlock.telegramFileId = result.telegram_file_id || null;
+    }
 
     if (zoneEl) zoneEl.style.display = 'none';
     if (previewEl) {
@@ -1498,6 +1501,7 @@ async function submitComposer(immediate) {
     content_type: mediaBlock ? mediaBlock.type : 'text',
     content_text: text,
     content_media_url: mediaUrl,
+    content_file_id: mediaBlock?.telegramFileId || null,
     buttons: getButtons(),
     scheduled_at,
     recurrence,

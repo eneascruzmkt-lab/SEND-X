@@ -263,6 +263,7 @@ router.post('/schedules', async (req, res) => {
       return res.status(400).json({ error: 'Botões não permitidos para mensagens do grupo' });
     }
     req.body.user_id = req.userId;
+    console.log('[schedules] criando:', { content_type: req.body.content_type, content_media_url: req.body.content_media_url?.slice?.(0, 80), origem: req.body.origem });
     const schedule = await db.createSchedule(req.body);
     const io = req.app.get('io');
     if (io && par_id) io.to(`par_${par_id}`).emit('schedule_update', schedule);

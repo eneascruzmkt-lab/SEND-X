@@ -142,6 +142,7 @@ function buildMessage(schedule, webhookDomain) {
   const type = schedule.content_type || 'text';
   const mediaValue = schedule.content_media_url || schedule.content_file_id || '';
   const resolvedMedia = resolveMediaUrl(mediaValue, webhookDomain);
+  console.log('[sendpulse] buildMessage input:', { type, mediaValue: mediaValue?.slice?.(0, 80) || mediaValue, resolvedMedia: resolvedMedia?.slice?.(0, 80) || resolvedMedia });
 
   if (type === 'photo' && resolvedMedia) {
     const msg = { type: 'photo', photo: resolvedMedia };

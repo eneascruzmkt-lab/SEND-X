@@ -64,7 +64,7 @@ async function dispatch(schedule, par, credentials) {
     throw new Error('Nenhum inscrito direto encontrado neste bot');
   }
 
-  const message = await buildMessage(schedule, credentials.webhook_domain, credentials);
+  const message = buildMessage(schedule, credentials.webhook_domain);
   console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
   const errors = [];
 
@@ -87,7 +87,7 @@ async function dispatch(schedule, par, credentials) {
   console.log(`[sendpulse] Enviado para ${subscribers.length - errors.length}/${subscribers.length} inscritos`);
 }
 
-function resolveLocalUrl(url, webhookDomain) {
+function resolveMediaUrl(url, webhookDomain) {
   if (!url) return '';
   if (url.startsWith('http')) return url;
   if (url.startsWith('/')) {
@@ -95,80 +95,37 @@ function resolveLocalUrl(url, webhookDomain) {
     const domain = webhookDomain || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
     return domain.replace(/\/$/, '') + url;
   }
-  return '';
+  // Return as-is (could be Telegram file_id — SendPulse may accept it)
+  return url;
 }
 
-// Resolve a Telegram file_id to a public URL via Telegram Bot API
-async function resolveTelegramFileUrl(fileId, credentials) {
-  try {
-    const db = require('../db');
-    // Get telegram token from user settings (we need it to call Telegram API)
-    // Try to find any user with a telegram token configured
-    const users = await db.getUsersWithTelegram();
-    if (users.length === 0) return '';
-    const telegramToken = users[0].telegram_token;
-    const res = await axios.get(`https://api.telegram.org/bot${telegramToken}/getFile?file_id=${fileId}`);
-    if (res.data?.ok && res.data.result?.file_path) {
-      return `https://api.telegram.org/file/bot${telegramToken}/${res.data.result.file_path}`;
-    }
-  } catch (err) {
-    console.error('[sendpulse] resolveTelegramFileUrl error:', err.message);
-  }
-  return '';
-}
-
-async function resolveMediaUrl(url, webhookDomain, credentials) {
-  if (!url) return '';
-  // Already a full URL
-  if (url.startsWith('http')) return url;
-  // Local upload path
-  if (url.startsWith('/')) {
-    const resolved = resolveLocalUrl(url, webhookDomain);
-    console.log('[sendpulse] resolveMediaUrl local:', url, '->', resolved);
-    return resolved;
-  }
-  // Likely a Telegram file_id — try to resolve via Bot API
-  console.log('[sendpulse] resolveMediaUrl: trying Telegram file_id:', url.slice(0, 40));
-  const telegramUrl = await resolveTelegramFileUrl(url, credentials);
-  if (telegramUrl) {
-    console.log('[sendpulse] resolveMediaUrl telegram:', telegramUrl.slice(0, 80));
-    return telegramUrl;
-  }
-  console.log('[sendpulse] resolveMediaUrl: could not resolve:', url.slice(0, 40));
-  return '';
-}
-
-async function buildMessage(schedule, webhookDomain, credentials) {
+function buildMessage(schedule, webhookDomain) {
   const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
   const replyMarkup = buttons && buttons.length > 0
     ? { inline_keyboard: [buttons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }
     : undefined;
 
   const type = schedule.content_type || 'text';
+  const mediaValue = schedule.content_media_url || schedule.content_file_id || '';
+  const resolvedMedia = resolveMediaUrl(mediaValue, webhookDomain);
 
-  if (type === 'photo') {
-    const photoUrl = await resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain, credentials);
-    if (photoUrl) {
-      const msg = { type: 'photo', photo: photoUrl };
-      if (schedule.content_text) msg.caption = schedule.content_text;
-      if (replyMarkup) msg.reply_markup = replyMarkup;
-      return msg;
-    }
-    console.log('[sendpulse] photo sem URL valida, enviando como texto');
+  if (type === 'photo' && resolvedMedia) {
+    const msg = { type: 'photo', photo: resolvedMedia };
+    if (schedule.content_text) msg.caption = schedule.content_text;
+    if (replyMarkup) msg.reply_markup = replyMarkup;
+    console.log('[sendpulse] buildMessage photo:', resolvedMedia.slice(0, 80));
+    return msg;
   }
 
-  if (type === 'video') {
-    const videoUrl = await resolveMediaUrl(schedule.content_media_url || schedule.content_file_id || '', webhookDomain, credentials);
-    if (videoUrl) {
-      const msg = { type: 'video', video: videoUrl };
-      if (schedule.content_text) msg.caption = schedule.content_text;
-      if (replyMarkup) msg.reply_markup = replyMarkup;
-      return msg;
-    }
-    console.log('[sendpulse] video sem URL valida, enviando como texto');
+  if (type === 'video' && resolvedMedia) {
+    const msg = { type: 'video', video: resolvedMedia };
+    if (schedule.content_text) msg.caption = schedule.content_text;
+    if (replyMarkup) msg.reply_markup = replyMarkup;
+    console.log('[sendpulse] buildMessage video:', resolvedMedia.slice(0, 80));
+    return msg;
   }
 
-  // text
+  // text (or fallback when no media)
   const msg = { type: 'text', text: schedule.content_text || '' };
   if (replyMarkup) msg.reply_markup = replyMarkup;
   return msg;

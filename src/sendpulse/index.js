@@ -51,36 +51,6 @@ async function listContacts(botId, credentials) {
   return res.data.data || res.data;
 }
 
-// Send media via Telegram Bot API directly (supports file_id up to 50MB)
-async function sendViaTelegramBot(chatId, schedule, telegramToken) {
-  const type = schedule.content_type;
-  const fileId = schedule.content_file_id;
-  const text = schedule.content_text || '';
-  const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
-  const replyMarkup = buttons && buttons.length > 0
-    ? { inline_keyboard: [buttons.map(b => ({ text: b.text, url: b.url }))] }
-    : undefined;
-
-  const body = { chat_id: chatId };
-  if (text) body.caption = text;
-  if (replyMarkup) body.reply_markup = JSON.stringify(replyMarkup);
-
-  let method;
-  if (type === 'video') {
-    method = 'sendVideo';
-    body.video = fileId;
-  } else if (type === 'photo') {
-    method = 'sendPhoto';
-    body.photo = fileId;
-  } else {
-    method = 'sendMessage';
-    body.text = text;
-    if (replyMarkup) body.reply_markup = JSON.stringify(replyMarkup);
-  }
-
-  await axios.post(`https://api.telegram.org/bot${telegramToken}/${method}`, body);
-}
-
 // Disparo seguro: envia SOMENTE para inscritos diretos (type != 3)
 async function dispatch(schedule, par, credentials) {
   const token = await getToken(credentials);
@@ -94,39 +64,6 @@ async function dispatch(schedule, par, credentials) {
     throw new Error('Nenhum inscrito direto encontrado neste bot');
   }
 
-  // Check if we have a Telegram file_id — if so, send directly via Bot API
-  const hasFileId = schedule.content_file_id && !schedule.content_file_id.startsWith('/') && !schedule.content_file_id.startsWith('http');
-  const isMedia = schedule.content_type === 'video' || schedule.content_type === 'photo';
-
-  if (hasFileId && isMedia) {
-    console.log('[sendpulse] sending via Telegram Bot API with file_id:', schedule.content_file_id.slice(0, 40));
-
-    // Get telegram token for sending
-    const db = require('../db');
-    const users = await db.getUsersWithTelegram();
-    if (users.length === 0) throw new Error('Nenhum bot Telegram configurado');
-
-    // Get Telegram chat_ids for SendPulse contacts
-    // SendPulse contacts have channel_data.id which is the Telegram user ID
-    const errors = [];
-    for (const contact of subscribers) {
-      try {
-        const telegramChatId = contact.channel_data?.id || contact.id;
-        await sendViaTelegramBot(telegramChatId, schedule, users[0].telegram_token);
-      } catch (err) {
-        console.error('[sendpulse] telegram send error:', contact.id, err.response?.data || err.message);
-        errors.push(`${contact.id}: ${err.response?.data?.description || err.message}`);
-      }
-    }
-
-    if (errors.length === subscribers.length) {
-      throw new Error(`Falha em todos os envios: ${errors[0]}`);
-    }
-    console.log(`[sendpulse] Enviado via Bot API para ${subscribers.length - errors.length}/${subscribers.length} inscritos`);
-    return;
-  }
-
-  // Standard SendPulse API dispatch (for text or media with URL)
   const message = buildMessage(schedule, credentials.webhook_domain);
   console.log('[sendpulse] dispatch message:', JSON.stringify(message).slice(0, 500));
   const errors = [];

@@ -90,49 +90,29 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   const localUrl = `/uploads/${req.file.filename}`;
   const localPath = req.file.path;
 
-  // Try to upload to Telegram for persistent storage
+  // Upload to catbox.moe for persistent public URL
   try {
-    const settings = await db.getUserSettings(req.userId);
-    if (settings.telegram_token) {
-      const FormData = require('form-data');
-      const fstream = require('fs');
-      const ext = path.extname(req.file.filename).toLowerCase();
-      const isVideo = ['.mp4', '.webm', '.gif'].includes(ext);
-      const isPhoto = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+    const FormData = require('form-data');
+    const fstream = require('fs');
+    const form = new FormData();
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', fstream.createReadStream(localPath));
 
-      if (isVideo || isPhoto) {
-        const form = new FormData();
-        // Send to bot's own chat (Saved Messages)
-        const meRes = await require('axios').get(`https://api.telegram.org/bot${settings.telegram_token}/getMe`);
-        const botId = meRes.data.result.id;
-        form.append('chat_id', botId);
+    const catRes = await require('axios').post('https://catbox.moe/user/api.php', form, {
+      headers: form.getHeaders(),
+      timeout: 120000,
+      maxContentLength: 210 * 1024 * 1024,
+    });
 
-        const method = isVideo ? 'sendVideo' : 'sendPhoto';
-        form.append(isVideo ? 'video' : 'photo', fstream.createReadStream(localPath));
-
-        const tgRes = await require('axios').post(
-          `https://api.telegram.org/bot${settings.telegram_token}/${method}`,
-          form,
-          { headers: form.getHeaders(), timeout: 120000, maxContentLength: 55 * 1024 * 1024 }
-        );
-
-        if (tgRes.data?.ok && tgRes.data.result) {
-          const msg = tgRes.data.result;
-          let fileId = null;
-          if (isVideo && msg.video) fileId = msg.video.file_id;
-          if (isPhoto && msg.photo) fileId = msg.photo[msg.photo.length - 1].file_id;
-
-          if (fileId) {
-            console.log('[upload] saved to Telegram, file_id:', fileId.slice(0, 40));
-            // Clean up local file since we have Telegram storage
-            try { fstream.unlinkSync(localPath); } catch {}
-            return res.json({ url: localUrl, filename: req.file.filename, size: req.file.size, telegram_file_id: fileId });
-          }
-        }
-      }
+    if (catRes.data && catRes.data.startsWith('https://')) {
+      const publicUrl = catRes.data.trim();
+      console.log('[upload] catbox.moe URL:', publicUrl);
+      // Clean up local file
+      try { fstream.unlinkSync(localPath); } catch {}
+      return res.json({ url: publicUrl, filename: req.file.filename, size: req.file.size });
     }
   } catch (err) {
-    console.error('[upload] Telegram upload failed, using local:', err.message);
+    console.error('[upload] catbox upload failed, using local:', err.message);
   }
 
   res.json({ url: localUrl, filename: req.file.filename, size: req.file.size });

@@ -135,6 +135,7 @@ tailwind.config = {
 .wg-card-text { @apply text-gray-300 mt-0.5 line-clamp-2 break-words; }
 .wg-card-bot { @apply text-green-400 text-[10px] mt-0.5 truncate; }
 .wg-card-meta { @apply flex flex-wrap gap-1 mt-1 items-center; }
+.wg-card-lastsend { @apply text-[10px] text-gray-500 mt-1 flex items-center gap-1; }
 .wg-card-error { @apply text-red-400 text-[10px] mt-1 line-clamp-1; }
 .wg-card-actions { @apply flex gap-1 mt-1.5; }
 .wg-card-actions button { @apply bg-surface border border-border/60 text-gray-400 px-2 py-1 rounded text-[10px] font-medium transition-all hover:border-green-500/40 hover:text-green-400 cursor-pointer; font-family: inherit; }
@@ -1519,6 +1520,25 @@ function getNextSendLabel(scheduledTime) {
   return remMins > 0 ? `em ${hrs}h${remMins}min` : `em ${hrs}h`;
 }
 
+function getLastSendInfo(scheduleId, allSchedules) {
+  // Procura schedules enviados com mesmo content_text ou bot que possam ser envios passados dessa recorrencia
+  const current = allSchedules.find(s => s.id === scheduleId);
+  if (!current) return null;
+  const past = allSchedules
+    .filter(s => s.id !== scheduleId && s.status === 'enviado' && s.sendpulse_bot_id === current.sendpulse_bot_id && s.content_text === current.content_text)
+    .sort((a, b) => (b.scheduled_at || '').localeCompare(a.scheduled_at || ''));
+  if (past.length === 0) return null;
+  const last = past[0];
+  const dt = last.scheduled_at ? last.scheduled_at.replace('T', ' ').slice(5, 16) : '';
+  return { status: 'enviado', date: dt };
+}
+
+function getBotSubscribers(botId) {
+  if (!botId || !botsList) return null;
+  const bot = botsList.find(b => b.id === botId);
+  return bot ? bot.subscribers : null;
+}
+
 function renderHistCalendar(allSchedules) {
   const weekDays = getWeekDays(histCalOffset);
   const todayStr = fmtDateISO(new Date());
@@ -1551,11 +1571,22 @@ function renderHistCalendar(allSchedules) {
           const recClass = s.recurrence ? `rec-${s.recurrence}` : '';
           const erroClass = s.status === 'erro' ? 'wg-erro' : '';
           const projClass = s.projected ? 'projected' : '';
-          const botName = s.sendpulse_bot_nome ? `<div class="wg-card-bot">${esc(s.sendpulse_bot_nome)}</div>` : '';
           const recBadge = s.recurrence ? `<span class="badge-rec" style="font-size:10px;padding:1px 6px">${s.recurrence}</span>` : '';
           const errMsg = s.status === 'erro' && s.error_msg ? `<div class="wg-card-error">${esc(s.error_msg.slice(0, 50))}</div>` : '';
 
-          // Indicador proximo envio (so para hoje, se horario nao passou)
+          // Alcance: bot + inscritos
+          const subs = getBotSubscribers(s.sendpulse_bot_id);
+          const botLine = s.sendpulse_bot_nome
+            ? `<div class="wg-card-bot">${esc(s.sendpulse_bot_nome)}${subs != null ? ` <span class="text-gray-500">· ${subs} inscr.</span>` : ''}</div>`
+            : '';
+
+          // Status do ultimo envio
+          const lastSend = getLastSendInfo(s.id, allSchedules);
+          const lastSendHtml = lastSend
+            ? `<div class="wg-card-lastsend"><span class="text-green-500">&#10003;</span> ${lastSend.date}</div>`
+            : `<div class="wg-card-lastsend"><span class="text-gray-600">—</span> <span class="text-gray-600">sem envios</span></div>`;
+
+          // Indicador proximo envio
           let nextLabel = '';
           if (isToday && s.status === 'pendente') {
             const lbl = getNextSendLabel(time);
@@ -1573,8 +1604,9 @@ function renderHistCalendar(allSchedules) {
             <div class="wg-card-time">${time}</div>
             ${nextLabel}
             <div class="wg-card-text">${esc(text.slice(0, 30))}</div>
-            ${botName}
+            ${botLine}
             <div class="wg-card-meta">${s.status === 'erro' ? '<span class="badge-erro" style="font-size:10px;padding:1px 6px">erro</span>' : ''} ${recBadge}</div>
+            ${lastSendHtml}
             ${errMsg}
             <div class="wg-card-actions">${actions}</div>
           </div>`;

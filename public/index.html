@@ -437,7 +437,7 @@ tailwind.config = {
                   <div class="flex gap-3">
                     <div class="flex-1" id="dateGroup">
                       <label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label>
-                      <input type="date" id="compDate" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+                      <input type="text" id="compDate" placeholder="DD/MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
                     </div>
                     <div class="flex-1">
                       <label class="block text-xs font-semibold text-gray-400 mb-1.5">Horario</label>
@@ -555,7 +555,7 @@ tailwind.config = {
         </select>
       </div>
       <div class="flex gap-3">
-        <div class="flex-1" id="modalDateGroup"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label><input type="date" id="modalDate" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
+        <div class="flex-1" id="modalDateGroup"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label><input type="text" id="modalDate" placeholder="DD/MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
         <div class="flex-1"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Hora</label><input type="time" id="modalTime" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
       </div>
     </div>
@@ -641,7 +641,7 @@ tailwind.config = {
         </label>
       </div>
       <div class="flex gap-3">
-        <div class="flex-1" id="editDateGroup"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label><input type="date" id="editDate" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
+        <div class="flex-1" id="editDateGroup"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label><input type="text" id="editDate" placeholder="DD/MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
         <div class="flex-1"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Horario</label><input type="time" id="editTime" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
       </div>
     </div>
@@ -958,7 +958,7 @@ function openScheduleModal() {
   if (selectedMsgs.size === 0) return;
   document.getElementById('schedModalSummary').textContent = `${selectedMsgs.size} mensagem(ns) selecionada(s)`;
   const now = new Date();
-  document.getElementById('modalDate').value = now.toISOString().slice(0, 10);
+  document.getElementById('modalDate').value = toDateInputFormat(now.toISOString());
   document.getElementById('modalTime').value = now.toTimeString().slice(0, 5);
   modalModeChanged('agora');
   document.querySelector('input[name="modalMode"][value="agora"]').checked = true;
@@ -990,7 +990,8 @@ async function confirmScheduleSelected() {
     const date = document.getElementById('modalDate').value;
     const time = document.getElementById('modalTime').value;
     if (!time) return alert('Informe o horario');
-    if ((rec === '' || rec === 'semanal') && !date) return alert('Informe a data');
+    if ((rec === '' || rec === 'semanal') && !date) return alert('Informe a data (DD/MM)');
+    if ((rec === '' || rec === 'semanal') && !parseDateInput(date)) return alert('Data invalida. Use DD/MM');
     recurrence = rec || null;
     scheduled_at = calcScheduledAt(rec || 'unico', date, time);
   } else {
@@ -1034,6 +1035,35 @@ async function sendNow(id) {
     alert('Erro ao enviar');
     loadSchedules();
   }
+}
+
+// ── Mascara DD/MM nos campos de data ─────────────
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'compDate' || e.target.id === 'modalDate' || e.target.id === 'editDate') {
+    let v = e.target.value.replace(/\D/g, '');
+    if (v.length > 4) v = v.slice(0, 4);
+    if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+    e.target.value = v;
+  }
+});
+
+// Converte DD/MM para YYYY-MM-DD (ano atual)
+function parseDateInput(val) {
+  if (!val) return null;
+  const parts = val.split('/');
+  if (parts.length !== 2) return null;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  if (!day || !month || day < 1 || day > 31 || month < 1 || month > 12) return null;
+  const year = new Date().getFullYear();
+  return { y: year, mo: month, d: day };
+}
+
+// Converte ISO ou YYYY-MM-DD para DD/MM
+function toDateInputFormat(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
 // ── Helpers de data local ────────────────────────
@@ -1256,7 +1286,7 @@ function editSchedule(id) {
   editSendTypeChanged();
 
   if (s.scheduled_at) {
-    document.getElementById('editDate').value = toLocalDateStr(s.scheduled_at);
+    document.getElementById('editDate').value = toDateInputFormat(s.scheduled_at);
     document.getElementById('editTime').value = toLocalTimeStr(s.scheduled_at);
   }
 
@@ -1357,12 +1387,13 @@ async function saveEdit() {
   if (!time) return alert('Informe o horario');
   const date = document.getElementById('editDate').value;
   const sendType = document.querySelector('input[name="editSendType"]:checked')?.value || 'unico';
-  if (!date) return alert('Informe a data');
+  if (!date) return alert('Informe a data (DD/MM)');
+  const p = parseDateInput(date);
+  if (!p) return alert('Data invalida. Use o formato DD/MM');
 
   const botSel = document.getElementById('editBot');
   const [h, m] = time.split(':').map(Number);
-  const [y, mo, d] = date.split('-').map(Number);
-  const scheduled_at = new Date(y, mo - 1, d, h, m, 0).toISOString();
+  const scheduled_at = new Date(p.y, p.mo - 1, p.d, h, m, 0).toISOString();
 
   const body = {
     sendpulse_bot_id: botSel.value,
@@ -1729,8 +1760,9 @@ function sendTypeChanged() {
 function calcScheduledAt(type, date, time) {
   const [h, m] = time.split(':').map(Number);
   if (type === 'unico' || type === 'semanal') {
-    const [y, mo, d] = date.split('-').map(Number);
-    return new Date(y, mo - 1, d, h, m, 0).toISOString();
+    const p = parseDateInput(date);
+    if (!p) return null;
+    return new Date(p.y, p.mo - 1, p.d, h, m, 0).toISOString();
   }
   const now = new Date();
   let target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
@@ -1928,7 +1960,8 @@ async function submitComposer(immediate) {
     const time = document.getElementById('compTime').value;
     if (!time) return alert('Informe o horario');
     const date = document.getElementById('compDate').value;
-    if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
+    if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data (DD/MM)');
+    if ((sendType === 'unico' || sendType === 'semanal') && !parseDateInput(date)) return alert('Data invalida. Use DD/MM');
     scheduled_at = calcScheduledAt(sendType, date, time);
     recurrence = sendType === 'unico' ? null : sendType;
   }

@@ -1630,7 +1630,10 @@ function renderHistCalendar(allSchedules) {
           if (s.status === 'erro') {
             actions += `<button class="wg-btn-retry" onclick="sendNow(${s.id})">Retentar</button>`;
           }
-          actions += `<button class="wg-btn-danger" onclick="deleteRecSchedule(${s.id})">Excluir</button>`;
+          if (s.recurrence) {
+            actions += `<button onclick="skipOneSchedule(${s.id})">Pular proximo</button>`;
+          }
+          actions += `<button class="wg-btn-danger" onclick="deleteRecSchedule(${s.id})">Excluir ${s.recurrence ? 'tudo' : ''}</button>`;
 
           return `<div class="wg-card ${recClass} ${erroClass} ${projClass}">
             <div class="wg-card-time">${time}</div>
@@ -1651,6 +1654,30 @@ function renderHistCalendar(allSchedules) {
       <div class="wg-col-body ${isToday ? 'bg-green-500/[0.03] rounded-b-lg border border-green-500/10 border-t-0' : ''}">${cardsHtml}</div>
     </div>`;
   }).join('');
+}
+
+async function skipOneSchedule(id) {
+  const s = schedules.find(x => x.id === id);
+  if (!s || !s.recurrence) return;
+  if (!confirm('Pular o proximo envio e avancar para o seguinte?')) return;
+
+  const current = new Date(s.scheduled_at);
+  let next = new Date(current);
+
+  if (s.recurrence === 'diario') {
+    next.setDate(next.getDate() + 1);
+  } else if (s.recurrence === 'diasuteis') {
+    do { next.setDate(next.getDate() + 1); } while (next.getDay() === 0 || next.getDay() === 6);
+  } else if (s.recurrence === 'semanal') {
+    next.setDate(next.getDate() + 7);
+  }
+
+  await api(`/schedules/${id}`, { method: 'PUT', body: {
+    scheduled_at: next.toISOString(),
+    status: 'pendente',
+  }});
+  loadSchedules();
+  loadDashboard();
 }
 
 async function deleteRecSchedule(id) {

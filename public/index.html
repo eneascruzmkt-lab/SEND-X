@@ -1094,7 +1094,7 @@ function todayLocalStr() {
 let histViewInitialized = false;
 async function loadSchedules() {
   const all = await api('/schedules');
-  schedules = currentPar ? all.filter(s => s.par_id === currentPar.id || s.par_id === null) : all;
+  schedules = currentPar ? all.filter(s => s.par_id === currentPar.id) : all;
   populateBotFilter();
   renderSchedules();
 
@@ -1432,7 +1432,7 @@ async function saveEdit() {
 // ── Dashboard ───────────────────────────────────
 async function loadDashboard() {
   const raw = await api('/schedules');
-  const all = currentPar ? raw.filter(s => s.par_id === currentPar.id || s.par_id === null) : raw;
+  const all = currentPar ? raw.filter(s => s.par_id === currentPar.id) : raw;
   const enviados = all.filter(s => s.status === 'enviado');
   const pendentes = all.filter(s => s.status === 'pendente');
   const erros = all.filter(s => s.status === 'erro');

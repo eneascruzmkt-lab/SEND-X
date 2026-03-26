@@ -1312,7 +1312,8 @@ function editSendTypeChanged() {
   document.querySelectorAll('#editModal .send-type-option').forEach(el => el.classList.remove('selected'));
   const opt = document.querySelector(`#editModal .send-type-option[data-type="${type}"]`);
   if (opt) opt.classList.add('selected');
-  document.getElementById('editDateGroup').style.display = (type === 'diario' || type === 'diasuteis') ? 'none' : '';
+  // Sempre mostrar campo data no edit (permite ajustar a data de inicio da recorrencia)
+  document.getElementById('editDateGroup').style.display = '';
 }
 
 function editAddBtnRow() {

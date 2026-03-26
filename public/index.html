@@ -1200,12 +1200,14 @@ function renderSchedules() {
 }
 
 async function cancelSchedule(id) { if (!confirm('Cancelar?')) return; await api(`/schedules/${id}`,{method:'DELETE'}); loadSchedules(); loadDashboard(); }
-async function duplicateSchedule(id) {
+function duplicateSchedule(id) {
   const s = schedules.find(x => x.id === id); if (!s) return;
-  let dupButtons = null;
-  try { dupButtons = s.buttons ? JSON.parse(s.buttons) : null; } catch(e) {}
-  await api('/schedules',{method:'POST',body:{par_id:s.par_id,sendpulse_bot_id:s.sendpulse_bot_id,sendpulse_bot_nome:s.sendpulse_bot_nome,origem:s.origem,content_type:s.content_type,content_text:s.content_text,content_file_id:s.content_file_id,content_media_url:s.content_media_url,buttons:dupButtons,scheduled_at:new Date().toISOString(),recurrence:s.recurrence}});
-  loadSchedules(); loadDashboard();
+  // Abrir edit modal em modo duplicar (cria novo ao salvar)
+  editSchedule(id);
+  document.getElementById('editId').value = 'new_' + id;
+  // Limpar data/hora para o usuario escolher
+  document.getElementById('editDate').value = '';
+  document.getElementById('editTime').value = '';
 }
 
 // ── Edit modal ──────────────────────────────────
@@ -1348,28 +1350,21 @@ function editGetButtons() {
 function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
 
 async function saveEdit() {
-  const id = document.getElementById('editId').value;
+  const rawId = document.getElementById('editId').value;
+  const isDuplicate = rawId.startsWith('new_');
+  const origId = isDuplicate ? rawId.replace('new_', '') : rawId;
   const time = document.getElementById('editTime').value;
   if (!time) return alert('Informe o horario');
   const date = document.getElementById('editDate').value;
   const sendType = document.querySelector('input[name="editSendType"]:checked')?.value || 'unico';
-  if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
+  if (!date) return alert('Informe a data');
 
   const botSel = document.getElementById('editBot');
-  // Para edição, usar a data do form diretamente (não recalcular)
   const [h, m] = time.split(':').map(Number);
-  let scheduled_at;
-  if (date) {
-    const [y, mo, d] = date.split('-').map(Number);
-    scheduled_at = new Date(y, mo - 1, d, h, m, 0).toISOString();
-  } else {
-    // Sem data (diario/diasuteis sem campo data): manter a data original do schedule
-    const original = schedules.find(s => s.id == id);
-    const orig = original ? new Date(original.scheduled_at) : new Date();
-    scheduled_at = new Date(orig.getFullYear(), orig.getMonth(), orig.getDate(), h, m, 0).toISOString();
-  }
+  const [y, mo, d] = date.split('-').map(Number);
+  const scheduled_at = new Date(y, mo - 1, d, h, m, 0).toISOString();
 
-  await api(`/schedules/${id}`, { method: 'PUT', body: {
+  const body = {
     sendpulse_bot_id: botSel.value,
     sendpulse_bot_nome: botSel.options[botSel.selectedIndex]?.text?.split(' (')[0] || '',
     content_type: document.getElementById('editType').value,
@@ -1379,7 +1374,19 @@ async function saveEdit() {
     scheduled_at,
     recurrence: sendType === 'unico' ? null : sendType,
     status: 'pendente',
-  }});
+  };
+
+  if (isDuplicate) {
+    // Duplicar: criar novo schedule
+    const original = schedules.find(s => s.id == origId);
+    body.par_id = original?.par_id || (currentPar ? currentPar.id : null);
+    body.origem = original?.origem || 'manual';
+    body.content_file_id = original?.content_file_id || null;
+    await api('/schedules', { method: 'POST', body });
+  } else {
+    // Editar: atualizar existente
+    await api(`/schedules/${rawId}`, { method: 'PUT', body });
+  }
   closeEditModal(); loadSchedules(); loadDashboard();
 }
 

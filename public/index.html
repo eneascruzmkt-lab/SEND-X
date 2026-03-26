@@ -237,28 +237,7 @@ tailwind.config = {
     <div class="flex-1 overflow-y-auto p-6 px-7">
       <!-- Dashboard -->
       <div class="panel active" id="panel-dashboard">
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-5" id="dashCounters"></div>
-        <div class="grid grid-cols-2 gap-4 mt-2">
-          <div class="bg-surface border border-border-light/60 rounded-xl shadow-sm">
-            <div class="p-4 px-5 border-b border-border-light/40 flex items-center justify-between">
-              <h3 class="text-sm font-semibold text-gray-200">Ultimos enviados</h3>
-            </div>
-            <div class="p-5 max-h-72 overflow-y-auto" id="dashSent"></div>
-          </div>
-          <div class="bg-surface border border-border-light/60 rounded-xl shadow-sm">
-            <div class="p-4 px-5 border-b border-border-light/40 flex items-center justify-between">
-              <h3 class="text-sm font-semibold text-gray-200">Pendentes</h3>
-            </div>
-            <div class="p-5 max-h-72 overflow-y-auto" id="dashPending"></div>
-          </div>
-        </div>
-        <div class="bg-surface border border-border-light/60 rounded-xl shadow-sm mt-4" id="dashErrorsCard" style="display:none">
-          <div class="p-4 px-5 border-b border-border-light/40">
-            <h3 class="text-sm font-semibold text-gray-200">Erros recentes</h3>
-          </div>
-          <div class="p-5 max-h-48 overflow-y-auto" id="dashErrors"></div>
-        </div>
-
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4" id="dashColumns"></div>
       </div>
 
       <!-- Feed -->
@@ -1431,80 +1410,104 @@ async function saveEdit() {
 
 // ── Dashboard ───────────────────────────────────
 async function loadDashboard() {
-  const raw = await api('/schedules');
-  const all = currentPar ? raw.filter(s => s.par_id === currentPar.id) : raw;
-  const enviados = all.filter(s => s.status === 'enviado');
-  const pendentes = all.filter(s => s.status === 'pendente');
-  const erros = all.filter(s => s.status === 'erro');
+  const allSchedules = await api('/schedules');
   const today = todayLocalStr();
-  const agendadosHoje = pendentes.filter(s => s.scheduled_at && toLocalDateStr(s.scheduled_at) === today);
+  const container = document.getElementById('dashColumns');
 
-  document.getElementById('dashCounters').innerHTML = `
-    <div class="bg-surface border border-border-light/60 rounded-xl p-4 shadow-sm"><div class="text-3xl font-extrabold text-green-400 leading-none">${enviados.length}</div><div class="text-xs text-gray-500 mt-1">Enviados</div></div>
-    <div class="bg-surface border border-border-light/60 rounded-xl p-4 shadow-sm"><div class="text-3xl font-extrabold text-amber-400 leading-none">${pendentes.length}</div><div class="text-xs text-gray-500 mt-1">Pendentes</div></div>
-    <div class="bg-surface border border-border-light/60 rounded-xl p-4 shadow-sm"><div class="text-3xl font-extrabold text-amber-400 leading-none">${agendadosHoje.length}</div><div class="text-xs text-gray-500 mt-1">Agendados hoje</div></div>
-    <div class="bg-surface border border-border-light/60 rounded-xl p-4 shadow-sm"><div class="text-3xl font-extrabold text-red-400 leading-none">${erros.length}</div><div class="text-xs text-gray-500 mt-1">Erros</div></div>`;
-
-  const sentEl = document.getElementById('dashSent');
-  if (enviados.length === 0) {
-    sentEl.innerHTML = '<div class="text-gray-500 text-[13px]">Nenhum envio ainda.</div>';
-  } else {
-    sentEl.innerHTML = enviados.slice(-10).reverse().map(s => {
-      const dt = s.scheduled_at ? toLocalDateStr(s.scheduled_at) + ' ' + toLocalTimeStr(s.scheduled_at) : '';
-      const bot = s.sendpulse_bot_nome || '';
-      return `<div class="py-1.5 border-b border-border-light/40 text-[13px]">
-        <div class="flex justify-between items-center">
-          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
-          <span class="badge-enviado shrink-0">enviado</span>
-        </div>
-        <div class="text-[11px] text-gray-500 mt-0.5">${bot} &middot; ${dt}</div>
-      </div>`;
-    }).join('');
+  if (!pares || pares.length === 0) {
+    container.innerHTML = '<div class="text-gray-500 text-[13px]">Nenhum par configurado.</div>';
+    return;
   }
 
-  const pendEl = document.getElementById('dashPending');
-  if (pendentes.length === 0) {
-    pendEl.innerHTML = '<div class="text-gray-500 text-[13px]">Nenhum pendente.</div>';
-  } else {
-    pendEl.innerHTML = pendentes.map(s => {
-      const dt = s.scheduled_at ? toLocalDateStr(s.scheduled_at) + ' ' + toLocalTimeStr(s.scheduled_at) : '';
-      const bot = s.sendpulse_bot_nome || '';
-      const rec = s.recurrence ? `<span class="badge-rec ml-1">${s.recurrence}</span>` : '';
-      return `<div class="py-1.5 border-b border-border-light/40 text-[13px]">
-        <div class="flex justify-between items-center gap-2">
-          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
-          <div class="shrink-0">
-            <span class="badge-pendente">pendente</span>${rec}
+  container.innerHTML = pares.map(par => {
+    const parScheds = allSchedules.filter(s => s.par_id === par.id);
+    const enviados = parScheds.filter(s => s.status === 'enviado').length;
+    const pendentes = parScheds.filter(s => s.status === 'pendente');
+    const agendadosHoje = pendentes.filter(s => s.scheduled_at && toLocalDateStr(s.scheduled_at) === today).length;
+    const recorrentes = pendentes.filter(s => s.recurrence);
+
+    // Msgs recebidas
+    const msgCount = par._msgCount ?? '—';
+
+    // Bot info
+    const botNome = par.sendpulse_bot_nome || '—';
+    const botInfo = botsList ? botsList.find(b => b.id === par.sendpulse_bot_id) : null;
+    const inscritos = botInfo ? botInfo.subscribers : null;
+
+    // Recorrentes detalhes
+    const recHtml = recorrentes.length === 0
+      ? '<span class="text-gray-600">nenhum</span>'
+      : recorrentes.map(s => {
+          const t = toLocalTimeStr(s.scheduled_at);
+          return `<span class="badge-rec">${s.recurrence}</span> <span class="text-gray-400">${t}</span>`;
+        }).join('<br>');
+
+    // Pendentes lista
+    const pendHtml = pendentes.length === 0
+      ? '<div class="text-gray-600 text-[11px]">nenhum</div>'
+      : pendentes.slice(0, 5).map(s => {
+          const dt = toLocalDateStr(s.scheduled_at).slice(5) + ' ' + toLocalTimeStr(s.scheduled_at);
+          const rec = s.recurrence ? `<span class="badge-rec" style="font-size:9px;padding:1px 4px">${s.recurrence}</span>` : '';
+          return `<div class="text-[11px] text-gray-400 py-0.5">${dt} ${rec} <span class="text-gray-500">${esc((s.content_text||'[midia]').slice(0,30))}</span></div>`;
+        }).join('');
+
+    return `<div class="bg-surface border border-border-light/60 rounded-xl shadow-sm overflow-hidden">
+      <div class="p-4 px-5 border-b border-border-light/40 bg-green-500/[0.04]">
+        <h3 class="text-sm font-bold text-green-400">${esc(par.nome)}</h3>
+        <div class="text-[11px] text-gray-500 mt-1">${esc(botNome)}${inscritos != null ? ` &middot; ${inscritos} inscritos` : ''}</div>
+      </div>
+      <div class="p-4 px-5">
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-green-400">${enviados}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Enviados</div>
+          </div>
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-amber-400">${agendadosHoje}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Agendados hoje</div>
+          </div>
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-blue-400">${msgCount}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Msgs recebidas</div>
+          </div>
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-purple-400">${recorrentes.length}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Recorrentes</div>
           </div>
         </div>
-        <div class="text-[11px] text-gray-500 mt-0.5">${bot} &middot; ${dt}
-          <button onclick="sendNow(${s.id})" class="ml-2 bg-green-500 text-white border-none py-0.5 px-2 rounded text-[11px] cursor-pointer hover:bg-green-400 transition-colors">Enviar</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
+        ${recorrentes.length > 0 ? `
+        <div class="mb-3">
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Programacoes ativas</div>
+          <div class="text-[12px]">${recHtml}</div>
+        </div>` : ''}
+        ${pendentes.length > 0 ? `
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Proximos envios</div>
+          ${pendHtml}
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 
-  const errEl = document.getElementById('dashErrors');
-  const errCard = document.getElementById('dashErrorsCard');
-  if (erros.length === 0) {
-    if (errCard) errCard.style.display = 'none';
-  } else {
-    if (errCard) errCard.style.display = '';
-    errEl.innerHTML = erros.slice(-5).reverse().map(s => {
-      const dt = s.scheduled_at ? toLocalDateStr(s.scheduled_at) + ' ' + toLocalTimeStr(s.scheduled_at) : '';
-      return `<div class="py-1.5 border-b border-border-light/40 text-[13px]">
-        <div class="flex justify-between items-center gap-2">
-          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
-          <span class="badge-erro shrink-0">erro</span>
-        </div>
-        <div class="text-[11px] text-red-400 mt-0.5">${esc((s.error_msg||'').slice(0,100))}</div>
-        <div class="text-[11px] text-gray-500 mt-0.5">${dt}
-          <button onclick="sendNow(${s.id})" class="ml-2 bg-green-500 text-white border-none py-0.5 px-2 rounded text-[11px] cursor-pointer hover:bg-green-400 transition-colors">Retentar</button>
-        </div>
-      </div>`;
-    }).join('');
+  // Carregar contagem de mensagens para cada par
+  for (const par of pares) {
+    try {
+      const msgs = await api(`/messages?par_id=${par.id}`);
+      par._msgCount = msgs.length;
+    } catch { par._msgCount = 0; }
   }
-
+  // Re-render com contagens atualizadas
+  if (document.getElementById('panel-dashboard').classList.contains('active')) {
+    const updatedContainer = document.getElementById('dashColumns');
+    // Atualizar só os contadores de msgs sem re-render completo
+    pares.forEach((par, i) => {
+      const cols = updatedContainer.querySelectorAll('.bg-surface');
+      if (cols[i]) {
+        const msgEl = cols[i].querySelectorAll('.text-blue-400')[0];
+        if (msgEl) msgEl.textContent = par._msgCount ?? 0;
+      }
+    });
+  }
 }
 
 // ── Hist Calendar (Programacao) ──────────────────

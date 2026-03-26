@@ -277,7 +277,8 @@ module.exports = {
   },
   async updateScheduleStatus(id, status, errorMsg) {
     if (errorMsg) {
-      await pool.query('UPDATE schedules SET status=$2, error_msg=$3 WHERE id=$1', [id, status, errorMsg]);
+      const safeMsg = String(errorMsg).slice(0, 500);
+      await pool.query('UPDATE schedules SET status=$2, error_msg=$3 WHERE id=$1', [id, status, safeMsg]);
     } else {
       await pool.query('UPDATE schedules SET status=$2 WHERE id=$1', [id, status]);
     }

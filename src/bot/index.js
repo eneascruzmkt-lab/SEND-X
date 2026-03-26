@@ -233,7 +233,7 @@ async function pollParMessages(par, credentials) {
     const axios = require('axios');
     const res = await axios.get(
       `https://api.sendpulse.com/telegram/chats/messages?contact_id=${groupContact.id}&size=20&order=desc`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 }
     );
 
     const msgs = (res.data.data || res.data).filter(m => m.direction === 1);

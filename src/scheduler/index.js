@@ -6,6 +6,10 @@ let io = null;
 
 async function scheduleNextOccurrence(schedule) {
   const current = new Date(schedule.scheduled_at);
+  if (isNaN(current.getTime())) {
+    console.error('[scheduler] scheduled_at inválido para recorrência:', schedule.scheduled_at);
+    return;
+  }
   let next;
 
   switch (schedule.recurrence) {
@@ -39,7 +43,7 @@ async function scheduleNextOccurrence(schedule) {
     content_file_id: schedule.content_file_id,
     content_media_url: schedule.content_media_url,
     buttons: schedule.buttons,
-    scheduled_at: next.toISOString().slice(0, 19),
+    scheduled_at: next.toISOString(),
     recurrence: schedule.recurrence,
   });
 }
@@ -49,7 +53,14 @@ function start(socketIo) {
 
   // Fire pending schedules every minute
   cron.schedule('* * * * *', async () => {
-    const pendentes = await db.getSchedulesDue();
+    let pendentes;
+    try {
+      pendentes = await db.getSchedulesDue();
+    } catch (err) {
+      console.error('[scheduler] erro ao buscar pendentes:', err.message);
+      return;
+    }
+
     for (const s of pendentes) {
       const userId = s.user_id;
       if (!userId) {
@@ -57,7 +68,15 @@ function start(socketIo) {
         continue;
       }
 
-      const settings = await db.getUserSettings(userId);
+      let settings;
+      try {
+        settings = await db.getUserSettings(userId);
+      } catch (err) {
+        console.error('[scheduler] erro ao buscar settings user', userId, ':', err.message);
+        await db.updateScheduleStatus(s.id, 'erro', 'Erro ao buscar configurações');
+        continue;
+      }
+
       if (!settings.sendpulse_id || !settings.sendpulse_secret) {
         await db.updateScheduleStatus(s.id, 'erro', 'Credenciais SendPulse não configuradas');
         continue;
@@ -82,7 +101,15 @@ function start(socketIo) {
         await sendpulse.dispatch(s, par, credentials);
         await db.updateScheduleStatus(s.id, 'enviado');
         await db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado' });
-        if (s.recurrence) await scheduleNextOccurrence(s);
+
+        if (s.recurrence) {
+          try {
+            await scheduleNextOccurrence(s);
+          } catch (recErr) {
+            console.error('[scheduler] erro ao criar próxima recorrência para schedule', s.id, ':', recErr.message);
+          }
+        }
+
         if (io && s.par_id) {
           const updated = await db.getScheduleById(s.id);
           io.to(`par_${s.par_id}`).emit('schedule_update', updated);
@@ -110,8 +137,12 @@ function start(socketIo) {
 
   // Midnight cleanup
   cron.schedule('0 0 * * *', async () => {
-    await db.clearMessages();
-    console.log('[cron] messages apagadas —', new Date().toISOString());
+    try {
+      await db.clearMessages();
+      console.log('[cron] messages apagadas —', new Date().toISOString());
+    } catch (err) {
+      console.error('[cron] erro ao limpar messages:', err.message);
+    }
   });
 
   console.log('[scheduler] cron jobs iniciados');

@@ -216,6 +216,9 @@ router.post('/schedules', async (req, res) => {
     if (!req.body.scheduled_at) {
       return res.status(400).json({ error: 'scheduled_at é obrigatório' });
     }
+    if (isNaN(new Date(req.body.scheduled_at).getTime())) {
+      return res.status(400).json({ error: 'scheduled_at inválido' });
+    }
     if (par_id) {
       const par = await db.getParById(par_id);
       if (!par || par.user_id !== req.userId) return res.status(403).json({ error: 'Acesso negado' });
@@ -229,6 +232,9 @@ router.post('/schedules', async (req, res) => {
     }
     if (!req.body.sendpulse_bot_id && !par_id) {
       return res.status(400).json({ error: 'par_id ou sendpulse_bot_id é obrigatório' });
+    }
+    if (req.body.recurrence && !['diario', 'diasuteis', 'semanal'].includes(req.body.recurrence)) {
+      return res.status(400).json({ error: 'recurrence inválido. Use: diario, diasuteis ou semanal' });
     }
     if (req.body.buttons && req.body.buttons.length > 3) {
       return res.status(400).json({ error: 'Máximo 3 botões permitidos' });

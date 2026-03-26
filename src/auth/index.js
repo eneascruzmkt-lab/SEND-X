@@ -1,7 +1,12 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'sendx-secret-change-me';
+const crypto = require('crypto');
+
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.JWT_SECRET) {
+  console.warn('[auth] AVISO: JWT_SECRET não definido. Usando secret aleatório — tokens serão invalidados ao reiniciar.');
+}
 
 function hashPassword(password) {
   return bcrypt.hashSync(password, 10);

@@ -109,6 +109,17 @@ async function dispatch(schedule, par, credentials) {
     });
     console.log('[sendpulse] campaign response:', JSON.stringify(res.data).slice(0, 300));
   } catch (err) {
+    // Retry com novo token se 401 (token expirado/revogado)
+    if (err.response?.status === 401) {
+      console.warn('[sendpulse] token expirado, renovando...');
+      delete tokenCache[credentials.sendpulse_id];
+      const newToken = await getToken(credentials);
+      const retry = await axios.post(`${BASE}/telegram/campaigns/send`, body, {
+        headers: headers(newToken),
+      });
+      console.log('[sendpulse] campaign response (retry):', JSON.stringify(retry.data).slice(0, 300));
+      return;
+    }
     const errData = err.response?.data;
     console.error('[sendpulse] campaign error:', JSON.stringify(errData || err.message).slice(0, 500));
     throw new Error(errData?.message || err.message);
@@ -132,7 +143,14 @@ function resolveMediaUrl(url, webhookDomain) {
 // Constrói mensagem no formato de campanha SendPulse
 // Formato: { type: "text|photo|video", message: { ... } }
 function buildCampaignMessage(schedule, webhookDomain) {
-  const buttons = schedule.buttons ? JSON.parse(schedule.buttons) : null;
+  let buttons = null;
+  if (schedule.buttons) {
+    try {
+      buttons = typeof schedule.buttons === 'string' ? JSON.parse(schedule.buttons) : schedule.buttons;
+    } catch (e) {
+      console.error('[sendpulse] JSON inválido em buttons:', e.message);
+    }
+  }
   const validButtons = buttons?.filter(b => b.text && b.url && /^https?:\/\/.+/i.test(b.url));
   const replyMarkup = validButtons && validButtons.length > 0
     ? { inline_keyboard: [validButtons.map(b => ({ text: b.text, type: 'web_url', url: b.url }))] }

@@ -42,6 +42,22 @@ db.init().then(() => {
   server.listen(PORT, () => {
     console.log(`[server] rodando em http://localhost:${PORT}`);
   });
+
+  // Graceful shutdown
+  const shutdown = (signal) => {
+    console.log(`[server] ${signal} recebido, encerrando...`);
+    feed.stop();
+    server.close(() => {
+      db.pool.end().then(() => {
+        console.log('[server] encerrado.');
+        process.exit(0);
+      });
+    });
+    // Forçar saída após 10s se algo travar
+    setTimeout(() => process.exit(1), 10000);
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }).catch(err => {
   console.error('[db] Falha ao inicializar PostgreSQL:', err.message);
   process.exit(1);

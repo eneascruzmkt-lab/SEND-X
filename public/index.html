@@ -1355,7 +1355,18 @@ async function saveEdit() {
   if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
 
   const botSel = document.getElementById('editBot');
-  const scheduled_at = calcScheduledAt(sendType, date, time);
+  // Para edição, usar a data do form diretamente (não recalcular)
+  const [h, m] = time.split(':').map(Number);
+  let scheduled_at;
+  if (date) {
+    const [y, mo, d] = date.split('-').map(Number);
+    scheduled_at = new Date(y, mo - 1, d, h, m, 0).toISOString();
+  } else {
+    // Sem data (diario/diasuteis sem campo data): manter a data original do schedule
+    const original = schedules.find(s => s.id == id);
+    const orig = original ? new Date(original.scheduled_at) : new Date();
+    scheduled_at = new Date(orig.getFullYear(), orig.getMonth(), orig.getDate(), h, m, 0).toISOString();
+  }
 
   await api(`/schedules/${id}`, { method: 'PUT', body: {
     sendpulse_bot_id: botSel.value,
@@ -1368,7 +1379,7 @@ async function saveEdit() {
     recurrence: sendType === 'unico' ? null : sendType,
     status: 'pendente',
   }});
-  closeEditModal(); loadSchedules();
+  closeEditModal(); loadSchedules(); loadDashboard();
 }
 
 // ── Dashboard ───────────────────────────────────
@@ -1643,7 +1654,11 @@ function renderHistCalendar(allSchedules) {
 }
 
 async function deleteRecSchedule(id) {
-  if (!confirm('Excluir esta programacao recorrente? Todos os envios futuros serao cancelados.')) return;
+  const s = schedules.find(x => x.id === id);
+  const msg = s && s.recurrence
+    ? 'Excluir esta programacao recorrente?\n\nIsso cancela TODOS os envios futuros deste conteudo.\nOs envios ja realizados nao serao afetados.'
+    : 'Excluir este agendamento?';
+  if (!confirm(msg)) return;
   await api(`/schedules/${id}`, { method: 'DELETE' });
   loadSchedules();
   loadDashboard();

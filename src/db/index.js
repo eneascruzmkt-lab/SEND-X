@@ -14,6 +14,8 @@ const pool = new Pool({
 });
 
 // ── Schema ──────────────────────────────────────────────
+// IMPORTANTE: NUNCA usar DROP TABLE ou TRUNCATE aqui.
+// Sempre usar CREATE TABLE IF NOT EXISTS para preservar dados existentes.
 async function init() {
   console.log('[db] Conectando ao PostgreSQL...');
   await pool.query(`

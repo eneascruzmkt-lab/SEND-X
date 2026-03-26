@@ -99,16 +99,40 @@ function start(socketIo) {
 
       try {
         await sendpulse.dispatch(s, par, credentials);
-        await db.updateScheduleStatus(s.id, 'enviado');
-        await db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado' });
 
+        // Para recorrentes: criar próxima ocorrência ANTES de marcar como enviado
+        // Se falhar, reverte para 'pendente' para não perder a recorrência
         if (s.recurrence) {
+          let recOk = false;
           try {
             await scheduleNextOccurrence(s);
+            recOk = true;
           } catch (recErr) {
-            console.error('[scheduler] erro ao criar próxima recorrência para schedule', s.id, ':', recErr.message);
+            console.error('[scheduler] erro ao criar próxima recorrência para schedule', s.id, '(tentativa 1):', recErr.message);
+            // Retry uma vez
+            try {
+              await scheduleNextOccurrence(s);
+              recOk = true;
+            } catch (recErr2) {
+              console.error('[scheduler] erro ao criar próxima recorrência para schedule', s.id, '(tentativa 2):', recErr2.message);
+            }
+          }
+          if (!recOk) {
+            // Não conseguiu criar próxima ocorrência — manter como pendente
+            // para que o cron tente novamente no próximo ciclo
+            console.error('[scheduler] ALERTA: recorrência do schedule', s.id, 'não foi criada — mantendo como pendente');
+            await db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado', sendpulse_response: 'Enviado, mas próxima recorrência falhou — mantido pendente para retry' });
+            if (io && s.par_id) {
+              io.to(`par_${s.par_id}`).emit('dispatch_fired', {
+                par_id: s.par_id, schedule_id: s.id, status: 'enviado',
+              });
+            }
+            continue;
           }
         }
+
+        await db.updateScheduleStatus(s.id, 'enviado');
+        await db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'enviado' });
 
         if (io && s.par_id) {
           const updated = await db.getScheduleById(s.id);

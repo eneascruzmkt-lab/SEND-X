@@ -1,3 +1,37 @@
+/**
+ * ============================================================
+ *  DB — Camada de acesso ao PostgreSQL (Railway)
+ * ============================================================
+ *
+ *  Tabelas:
+ *  - users           → cadastro de usuários (email + senha bcrypt)
+ *  - user_settings   → credenciais SendPulse + Telegram por usuário
+ *  - pares           → vínculo Telegram grupo <-> SendPulse bot
+ *  - messages        → mensagens capturadas dos grupos Telegram (feed)
+ *  - schedules       → agendamentos de disparo (pendente/enviado/erro)
+ *  - logs            → histórico de disparos (auditoria)
+ *
+ *  REGRAS CRÍTICAS:
+ *  ┌─────────────────────────────────────────────────────────┐
+ *  │  1. NUNCA usar DROP TABLE ou TRUNCATE em schedules      │
+ *  │  2. NUNCA usar CREATE TABLE sem IF NOT EXISTS            │
+ *  │  3. Alterações de schema devem ser feitas via ALTER TABLE│
+ *  │  4. Dados de schedules são IRREVERSÍVEIS se perdidos     │
+ *  └─────────────────────────────────────────────────────────┘
+ *
+ *  Status de schedules:
+ *  - 'pendente' → aguardando disparo (cron verifica a cada minuto)
+ *  - 'enviado'  → disparado com sucesso via SendPulse
+ *  - 'erro'     → falha no disparo (mensagem salva em error_msg)
+ *
+ *  Recorrência de schedules:
+ *  - null       → disparo único
+ *  - 'diario'   → repete todo dia no mesmo horário
+ *  - 'diasuteis' → repete seg-sex no mesmo horário
+ *  - 'semanal'  → repete a cada 7 dias no mesmo horário
+ * ============================================================
+ */
+
 const { Pool } = require('pg');
 
 const dbUrl = process.env.DATABASE_URL;
@@ -8,6 +42,7 @@ if (!dbUrl) {
   process.exit(1);
 }
 
+// Pool de conexões PostgreSQL com SSL (Railway exige)
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: { rejectUnauthorized: false },
@@ -16,6 +51,7 @@ const pool = new Pool({
 // ── Schema ──────────────────────────────────────────────
 // IMPORTANTE: NUNCA usar DROP TABLE ou TRUNCATE aqui.
 // Sempre usar CREATE TABLE IF NOT EXISTS para preservar dados existentes.
+// Se precisar alterar uma tabela, use ALTER TABLE ADD COLUMN IF NOT EXISTS.
 async function init() {
   console.log('[db] Conectando ao PostgreSQL...');
   await pool.query(`
@@ -93,8 +129,9 @@ async function init() {
 // ── Users ─────────────────────────────────────────────
 module.exports = {
   init,
-  pool,
+  pool, // Exposto para graceful shutdown em index.js
 
+  /** Cria novo usuário e retorna sem password_hash */
   async createUser(data) {
     const res = await pool.query(
       'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email, created_at',
@@ -102,20 +139,28 @@ module.exports = {
     );
     return res.rows[0];
   },
+
+  /** Busca usuário por email (inclui password_hash para login) */
   async getUserByEmail(email) {
     const res = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
     return res.rows[0] || null;
   },
+
+  /** Busca usuário por id (sem password_hash — seguro para resposta) */
   async getUserById(id) {
     const res = await pool.query('SELECT id, name, email, created_at FROM users WHERE id=$1', [id]);
     return res.rows[0] || null;
   },
 
-  // User Settings
+  // ── User Settings ─────────────────────────────────────
+
+  /** Retorna configurações do usuário (SendPulse + Telegram) */
   async getUserSettings(userId) {
     const res = await pool.query('SELECT * FROM user_settings WHERE user_id=$1', [userId]);
     return res.rows[0] || {};
   },
+
+  /** Cria ou atualiza configurações do usuário (upsert) */
   async upsertUserSettings(userId, data) {
     const existing = await pool.query('SELECT user_id FROM user_settings WHERE user_id=$1', [userId]);
     if (existing.rows.length > 0) {
@@ -133,6 +178,7 @@ module.exports = {
     return this.getUserSettings(userId);
   },
 
+  /** Lista todos os usuários que têm telegram_token configurado (para iniciar bots) */
   async getUsersWithTelegram() {
     const res = await pool.query(`
       SELECT u.id, us.telegram_token FROM users u
@@ -142,30 +188,62 @@ module.exports = {
     return res.rows;
   },
 
-  // Pares
+  // ── Pares ─────────────────────────────────────────────
+  // Par = vínculo entre um grupo Telegram e um bot SendPulse
+  // ativo=1 → ativo, ativo=0 → desativado (soft delete)
+
+  /** Lista todos os pares ativos de um usuário */
   async getAllPares(userId) {
     const res = await pool.query('SELECT * FROM pares WHERE user_id=$1 AND ativo=1 ORDER BY created_at DESC', [userId]);
     return res.rows;
   },
+
+  /** Busca par por ID (inclui inativos — usado internamente) */
   async getParById(id) {
     const res = await pool.query('SELECT * FROM pares WHERE id=$1', [id]);
     return res.rows[0] || null;
   },
+
+  /** Busca par ativo por telegram_group_id (usado pelo bot ao receber mensagem) */
   async getParByGroupId(groupId) {
     const res = await pool.query('SELECT * FROM pares WHERE telegram_group_id=$1 AND ativo=1', [groupId]);
     return res.rows[0] || null;
   },
+
+  /** Busca todos os pares ativos com um telegram_group_id (pode haver mais de um usuário) */
   async getParsByGroupId(groupId) {
     const res = await pool.query('SELECT * FROM pares WHERE telegram_group_id=$1 AND ativo=1', [groupId]);
     return res.rows;
   },
+
+  /**
+   * Cria novo par (vínculo Telegram grupo <-> SendPulse bot).
+   * Se já existe um par desativado (ativo=0) com mesmo user_id + telegram_group_id,
+   * reativa ele com os novos dados em vez de falhar por constraint UNIQUE.
+   */
   async createPar(data) {
+    // Verifica se existe par desativado com mesmo group_id para esse usuário
+    const existing = await pool.query(
+      'SELECT * FROM pares WHERE user_id=$1 AND telegram_group_id=$2 AND ativo=0',
+      [data.user_id, data.telegram_group_id]
+    );
+    if (existing.rows.length > 0) {
+      // Reativa o par existente com os novos dados
+      const id = existing.rows[0].id;
+      await pool.query(`
+        UPDATE pares SET nome=$2, sendpulse_bot_id=$3, sendpulse_bot_nome=$4, ativo=1
+        WHERE id=$1
+      `, [id, data.nome, data.sendpulse_bot_id, data.sendpulse_bot_nome]);
+      return this.getParById(id);
+    }
     const res = await pool.query(`
       INSERT INTO pares (user_id, nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome)
       VALUES ($1, $2, $3, $4, $5) RETURNING *
     `, [data.user_id, data.nome, data.telegram_group_id, data.sendpulse_bot_id, data.sendpulse_bot_nome]);
     return res.rows[0];
   },
+
+  /** Atualiza dados do par (nome, IDs) */
   async updatePar(id, data) {
     await pool.query(`
       UPDATE pares SET nome=$2, telegram_group_id=$3, sendpulse_bot_id=$4, sendpulse_bot_nome=$5
@@ -173,11 +251,17 @@ module.exports = {
     `, [id, data.nome, data.telegram_group_id, data.sendpulse_bot_id, data.sendpulse_bot_nome]);
     return this.getParById(id);
   },
+
+  /** Desativa par (soft delete — ativo=0). Schedules existentes NÃO são afetados. */
   async deactivatePar(id) {
     await pool.query('UPDATE pares SET ativo=0 WHERE id=$1', [id]);
   },
 
-  // Messages
+  // ── Messages ──────────────────────────────────────────
+  // Mensagens capturadas dos grupos Telegram (feed ao vivo)
+  // Limpas diariamente pelo cron de meia-noite (clearMessages)
+
+  /** Insere mensagem capturada do Telegram. Campos opcionais: created_at, telegram_media_url */
   async insertMessage(msg) {
     const cols = ['par_id', 'text', 'from_user', 'message_type', 'file_id'];
     const vals = [msg.par_id, msg.text, msg.from_user, msg.message_type, msg.file_id];
@@ -190,6 +274,8 @@ module.exports = {
     );
     return res.rows[0];
   },
+
+  /** Busca últimas mensagens de um par (DESC por id, limit padrão 200) */
   async getMessages(parId, limit = 200) {
     const res = await pool.query(
       'SELECT * FROM messages WHERE par_id=$1 ORDER BY id DESC LIMIT $2',
@@ -197,11 +283,29 @@ module.exports = {
     );
     return res.rows;
   },
+
+  /**
+   * Apaga TODAS as mensagens do feed.
+   * Executado pelo cron de meia-noite (scheduler/index.js).
+   * ATENÇÃO: Só afeta a tabela messages, NUNCA schedules.
+   */
   async clearMessages() {
     await pool.query('DELETE FROM messages');
   },
 
-  // Schedules
+  // ── Schedules ─────────────────────────────────────────
+  // Agendamentos de disparo para o SendPulse
+  // O scheduler (cron) processa pendentes a cada minuto
+  //
+  // FLUXO DE VIDA:
+  // 1. Criado como 'pendente' (via frontend ou recorrência)
+  // 2. Quando scheduled_at <= NOW(), o cron dispara via SendPulse
+  // 3. Se sucesso → 'enviado'. Se erro → 'erro' + error_msg
+  // 4. Se tem recorrência → cria NOVO schedule para próxima data
+  //
+  // NUNCA deletar schedules automaticamente. Apenas via ação do usuário.
+
+  /** Busca schedules de um par, opcionalmente filtrado por status */
   async getSchedules(parId, status) {
     if (status) {
       const res = await pool.query(
@@ -213,6 +317,8 @@ module.exports = {
     const res = await pool.query('SELECT * FROM schedules WHERE par_id=$1 ORDER BY scheduled_at ASC', [parId]);
     return res.rows;
   },
+
+  /** Busca todos os schedules do usuário, opcionalmente filtrado por status */
   async getAllSchedules(status, userId) {
     if (status && userId) {
       const res = await pool.query(
@@ -232,14 +338,28 @@ module.exports = {
     const res = await pool.query('SELECT * FROM schedules ORDER BY scheduled_at ASC');
     return res.rows;
   },
+
+  /** Busca schedule por ID */
   async getScheduleById(id) {
     const res = await pool.query('SELECT * FROM schedules WHERE id=$1', [id]);
     return res.rows[0] || null;
   },
+
+  /**
+   * Busca schedules prontos para disparo (pendentes com data <= agora).
+   * Chamado pelo cron a cada minuto.
+   * Retorna de TODOS os usuários — o scheduler valida credenciais individualmente.
+   */
   async getSchedulesDue() {
     const res = await pool.query("SELECT * FROM schedules WHERE status='pendente' AND scheduled_at <= NOW()");
     return res.rows;
   },
+
+  /**
+   * Cria novo schedule (agendamento de disparo).
+   * Campos obrigatórios: scheduled_at
+   * Buttons são serializados como JSON string se passados como objeto.
+   */
   async createSchedule(data) {
     const buttons = data.buttons ? (typeof data.buttons === 'string' ? data.buttons : JSON.stringify(data.buttons)) : null;
     const res = await pool.query(`
@@ -262,6 +382,12 @@ module.exports = {
     ]);
     return res.rows[0];
   },
+
+  /**
+   * Atualiza campos de um schedule existente (parcial — só atualiza campos presentes em data).
+   * Campos permitidos: content_type, content_text, content_file_id, content_media_url,
+   *                    buttons, scheduled_at, recurrence, status, sendpulse_bot_id, sendpulse_bot_nome
+   */
   async updateSchedule(id, data) {
     const fields = [];
     const vals = [id];
@@ -277,6 +403,8 @@ module.exports = {
     await pool.query(`UPDATE schedules SET ${fields.join(', ')} WHERE id=$1`, vals);
     return this.getScheduleById(id);
   },
+
+  /** Atualiza status de um schedule. Se erro, salva mensagem truncada (max 500 chars) */
   async updateScheduleStatus(id, status, errorMsg) {
     if (errorMsg) {
       const safeMsg = String(errorMsg).slice(0, 500);
@@ -285,11 +413,20 @@ module.exports = {
       await pool.query('UPDATE schedules SET status=$2 WHERE id=$1', [id, status]);
     }
   },
+
+  /**
+   * Deleta schedule permanentemente.
+   * Chamado apenas via ação explícita do usuário (botão Excluir/Cancelar).
+   * NUNCA chamar automaticamente — dados perdidos não podem ser recuperados.
+   */
   async deleteSchedule(id) {
     await pool.query('DELETE FROM schedules WHERE id=$1', [id]);
   },
 
-  // Logs
+  // ── Logs ──────────────────────────────────────────────
+  // Registro de todos os disparos (sucesso e erro) para auditoria
+
+  /** Insere log de disparo (chamado pelo scheduler e pela rota /send) */
   async insertLog(data) {
     await pool.query(`
       INSERT INTO logs (schedule_id, par_id, status, sendpulse_response)
@@ -297,7 +434,9 @@ module.exports = {
     `, [data.schedule_id, data.par_id || null, data.status, data.sendpulse_response || null]);
   },
 
-  // Dashboard
+  // ── Dashboard ─────────────────────────────────────────
+
+  /** Retorna contadores do dashboard para um par específico */
   async getDashboard(parId) {
     const today = new Date().toISOString().slice(0, 10);
     const [agendados, enviados, pendentes, erros, msgs] = await Promise.all([
@@ -316,7 +455,7 @@ module.exports = {
     };
   },
 
-  // Raw query helper for custom queries
+  /** Query genérica — usar com cuidado, preferir métodos específicos */
   async query(text, params) {
     const res = await pool.query(text, params);
     return res.rows;

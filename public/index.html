@@ -740,7 +740,12 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 401) { logout(); throw new Error('Sessao expirada'); }
-  return res.json();
+  const data = await res.json();
+  if (!res.ok && data.error) {
+    alert(data.error);
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 // ── Init ────────────────────────────────────────

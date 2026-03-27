@@ -41,6 +41,10 @@ function extractRow(row) {
 
 router.get('/relatorio', async (req, res) => {
   try {
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY || !process.env.GOOGLE_SHEET_ID) {
+      console.error('[Relatorio] Missing env vars: GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_SHEET_ID');
+      return res.status(500).json({ error: 'Configuração do Google Sheets ausente' });
+    }
     const tab = req.query.tab === 'DEIVID' ? 'DEIVID' : 'DANI';
     const auth = getAuth();
     const sheets = google.sheets({ version: 'v4', auth });

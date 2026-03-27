@@ -3,9 +3,16 @@ const { Router } = require('express');
 const router = Router();
 
 function getAuth() {
-  const keyJson = JSON.parse(
-    Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY, 'base64').toString()
-  );
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  // Support both base64-encoded and raw JSON
+  let keyJson;
+  if (raw.trim().startsWith('{')) {
+    keyJson = JSON.parse(raw);
+  } else {
+    // Remove any spaces that Railway might inject
+    const cleaned = raw.replace(/\s/g, '');
+    keyJson = JSON.parse(Buffer.from(cleaned, 'base64').toString());
+  }
   return new google.auth.GoogleAuth({
     credentials: keyJson,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],

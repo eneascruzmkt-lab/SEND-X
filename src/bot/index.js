@@ -234,13 +234,15 @@ async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
   const https = require('https');
   const axios = require('axios');
   const FormData = require('form-data');
+  const { execSync } = require('child_process');
 
   // Obtém path do arquivo no Telegram
   const fileInfo = await ctx.telegram.getFile(fileId);
   const filePath = fileInfo.file_path;
-  const ext = path.extname(filePath) || (type === 'photo' ? '.jpg' : '.mp4');
-  const filename = crypto.randomBytes(12).toString('hex') + ext;
-  const localPath = path.join(__dirname, '..', '..', 'public', 'uploads', filename);
+  let ext = path.extname(filePath) || (type === 'photo' ? '.jpg' : '.mp4');
+  const baseName = crypto.randomBytes(12).toString('hex');
+  const originalFilename = baseName + ext;
+  const localPath = path.join(__dirname, '..', '..', 'public', 'uploads', originalFilename);
 
   // Download do Telegram Bot API
   const telegramUrl = `https://api.telegram.org/file/bot${telegramToken}/${filePath}`;
@@ -252,13 +254,37 @@ async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
     }).on('error', reject);
   });
 
+  // Convert non-mp4 videos to mp4 for SendPulse compatibility
+  let uploadPath = localPath;
+  let filename = originalFilename;
+  if (type === 'video' && ext.toLowerCase() !== '.mp4') {
+    const mp4Filename = baseName + '.mp4';
+    const mp4Path = path.join(__dirname, '..', '..', 'public', 'uploads', mp4Filename);
+    try {
+      console.log(`[feed] Converting ${ext} to .mp4...`);
+      execSync(`ffmpeg -i "${localPath}" -c:v libx264 -c:a aac -movflags +faststart -y "${mp4Path}"`, {
+        timeout: 120000,
+        stdio: 'pipe',
+      });
+      // Remove original, use mp4
+      fs.unlinkSync(localPath);
+      uploadPath = mp4Path;
+      filename = mp4Filename;
+      ext = '.mp4';
+      console.log(`[feed] Converted to mp4: ${mp4Filename}`);
+    } catch (e) {
+      console.error('[feed] ffmpeg conversion failed, using original:', e.message);
+      // Fallback: keep original file
+    }
+  }
+
   // Upload para catbox.moe (hospedagem gratuita de arquivos)
   // Necessário porque o SendPulse precisa de URL pública para mídia
   let publicUrl = telegramUrl;
   try {
     const form = new FormData();
     form.append('reqtype', 'fileupload');
-    form.append('fileToUpload', fs.createReadStream(localPath));
+    form.append('fileToUpload', fs.createReadStream(uploadPath));
     const res = await axios.post('https://catbox.moe/user/api.php', form, {
       headers: form.getHeaders(),
       timeout: 120000,

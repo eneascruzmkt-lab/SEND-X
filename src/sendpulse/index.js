@@ -298,31 +298,35 @@ async function buildCampaignMessage(schedule, webhookDomain) {
 
   console.log('[sendpulse] buildCampaignMessage:', { type, resolvedMedia: resolvedMedia?.slice?.(0, 80) });
 
+  // Detect if text contains HTML tags (from Telegram entities conversion)
+  const textContent = schedule.content_text || '';
+  const hasHtml = /<[a-z][\s\S]*>/i.test(textContent);
+
   // Photo: { type: "photo", message: { photo: url, caption?, reply_markup? } }
   if (type === 'photo' && resolvedMedia) {
     const inner = { photo: resolvedMedia };
-    if (schedule.content_text) inner.caption = schedule.content_text;
+    if (textContent) inner.caption = textContent;
+    if (hasHtml) inner.parse_mode = 'HTML';
     if (replyMarkup) inner.reply_markup = replyMarkup;
     return { type: 'photo', message: inner };
   }
 
   // Video: { type: "video", message: { video: url, caption?, reply_markup? } }
   if (type === 'video' && resolvedMedia) {
-    // Convert non-mp4 URLs to mp4 before sending to SendPulse
     let videoUrl = resolvedMedia;
     if (!resolvedMedia.toLowerCase().endsWith('.mp4') && resolvedMedia.startsWith('http')) {
       videoUrl = await convertRemoteVideoToMp4(resolvedMedia);
-      // If conversion fails, the error propagates and the schedule gets status 'erro'
-      // This prevents sending .MOV files to SendPulse
     }
     const inner = { video: videoUrl };
-    if (schedule.content_text) inner.caption = schedule.content_text;
+    if (textContent) inner.caption = textContent;
+    if (hasHtml) inner.parse_mode = 'HTML';
     if (replyMarkup) inner.reply_markup = replyMarkup;
     return { type: 'video', message: inner };
   }
 
   // Text (ou fallback quando mídia não disponível)
-  const inner = { text: schedule.content_text || '' };
+  const inner = { text: textContent };
+  if (hasHtml) inner.parse_mode = 'HTML';
   if (replyMarkup) inner.reply_markup = replyMarkup;
   return { type: 'text', message: inner };
 }

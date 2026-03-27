@@ -137,7 +137,7 @@ async function startUserBot(userId, telegramToken) {
         // Detecta tipo de conteúdo e extrai file_id se houver mídia
         const msgType = detectTelegrafType(msg);
         const fileId = extractTelegrafFileId(msg);
-        const text = msg.text || msg.caption || null;
+        const text = telegramToHtml(msg.text, msg.entities) || telegramToHtml(msg.caption, msg.caption_entities) || null;
 
         // ── Download de mídia ──
         // Tenta: Telegram Bot API → catbox.moe (URL pública permanente)
@@ -299,6 +299,56 @@ async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
   }
 
   return { localPath: `/uploads/${filename}`, publicUrl };
+}
+
+/**
+ * Converte texto + entities do Telegram em HTML.
+ * Preserva links, bold, italic, code. Se não há entities, retorna o texto puro.
+ */
+function telegramToHtml(text, entities) {
+  if (!text) return null;
+  if (!entities || entities.length === 0) return text;
+
+  // Sort entities by offset descending so we can insert tags from end to start
+  const sorted = [...entities].sort((a, b) => b.offset - a.offset);
+  // Convert string to array of chars (handles unicode correctly)
+  const chars = [...text];
+
+  for (const e of sorted) {
+    const start = e.offset;
+    const end = e.offset + e.length;
+    const inner = chars.slice(start, end).join('');
+
+    let replacement;
+    switch (e.type) {
+      case 'text_link':
+        replacement = `<a href="${e.url}">${inner}</a>`;
+        break;
+      case 'bold':
+        replacement = `<b>${inner}</b>`;
+        break;
+      case 'italic':
+        replacement = `<i>${inner}</i>`;
+        break;
+      case 'underline':
+        replacement = `<u>${inner}</u>`;
+        break;
+      case 'strikethrough':
+        replacement = `<s>${inner}</s>`;
+        break;
+      case 'code':
+        replacement = `<code>${inner}</code>`;
+        break;
+      case 'url':
+        replacement = `<a href="${inner}">${inner}</a>`;
+        break;
+      default:
+        continue; // Skip unsupported entity types
+    }
+    chars.splice(start, e.length, replacement);
+  }
+
+  return chars.join('');
 }
 
 /** Detecta tipo de conteúdo de uma mensagem Telegraf */

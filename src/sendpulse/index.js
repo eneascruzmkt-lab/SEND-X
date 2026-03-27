@@ -311,11 +311,9 @@ async function buildCampaignMessage(schedule, webhookDomain) {
     // Convert non-mp4 URLs to mp4 before sending to SendPulse
     let videoUrl = resolvedMedia;
     if (!resolvedMedia.toLowerCase().endsWith('.mp4') && resolvedMedia.startsWith('http')) {
-      try {
-        videoUrl = await convertRemoteVideoToMp4(resolvedMedia);
-      } catch (e) {
-        console.error('[sendpulse] video conversion failed, using original:', e.message);
-      }
+      videoUrl = await convertRemoteVideoToMp4(resolvedMedia);
+      // If conversion fails, the error propagates and the schedule gets status 'erro'
+      // This prevents sending .MOV files to SendPulse
     }
     const inner = { video: videoUrl };
     if (schedule.content_text) inner.caption = schedule.content_text;

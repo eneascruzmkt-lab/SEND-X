@@ -302,10 +302,21 @@ async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
 }
 
 /** Detecta tipo de conteúdo de uma mensagem Telegraf */
+const VIDEO_EXTENSIONS = ['.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp'];
+const VIDEO_MIMES = ['video/'];
+
 function detectTelegrafType(message) {
   if (message.photo && message.photo.length > 0) return 'photo';
   if (message.video) return 'video';
-  if (message.document) return 'document';
+  if (message.document) {
+    // Check if document is actually a video file (e.g. .mov sent as document)
+    const doc = message.document;
+    const mime = (doc.mime_type || '').toLowerCase();
+    const name = (doc.file_name || '').toLowerCase();
+    const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
+    if (mime.startsWith('video/') || VIDEO_EXTENSIONS.includes(ext)) return 'video';
+    return 'document';
+  }
   if (message.animation) return 'photo'; // GIFs tratados como foto
   return 'text';
 }

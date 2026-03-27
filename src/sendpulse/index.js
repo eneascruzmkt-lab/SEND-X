@@ -153,7 +153,7 @@ async function dispatch(schedule, par, credentials) {
   if (!botId) throw new Error('Bot ID não encontrado');
 
   // Monta mensagem no formato de campanha SendPulse
-  const message = buildCampaignMessage(schedule, credentials.webhook_domain);
+  const message = await buildCampaignMessage(schedule, credentials.webhook_domain);
   const type = schedule.content_type || 'text';
   console.log('[dispatch] type:', type, 'media_url:', schedule.content_media_url?.slice?.(0, 60), 'file_id:', schedule.content_file_id?.slice?.(0, 40));
 
@@ -211,6 +211,62 @@ function resolveMediaUrl(url, webhookDomain) {
 }
 
 /**
+ * Downloads a remote video, converts to mp4 via ffmpeg, re-uploads to catbox.moe.
+ * Returns the new mp4 URL.
+ */
+async function convertRemoteVideoToMp4(url) {
+  const fs = require('fs');
+  const path = require('path');
+  const crypto = require('crypto');
+  const axios = require('axios');
+  const { execSync } = require('child_process');
+  const FormData = require('form-data');
+
+  const uploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads');
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+  const baseName = crypto.randomBytes(12).toString('hex');
+  const origExt = path.extname(new URL(url).pathname) || '.mov';
+  const origPath = path.join(uploadsDir, baseName + origExt);
+  const mp4Path = path.join(uploadsDir, baseName + '.mp4');
+
+  // Download
+  console.log(`[sendpulse] Downloading video for conversion: ${url.slice(0, 80)}`);
+  const resp = await axios.get(url, { responseType: 'stream', timeout: 120000 });
+  await new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(origPath);
+    resp.data.pipe(file);
+    file.on('finish', () => { file.close(); resolve(); });
+    file.on('error', reject);
+  });
+
+  // Convert
+  console.log(`[sendpulse] Converting ${origExt} to .mp4...`);
+  execSync(`ffmpeg -i "${origPath}" -c:v libx264 -c:a aac -movflags +faststart -y "${mp4Path}"`, {
+    timeout: 120000,
+    stdio: 'pipe',
+  });
+  fs.unlinkSync(origPath);
+
+  // Upload to catbox
+  const form = new FormData();
+  form.append('reqtype', 'fileupload');
+  form.append('fileToUpload', fs.createReadStream(mp4Path));
+  const res = await axios.post('https://catbox.moe/user/api.php', form, {
+    headers: form.getHeaders(),
+    timeout: 120000,
+    maxContentLength: 210 * 1024 * 1024,
+  });
+  fs.unlinkSync(mp4Path);
+
+  if (res.data && res.data.startsWith('https://')) {
+    console.log(`[sendpulse] Converted video uploaded: ${res.data.trim()}`);
+    return res.data.trim();
+  }
+  throw new Error('Catbox upload failed');
+}
+
+/**
  * Constrói mensagem no formato de campanha SendPulse.
  *
  * Formato final: { type: "text|photo|video", message: { ... } }
@@ -220,7 +276,7 @@ function resolveMediaUrl(url, webhookDomain) {
  * - Máximo 3 botões (validado na rota, mas tolerante aqui)
  * - Formato SendPulse: inline_keyboard com type: 'web_url'
  */
-function buildCampaignMessage(schedule, webhookDomain) {
+async function buildCampaignMessage(schedule, webhookDomain) {
   // Parse buttons (pode ser JSON string ou array)
   let buttons = null;
   if (schedule.buttons) {
@@ -252,7 +308,16 @@ function buildCampaignMessage(schedule, webhookDomain) {
 
   // Video: { type: "video", message: { video: url, caption?, reply_markup? } }
   if (type === 'video' && resolvedMedia) {
-    const inner = { video: resolvedMedia };
+    // Convert non-mp4 URLs to mp4 before sending to SendPulse
+    let videoUrl = resolvedMedia;
+    if (!resolvedMedia.toLowerCase().endsWith('.mp4') && resolvedMedia.startsWith('http')) {
+      try {
+        videoUrl = await convertRemoteVideoToMp4(resolvedMedia);
+      } catch (e) {
+        console.error('[sendpulse] video conversion failed, using original:', e.message);
+      }
+    }
+    const inner = { video: videoUrl };
     if (schedule.content_text) inner.caption = schedule.content_text;
     if (replyMarkup) inner.reply_markup = replyMarkup;
     return { type: 'video', message: inner };

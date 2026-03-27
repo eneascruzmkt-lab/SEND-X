@@ -203,6 +203,9 @@ tailwind.config = {
       <button class="nav-item active" data-tab="dashboard" onclick="showPanel('dashboard')">
         <span class="w-5 h-5 flex items-center justify-center text-base">&#9632;</span> Dashboard
       </button>
+      <button class="nav-item" data-tab="relatorio" onclick="showPanel('relatorio')">
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#128202;</span> Relatorio
+      </button>
       <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
         <span class="w-5 h-5 flex items-center justify-center text-base">&#9673;</span> Feed ao vivo
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">LIVE</span>
@@ -238,6 +241,17 @@ tailwind.config = {
       <!-- Dashboard -->
       <div class="panel active" id="panel-dashboard">
         <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4" id="dashColumns"></div>
+      </div>
+
+      <!-- Relatório -->
+      <div class="panel" id="panel-relatorio">
+        <div class="flex gap-2 mb-6">
+          <button class="filter-btn active" id="tabDani" onclick="switchRelatorioTab('DANI')">DANI</button>
+          <button class="filter-btn" id="tabDeivid" onclick="switchRelatorioTab('DEIVID')">DEIVID</button>
+        </div>
+        <div id="relatorioContent">
+          <div class="empty-state">Carregando...</div>
+        </div>
       </div>
 
       <!-- Feed -->
@@ -644,7 +658,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -2052,6 +2066,65 @@ async function deletePar(id) {
   renderParSelect(); renderPares();
 }
 
+// ── Relatório ──────────────────────────────────
+let relatorioTab = 'DANI';
+
+function switchRelatorioTab(tab) {
+  relatorioTab = tab;
+  document.getElementById('tabDani').classList.toggle('active', tab === 'DANI');
+  document.getElementById('tabDeivid').classList.toggle('active', tab === 'DEIVID');
+  loadRelatorio();
+}
+
+async function loadRelatorio() {
+  const container = document.getElementById('relatorioContent');
+  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const data = await api(`/relatorio?tab=${relatorioTab}`);
+    container.innerHTML = renderRelatorio(data);
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar relatório</div>';
+  }
+}
+
+function fmtMoney(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function fmtInt(v) { return Math.round(v).toLocaleString('pt-BR'); }
+
+function renderRelatorioCard(label, value, isMoney, isNetPL) {
+  const formatted = isMoney ? fmtMoney(value) : fmtInt(value);
+  let colorClass = 'text-gray-100';
+  if (isNetPL && value > 0) colorClass = 'text-green-400';
+  if (isNetPL && value < 0) colorClass = 'text-red-400';
+  return `<div class="bg-surface border border-border-light/60 rounded-xl p-5 flex flex-col gap-1">
+    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">${label}</span>
+    <span class="text-xl font-bold ${colorClass}">${formatted}</span>
+  </div>`;
+}
+
+function renderRelatorioSection(title, subtitle, data) {
+  return `<div class="mb-8">
+    <div class="flex items-baseline gap-3 mb-4">
+      <h3 class="text-base font-bold text-gray-200">${title}</h3>
+      <span class="text-xs text-gray-500">${subtitle}</span>
+    </div>
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+      ${renderRelatorioCard('Gasto', data.gasto, true, false)}
+      ${renderRelatorioCard('FTDs', data.ftds, false, false)}
+      ${renderRelatorioCard('FTD Amount', data.ftdAmount, true, false)}
+      ${renderRelatorioCard('Deposits Amount', data.depositsAmount, true, false)}
+      ${renderRelatorioCard('Inscritos Telegram', data.telegramJoins, false, false)}
+      ${renderRelatorioCard('Net P&L', data.netPL, true, true)}
+    </div>
+  </div>`;
+}
+
+function renderRelatorio(data) {
+  const diaSubtitle = data.dataRef || '—';
+  const mesSubtitle = data.mesRef || '—';
+  return renderRelatorioSection('Métricas do Dia', diaSubtitle, data.dia)
+       + renderRelatorioSection('Métricas do Mês', mesSubtitle, data.mes);
+}
+
 // ── Panels ──────────────────────────────────────
 function showPanel(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -2066,6 +2139,7 @@ function showPanel(name) {
   if (name === 'config') { renderPares(); loadSettings(); }
   if (name === 'schedules') loadSchedules();
   if (name === 'composer') updatePreview();
+  if (name === 'relatorio') loadRelatorio();
 }
 
 // ── Socket ──────────────────────────────────────

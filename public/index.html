@@ -546,7 +546,7 @@ tailwind.config = {
 
 <!-- Schedule modal -->
 <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden" id="schedModal">
-  <div class="bg-surface border border-border/60 rounded-2xl p-6 w-[90%] max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl shadow-black/50">
+  <div class="bg-surface border border-border/60 rounded-2xl p-4 sm:p-6 w-[95%] sm:w-[90%] max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
     <h3 class="text-base font-bold mb-4">Enviar mensagens selecionadas</h3>
     <div id="schedModalSummary" class="text-[13px] text-gray-500 mb-3.5"></div>
 
@@ -561,12 +561,19 @@ tailwind.config = {
       </label>
     </div>
 
-    <!-- Edição de texto e botões (só aparece com 1 mensagem selecionada) -->
+    <!-- Edição de texto, mídia preview e botões (só aparece com 1 mensagem selecionada) -->
     <div id="modalEditFields" style="display:none">
+      <!-- Preview de mídia -->
+      <div id="modalMediaPreview" class="mb-3.5" style="display:none">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Mídia</label>
+        <div id="modalMediaContainer" class="rounded-lg overflow-hidden border border-border/60 bg-[#0c0f0c]"></div>
+      </div>
+      <!-- Texto editável -->
       <div class="mb-3.5">
         <label class="block text-xs font-semibold text-gray-400 mb-1.5">Texto da mensagem</label>
-        <textarea id="modalText" rows="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 resize-y" placeholder="Texto da mensagem..."></textarea>
+        <textarea id="modalText" rows="4" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 resize-y" placeholder="Texto da mensagem..."></textarea>
       </div>
+      <!-- Botões -->
       <div class="mb-3.5">
         <label class="block text-xs font-semibold text-gray-400 mb-1.5">Botões (máx 3)</label>
         <div id="modalButtons" class="flex flex-col gap-2"></div>
@@ -998,16 +1005,36 @@ function openScheduleModal() {
   modalModeChanged('agora');
   document.querySelector('input[name="modalMode"][value="agora"]').checked = true;
 
-  // Se 1 mensagem selecionada, mostrar campos de edição
+  // Se 1 mensagem selecionada, mostrar campos de edição + preview de mídia
   const editFields = document.getElementById('modalEditFields');
+  const mediaPreview = document.getElementById('modalMediaPreview');
+  const mediaContainer = document.getElementById('modalMediaContainer');
   if (selectedMsgs.size === 1) {
     const msgId = [...selectedMsgs][0];
     const cb = document.querySelector(`#msgList input[data-id="${msgId}"]`);
     document.getElementById('modalText').value = cb?.dataset.text || '';
     document.getElementById('modalButtons').innerHTML = '';
+
+    // Preview de mídia
+    const mediaUrl = cb?.dataset.mediaurl || '';
+    const msgType = cb?.dataset.type || 'text';
+    if (mediaUrl && mediaUrl.startsWith('http') && (msgType === 'photo' || msgType === 'video')) {
+      if (msgType === 'photo') {
+        mediaContainer.innerHTML = `<img src="${mediaUrl}" class="w-full max-h-48 object-contain rounded-lg">`;
+      } else {
+        mediaContainer.innerHTML = `<video src="${mediaUrl}" controls class="w-full max-h-48 rounded-lg"></video>`;
+      }
+      mediaPreview.style.display = 'block';
+    } else {
+      mediaContainer.innerHTML = '';
+      mediaPreview.style.display = 'none';
+    }
+
     editFields.style.display = 'block';
   } else {
     editFields.style.display = 'none';
+    mediaPreview.style.display = 'none';
+    mediaContainer.innerHTML = '';
   }
 
   document.getElementById('schedModal').classList.remove('hidden');

@@ -304,51 +304,69 @@ async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
 /**
  * Converte texto + entities do Telegram em HTML.
  * Preserva links, bold, italic, code. Se não há entities, retorna o texto puro.
+ *
+ * IMPORTANTE: Telegram entity offsets/lengths são em UTF-16 code units (igual a JS string.length).
+ * Emojis contam como 2 unidades. Usamos string.substring() que opera em UTF-16.
  */
 function telegramToHtml(text, entities) {
   if (!text) return null;
   if (!entities || entities.length === 0) return text;
 
-  // Sort entities by offset descending so we can insert tags from end to start
-  const sorted = [...entities].sort((a, b) => b.offset - a.offset);
-  // Convert string to array of chars (handles unicode correctly)
-  const chars = [...text];
+  // Escape HTML chars in the original text first
+  function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  // Sort entities by offset ascending
+  const sorted = [...entities].sort((a, b) => a.offset - b.offset || a.length - b.length);
+
+  let result = '';
+  let lastIdx = 0;
 
   for (const e of sorted) {
     const start = e.offset;
     const end = e.offset + e.length;
-    const inner = chars.slice(start, end).join('');
 
-    let replacement;
+    // Add text before this entity
+    if (start > lastIdx) {
+      result += escHtml(text.substring(lastIdx, start));
+    }
+
+    const inner = escHtml(text.substring(start, end));
+
     switch (e.type) {
       case 'text_link':
-        replacement = `<a href="${e.url}">${inner}</a>`;
+        result += `<a href="${e.url}">${inner}</a>`;
         break;
       case 'bold':
-        replacement = `<b>${inner}</b>`;
+        result += `<b>${inner}</b>`;
         break;
       case 'italic':
-        replacement = `<i>${inner}</i>`;
+        result += `<i>${inner}</i>`;
         break;
       case 'underline':
-        replacement = `<u>${inner}</u>`;
+        result += `<u>${inner}</u>`;
         break;
       case 'strikethrough':
-        replacement = `<s>${inner}</s>`;
+        result += `<s>${inner}</s>`;
         break;
       case 'code':
-        replacement = `<code>${inner}</code>`;
+        result += `<code>${inner}</code>`;
         break;
       case 'url':
-        replacement = `<a href="${inner}">${inner}</a>`;
+        result += `<a href="${inner}">${inner}</a>`;
         break;
       default:
-        continue; // Skip unsupported entity types
+        result += inner;
+        break;
     }
-    chars.splice(start, e.length, replacement);
+    lastIdx = end;
   }
 
-  return chars.join('');
+  // Add remaining text after last entity
+  if (lastIdx < text.length) {
+    result += escHtml(text.substring(lastIdx));
+  }
+
+  return result;
 }
 
 /** Detecta tipo de conteúdo de uma mensagem Telegraf */

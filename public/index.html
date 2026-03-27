@@ -561,6 +561,19 @@ tailwind.config = {
       </label>
     </div>
 
+    <!-- Edição de texto e botões (só aparece com 1 mensagem selecionada) -->
+    <div id="modalEditFields" style="display:none">
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Texto da mensagem</label>
+        <textarea id="modalText" rows="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 resize-y" placeholder="Texto da mensagem..."></textarea>
+      </div>
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Botões (máx 3)</label>
+        <div id="modalButtons" class="flex flex-col gap-2"></div>
+        <button type="button" onclick="addModalButton()" class="mt-2 text-[11px] text-green-400 hover:text-green-300 font-semibold transition-colors">+ Adicionar botão</button>
+      </div>
+    </div>
+
     <div id="modalSchedFields" style="display:none">
       <div class="mb-3.5">
         <label class="block text-xs font-semibold text-gray-400 mb-1.5">Tipo de envio</label>
@@ -984,7 +997,33 @@ function openScheduleModal() {
   document.getElementById('modalTime').value = now.toTimeString().slice(0, 5);
   modalModeChanged('agora');
   document.querySelector('input[name="modalMode"][value="agora"]').checked = true;
+
+  // Se 1 mensagem selecionada, mostrar campos de edição
+  const editFields = document.getElementById('modalEditFields');
+  if (selectedMsgs.size === 1) {
+    const msgId = [...selectedMsgs][0];
+    const cb = document.querySelector(`#msgList input[data-id="${msgId}"]`);
+    document.getElementById('modalText').value = cb?.dataset.text || '';
+    document.getElementById('modalButtons').innerHTML = '';
+    editFields.style.display = 'block';
+  } else {
+    editFields.style.display = 'none';
+  }
+
   document.getElementById('schedModal').classList.remove('hidden');
+}
+
+function addModalButton() {
+  const container = document.getElementById('modalButtons');
+  if (container.children.length >= 3) return;
+  const idx = container.children.length;
+  container.insertAdjacentHTML('beforeend', `
+    <div class="btn-row">
+      <input type="text" placeholder="Texto do botão" class="modal-btn-label">
+      <input type="text" placeholder="https://..." class="modal-btn-url">
+      <button type="button" class="btn-row-remove" onclick="this.parentElement.remove()">✕</button>
+    </div>
+  `);
 }
 function closeScheduleModal() { document.getElementById('schedModal').classList.add('hidden'); }
 
@@ -1023,6 +1062,23 @@ async function confirmScheduleSelected() {
   const btn = document.getElementById('modalConfirmBtn');
   btn.disabled = true; btn.textContent = 'Enviando...';
 
+  // Collect edited text and buttons (only when 1 message selected)
+  let editedText = null;
+  let editedButtons = null;
+  if (selectedMsgs.size === 1 && document.getElementById('modalEditFields').style.display !== 'none') {
+    editedText = document.getElementById('modalText').value || null;
+    const btnRows = document.querySelectorAll('#modalButtons .btn-row');
+    if (btnRows.length > 0) {
+      const btns = [];
+      btnRows.forEach(row => {
+        const label = row.querySelector('.modal-btn-label')?.value?.trim();
+        const url = row.querySelector('.modal-btn-url')?.value?.trim();
+        if (label && url) btns.push({ text: label, url });
+      });
+      if (btns.length > 0) editedButtons = btns;
+    }
+  }
+
   try {
     for (const cb of checkboxes) {
       const mediaUrl = cb.dataset.mediaurl || null;
@@ -1031,9 +1087,10 @@ async function confirmScheduleSelected() {
       const sched = await api('/schedules', { method: 'POST', body: {
         par_id: currentPar.id, origem: 'grupo',
         content_type: hasMedia ? (cb.dataset.type || 'text') : 'text',
-        content_text: cb.dataset.text || null,
+        content_text: editedText !== null ? editedText : (cb.dataset.text || null),
         content_media_url: (mediaUrl && mediaUrl.startsWith('http')) ? mediaUrl : null,
         content_file_id: (telegramFileId && !telegramFileId.startsWith('/')) ? telegramFileId : null,
+        buttons: editedButtons,
         scheduled_at, recurrence,
       }});
 

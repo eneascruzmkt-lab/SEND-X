@@ -137,7 +137,7 @@ async function startUserBot(userId, telegramToken) {
         // Detecta tipo de conteúdo e extrai file_id se houver mídia
         const msgType = detectTelegrafType(msg);
         const fileId = extractTelegrafFileId(msg);
-        const text = telegramToHtml(msg.text, msg.entities) || telegramToHtml(msg.caption, msg.caption_entities) || null;
+        const text = msg.text || msg.caption || null;
 
         // ── Download de mídia ──
         // Tenta: Telegram Bot API → catbox.moe (URL pública permanente)

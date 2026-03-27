@@ -298,15 +298,10 @@ async function buildCampaignMessage(schedule, webhookDomain) {
 
   console.log('[sendpulse] buildCampaignMessage:', { type, resolvedMedia: resolvedMedia?.slice?.(0, 80) });
 
-  // Detect if text contains HTML tags (from Telegram entities conversion)
-  const textContent = schedule.content_text || '';
-  const hasHtml = /<[a-z][\s\S]*>/i.test(textContent);
-
   // Photo: { type: "photo", message: { photo: url, caption?, reply_markup? } }
   if (type === 'photo' && resolvedMedia) {
     const inner = { photo: resolvedMedia };
-    if (textContent) inner.caption = textContent;
-    if (hasHtml) inner.parse_mode = 'HTML';
+    if (schedule.content_text) inner.caption = schedule.content_text;
     if (replyMarkup) inner.reply_markup = replyMarkup;
     return { type: 'photo', message: inner };
   }
@@ -318,15 +313,13 @@ async function buildCampaignMessage(schedule, webhookDomain) {
       videoUrl = await convertRemoteVideoToMp4(resolvedMedia);
     }
     const inner = { video: videoUrl };
-    if (textContent) inner.caption = textContent;
-    if (hasHtml) inner.parse_mode = 'HTML';
+    if (schedule.content_text) inner.caption = schedule.content_text;
     if (replyMarkup) inner.reply_markup = replyMarkup;
     return { type: 'video', message: inner };
   }
 
   // Text (ou fallback quando mídia não disponível)
-  const inner = { text: textContent };
-  if (hasHtml) inner.parse_mode = 'HTML';
+  const inner = { text: schedule.content_text || '' };
   if (replyMarkup) inner.reply_markup = replyMarkup;
   return { type: 'text', message: inner };
 }

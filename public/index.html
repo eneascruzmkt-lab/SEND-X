@@ -192,8 +192,13 @@ tailwind.config = {
 
 <!-- App -->
 <div class="hidden h-screen" id="appContainer">
+  <!-- Mobile topbar with hamburger -->
+  <div class="md:hidden bg-surface border-b border-border/40 py-3 px-4 flex items-center justify-between">
+    <h1 class="text-lg font-extrabold text-green-500">SEND X</h1>
+    <button onclick="document.getElementById('sidebar').classList.toggle('hidden')" class="text-gray-400 text-2xl">&#9776;</button>
+  </div>
   <!-- Sidebar -->
-  <aside class="w-64 bg-surface border-r border-border/40 flex flex-col flex-shrink-0">
+  <aside id="sidebar" class="hidden md:flex w-full md:w-64 bg-surface border-r border-border/40 flex-col flex-shrink-0 absolute md:relative z-40 h-full md:h-auto">
     <div class="p-5 border-b border-border-light/40">
       <h1 class="text-xl font-extrabold text-green-500 tracking-tight">SEND X</h1>
       <p class="text-[11px] text-gray-500 mt-0.5">Agendamento SendPulse</p>
@@ -232,22 +237,22 @@ tailwind.config = {
 
   <!-- Main -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    <div class="bg-surface border-b border-border/40 py-4 px-7 flex items-center justify-between">
-      <h2 class="text-lg font-bold text-gray-100" id="topbarTitle">Dashboard</h2>
+    <div class="bg-surface border-b border-border/40 py-3 sm:py-4 px-4 sm:px-7 flex items-center justify-between">
+      <h2 class="text-base sm:text-lg font-bold text-gray-100" id="topbarTitle">Dashboard</h2>
       <div class="flex items-center gap-2.5" id="topbarRight"></div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-6 px-7">
+    <div class="flex-1 overflow-y-auto p-3 sm:p-6 px-3 sm:px-7">
       <!-- Dashboard -->
       <div class="panel active" id="panel-dashboard">
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4" id="dashColumns"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3 sm:gap-4" id="dashColumns"></div>
       </div>
 
       <!-- Relatório -->
       <div class="panel" id="panel-relatorio">
         <!-- Header bar -->
         <div class="bg-surface border border-border-light/60 rounded-xl p-4 mb-6">
-          <div class="flex flex-wrap items-center gap-4">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
             <!-- Tabs DANI / DEIVID -->
             <div class="flex bg-[#0c0f0c] rounded-lg p-0.5">
               <button class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400" id="tabDani" onclick="switchRelatorioTab('DANI')">DANI</button>
@@ -264,7 +269,7 @@ tailwind.config = {
             </div>
           </div>
           <!-- Custom date range -->
-          <div id="relatorioCustomDates" class="flex gap-3 mt-4 pt-3 border-t border-border/30 items-center" style="display:none">
+          <div id="relatorioCustomDates" class="flex flex-wrap gap-2 sm:gap-3 mt-4 pt-3 border-t border-border/30 items-center" style="display:none">
             <label class="text-[11px] font-semibold text-gray-500 uppercase">De</label>
             <input type="date" id="relDe" class="bg-[#0c0f0c] border border-border/60 py-1.5 px-3 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
             <label class="text-[11px] font-semibold text-gray-500 uppercase">Até</label>
@@ -364,7 +369,7 @@ tailwind.config = {
             <button onclick="histCalNav(1)" class="bg-surface border border-border/60 text-gray-400 w-8 h-8 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-sm">&#8250;</button>
             <button onclick="histCalNav(0)" class="bg-surface border border-border/60 text-gray-400 h-8 px-3 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-[11px] font-semibold">Hoje</button>
           </div>
-          <div class="grid grid-cols-7 gap-1.5" id="histWeekGrid"></div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5" id="histWeekGrid"></div>
           <div class="flex gap-4 items-center text-[11px] text-gray-500 mt-3.5 pt-3.5 border-t border-border-light/40">
             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-green-500"></div> Diario</div>
             <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-blue-500"></div> Dias uteis</div>
@@ -375,7 +380,7 @@ tailwind.config = {
 
       <!-- Composer -->
       <div class="panel" id="panel-composer">
-        <div class="grid grid-cols-[1fr_340px] gap-6 items-start max-[900px]:grid-cols-1">
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 sm:gap-6 items-start">
           <div class="flex flex-col gap-4">
             <div class="bg-surface border border-border-light/60 rounded-xl overflow-hidden shadow-sm">
 
@@ -521,7 +526,7 @@ tailwind.config = {
         </div>
 
         <h3 class="text-base font-bold mb-4">Pares configurados</h3>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 mb-6" id="paresList"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 mb-6" id="paresList"></div>
 
         <h3 class="text-base font-bold mb-4">Criar novo par</h3>
         <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5">
@@ -606,7 +611,7 @@ tailwind.config = {
 
 <!-- Edit modal -->
 <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden" id="editModal">
-  <div class="bg-surface border border-border/60 rounded-2xl p-6 w-[90%] max-w-xl max-h-[85vh] overflow-y-auto shadow-2xl shadow-black/50">
+  <div class="bg-surface border border-border/60 rounded-2xl p-4 sm:p-6 w-[95%] sm:w-[90%] max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
     <h3 class="text-base font-bold mb-4">Editar campanha</h3>
     <input type="hidden" id="editId">
 
@@ -764,7 +769,7 @@ function logout() {
   currentUser = null;
   localStorage.removeItem('sendx_token');
   document.getElementById('authPage').style.display = '';
-  document.getElementById('appContainer').classList.remove('flex');
+  document.getElementById('appContainer').classList.remove('flex', 'flex-col', 'md:flex-row');
   document.getElementById('appContainer').classList.add('hidden');
 }
 
@@ -783,7 +788,7 @@ async function checkAuth() {
 function enterApp() {
   document.getElementById('authPage').style.display = 'none';
   document.getElementById('appContainer').classList.remove('hidden');
-  document.getElementById('appContainer').classList.add('flex');
+  document.getElementById('appContainer').classList.add('flex', 'flex-col', 'md:flex-row');
   document.getElementById('userName').textContent = currentUser.name;
   init();
 }
@@ -2256,6 +2261,8 @@ function renderRelatorio(data) {
 
 // ── Panels ──────────────────────────────────────
 function showPanel(name) {
+  // Close sidebar on mobile when navigating
+  if (window.innerWidth < 768) document.getElementById('sidebar').classList.add('hidden');
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const panel = document.getElementById(`panel-${name}`);

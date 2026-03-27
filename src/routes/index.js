@@ -414,4 +414,7 @@ router.get('/sendpulse/bots', async (req, res) => {
   }
 });
 
+const relatorioRoutes = require('./relatorio');
+router.use(relatorioRoutes);
+
 module.exports = router;

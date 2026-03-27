@@ -245,9 +245,26 @@ tailwind.config = {
 
       <!-- Relatório -->
       <div class="panel" id="panel-relatorio">
-        <div class="flex gap-2 mb-6">
-          <button class="filter-btn active" id="tabDani" onclick="switchRelatorioTab('DANI')">DANI</button>
-          <button class="filter-btn" id="tabDeivid" onclick="switchRelatorioTab('DEIVID')">DEIVID</button>
+        <div class="flex flex-wrap items-center gap-3 mb-6">
+          <div class="flex gap-2">
+            <button class="filter-btn active" id="tabDani" onclick="switchRelatorioTab('DANI')">DANI</button>
+            <button class="filter-btn" id="tabDeivid" onclick="switchRelatorioTab('DEIVID')">DEIVID</button>
+          </div>
+          <div class="w-px h-6 bg-border/60"></div>
+          <div class="flex gap-2">
+            <button class="filter-btn active" data-periodo="ontem" onclick="switchRelatorioPeriodo('ontem')">Ontem</button>
+            <button class="filter-btn" data-periodo="7d" onclick="switchRelatorioPeriodo('7d')">7 dias</button>
+            <button class="filter-btn" data-periodo="1m" onclick="switchRelatorioPeriodo('1m')">Mês</button>
+            <button class="filter-btn" data-periodo="3m" onclick="switchRelatorioPeriodo('3m')">3 meses</button>
+            <button class="filter-btn" data-periodo="custom" onclick="switchRelatorioPeriodo('custom')">Personalizado</button>
+          </div>
+        </div>
+        <div id="relatorioCustomDates" class="flex gap-3 mb-4 items-center" style="display:none">
+          <label class="text-xs text-gray-500">De:</label>
+          <input type="date" id="relDe" class="bg-[#0c0f0c] border border-border/60 py-1.5 px-3 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500/50">
+          <label class="text-xs text-gray-500">Até:</label>
+          <input type="date" id="relAte" class="bg-[#0c0f0c] border border-border/60 py-1.5 px-3 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500/50">
+          <button onclick="loadRelatorio()" class="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-green-500/20 transition-all">Aplicar</button>
         </div>
         <div id="relatorioContent">
           <div class="empty-state">Carregando...</div>
@@ -2068,6 +2085,7 @@ async function deletePar(id) {
 
 // ── Relatório ──────────────────────────────────
 let relatorioTab = 'DANI';
+let relatorioPeriodo = 'ontem';
 
 function switchRelatorioTab(tab) {
   relatorioTab = tab;
@@ -2076,11 +2094,27 @@ function switchRelatorioTab(tab) {
   loadRelatorio();
 }
 
+function switchRelatorioPeriodo(periodo) {
+  relatorioPeriodo = periodo;
+  document.querySelectorAll('[data-periodo]').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodo));
+  document.getElementById('relatorioCustomDates').style.display = periodo === 'custom' ? 'flex' : 'none';
+  if (periodo !== 'custom') loadRelatorio();
+}
+
 async function loadRelatorio() {
   const container = document.getElementById('relatorioContent');
   container.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
-    const data = await api(`/relatorio?tab=${relatorioTab}`);
+    let url = `/relatorio?tab=${relatorioTab}&periodo=${relatorioPeriodo}`;
+    if (relatorioPeriodo === 'custom') {
+      const de = document.getElementById('relDe').value;
+      const ate = document.getElementById('relAte').value;
+      if (!de || !ate) { container.innerHTML = '<div class="empty-state">Selecione as datas</div>'; return; }
+      // Convert YYYY-MM-DD to DD/MM/YYYY
+      const fmtDate = d => d.split('-').reverse().join('/');
+      url += `&de=${fmtDate(de)}&ate=${fmtDate(ate)}`;
+    }
+    const data = await api(url);
     container.innerHTML = renderRelatorio(data);
   } catch (err) {
     container.innerHTML = '<div class="empty-state">Erro ao carregar relatório</div>';
@@ -2101,28 +2135,21 @@ function renderRelatorioCard(label, value, isMoney, isNetPL) {
   </div>`;
 }
 
-function renderRelatorioSection(title, subtitle, data) {
-  return `<div class="mb-8">
+function renderRelatorio(data) {
+  return `<div class="mb-4">
     <div class="flex items-baseline gap-3 mb-4">
-      <h3 class="text-base font-bold text-gray-200">${title}</h3>
-      <span class="text-xs text-gray-500">${subtitle}</span>
+      <h3 class="text-base font-bold text-gray-200">${data.tab}</h3>
+      <span class="text-xs text-gray-500">${data.periodoLabel}</span>
     </div>
     <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
-      ${renderRelatorioCard('Gasto', data.gasto, true, false)}
-      ${renderRelatorioCard('FTDs', data.ftds, false, false)}
-      ${renderRelatorioCard('FTD Amount', data.ftdAmount, true, false)}
-      ${renderRelatorioCard('Deposits Amount', data.depositsAmount, true, false)}
-      ${renderRelatorioCard('Inscritos Telegram', data.telegramJoins, false, false)}
-      ${renderRelatorioCard('Net P&L', data.netPL, true, true)}
+      ${renderRelatorioCard('Gasto', data.total.gasto, true, false)}
+      ${renderRelatorioCard('FTDs', data.total.ftds, false, false)}
+      ${renderRelatorioCard('FTD Amount', data.total.ftdAmount, true, false)}
+      ${renderRelatorioCard('Deposits Amount', data.total.depositsAmount, true, false)}
+      ${renderRelatorioCard('Inscritos Telegram', data.total.telegramJoins, false, false)}
+      ${renderRelatorioCard('Net P&L', data.total.netPL, true, true)}
     </div>
   </div>`;
-}
-
-function renderRelatorio(data) {
-  const diaSubtitle = data.dataRef || '—';
-  const mesSubtitle = data.mesRef || '—';
-  return renderRelatorioSection('Métricas do Dia', diaSubtitle, data.dia)
-       + renderRelatorioSection('Métricas do Mês', mesSubtitle, data.mes);
 }
 
 // ── Panels ──────────────────────────────────────

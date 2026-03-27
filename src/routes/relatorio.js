@@ -4,12 +4,10 @@ const router = Router();
 
 function getAuth() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  // Support both base64-encoded and raw JSON
   let keyJson;
   if (raw.trim().startsWith('{')) {
     keyJson = JSON.parse(raw);
   } else {
-    // Remove any spaces that Railway might inject
     const cleaned = raw.replace(/\s/g, '');
     keyJson = JSON.parse(Buffer.from(cleaned, 'base64').toString());
   }
@@ -19,8 +17,6 @@ function getAuth() {
   });
 }
 
-// Column indices in fetched range A:J (0-based)
-// A=0(date), B=1(gasto), C=2(ftds), D=3(ftdAmount), E=4(skip), F=5(depositsAmount), G=6(skip), H=7(telegramJoins), I=8(skip), J=9(netPL)
 const COL = { gasto: 1, ftds: 2, ftdAmount: 3, depositsAmount: 5, telegramJoins: 7, netPL: 9 };
 
 function parseNum(val) {
@@ -46,57 +42,140 @@ function extractRow(row) {
   };
 }
 
+const EMPTY = { gasto: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
+
+function sumRows(rows) {
+  const total = { ...EMPTY };
+  for (const row of rows) {
+    const r = extractRow(row);
+    total.gasto += r.gasto;
+    total.ftds += r.ftds;
+    total.ftdAmount += r.ftdAmount;
+    total.depositsAmount += r.depositsAmount;
+    total.telegramJoins += r.telegramJoins;
+    total.netPL += r.netPL;
+  }
+  Object.keys(total).forEach(k => { total[k] = Math.round(total[k] * 100) / 100; });
+  return total;
+}
+
+/**
+ * GET /relatorio?tab=DANI|DEIVID&periodo=ontem|7d|1m|3m|custom&de=DD/MM/YYYY&ate=DD/MM/YYYY
+ *
+ * periodo:
+ *   ontem   — only yesterday (default)
+ *   7d      — last 7 days
+ *   1m      — current month
+ *   3m      — last 3 months (current + 2 previous)
+ *   custom  — from 'de' to 'ate' dates
+ */
 router.get('/relatorio', async (req, res) => {
   try {
     if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY || !process.env.GOOGLE_SHEET_ID) {
-      console.error('[Relatorio] Missing env vars: GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_SHEET_ID');
       return res.status(500).json({ error: 'Configuração do Google Sheets ausente' });
     }
+
     const tab = req.query.tab === 'DEIVID' ? 'DEIVID' : 'DANI';
+    const periodo = req.query.periodo || 'ontem';
     const auth = getAuth();
     const sheets = google.sheets({ version: 'v4', auth });
     const spreadsheetId = process.env.GOOGLE_SHEET_ID;
 
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const today = now.getDate();
+    const month = now.getMonth();
+    const year = now.getFullYear();
 
-    if (today === 1) {
-      return res.json({
-        dia: { gasto: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 },
-        mes: { gasto: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 },
-        dataRef: null,
-        mesRef: now.toLocaleString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' }),
-      });
+    // Read all rows of current month (A2:J32 covers days 1-31)
+    const allRange = `${tab}!A2:J32`;
+    const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: allRange });
+    const allRows = result.data.values || [];
+
+    // Parse date from column A (DD/MM/YYYY) and filter rows
+    function parseDate(dateStr) {
+      if (!dateStr) return null;
+      const parts = dateStr.trim().split('/');
+      if (parts.length !== 3) return null;
+      return new Date(parts[2], parts[1] - 1, parts[0]);
     }
 
-    const yesterdayDay = today - 1;
-    const yesterdayRow = yesterdayDay + 1;
+    let filteredRows = [];
+    let periodoLabel = '';
 
-    const range = `${tab}!A2:J${yesterdayRow}`;
-    const result = await sheets.spreadsheets.values.get({ spreadsheetId, range });
-    const rows = result.data.values || [];
+    if (periodo === 'ontem') {
+      if (today === 1) {
+        return res.json({ total: { ...EMPTY }, periodoLabel: 'Sem dados', tab });
+      }
+      const yesterdayDay = today - 1;
+      // Yesterday = row index (yesterdayDay - 1) since rows start at day 1
+      const row = allRows[yesterdayDay - 1];
+      filteredRows = row ? [row] : [];
+      const dd = String(yesterdayDay).padStart(2, '0');
+      const mm = String(month + 1).padStart(2, '0');
+      periodoLabel = `${dd}/${mm}/${year}`;
 
-    const lastRow = rows.length > 0 ? rows[rows.length - 1] : [];
-    const dia = lastRow.length > 0 ? extractRow(lastRow) : { gasto: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
+    } else if (periodo === '7d') {
+      const endDate = new Date(year, month, today - 1); // yesterday
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 6); // 7 days back
 
-    const mes = { gasto: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
-    for (const row of rows) {
-      const r = extractRow(row);
-      mes.gasto += r.gasto;
-      mes.ftds += r.ftds;
-      mes.ftdAmount += r.ftdAmount;
-      mes.depositsAmount += r.depositsAmount;
-      mes.telegramJoins += r.telegramJoins;
-      mes.netPL += r.netPL;
+      for (const row of allRows) {
+        const d = parseDate(row[0]);
+        if (d && d >= startDate && d <= endDate) filteredRows.push(row);
+      }
+
+      // If 7d spans previous month, also read that sheet
+      if (startDate.getMonth() !== month) {
+        // Need to read previous month's sheet too — but sheets are per-month
+        // For now, only show data available in current month's tab
+      }
+
+      const fmt = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+      periodoLabel = `${fmt(startDate)} — ${fmt(endDate)}/${year}`;
+
+    } else if (periodo === '1m') {
+      const lastDay = Math.min(today - 1, 31);
+      filteredRows = allRows.slice(0, lastDay);
+      const mesNome = now.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
+      periodoLabel = `${mesNome.charAt(0).toUpperCase() + mesNome.slice(1)} ${year}`;
+
+    } else if (periodo === '3m') {
+      // Current month
+      const lastDay = Math.min(today - 1, 31);
+      filteredRows = allRows.slice(0, lastDay);
+
+      // Read 2 previous months
+      for (let i = 1; i <= 2; i++) {
+        const prevMonth = new Date(year, month - i, 1);
+        const prevMonthName = prevMonth.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
+        // Previous months would be in different sheet tabs or same tab with different data
+        // Since the sheet resets monthly (same tab), we can only show current month
+        // TODO: if historical sheets exist, read them here
+      }
+      periodoLabel = 'Últimos 3 meses (dados do mês atual)';
+
+    } else if (periodo === 'custom') {
+      const deStr = req.query.de; // DD/MM/YYYY
+      const ateStr = req.query.ate; // DD/MM/YYYY
+      if (!deStr || !ateStr) {
+        return res.status(400).json({ error: 'Parâmetros de e ate são obrigatórios para período personalizado' });
+      }
+      const startDate = parseDate(deStr);
+      const endDate = parseDate(ateStr);
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'Formato de data inválido. Use DD/MM/YYYY' });
+      }
+
+      for (const row of allRows) {
+        const d = parseDate(row[0]);
+        if (d && d >= startDate && d <= endDate) filteredRows.push(row);
+      }
+      periodoLabel = `${deStr} — ${ateStr}`;
     }
-    Object.keys(mes).forEach(k => { mes[k] = Math.round(mes[k] * 100) / 100; });
 
-    const dd = String(yesterdayDay).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dataRef = `${dd}/${mm}/${now.getFullYear()}`;
-    const mesRef = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+    const total = sumRows(filteredRows);
 
-    res.json({ dia, mes, dataRef, mesRef: mesRef.charAt(0).toUpperCase() + mesRef.slice(1) });
+    res.json({ total, periodoLabel, tab });
   } catch (err) {
     console.error('[Relatorio] Error:', err.message);
     res.status(500).json({ error: 'Erro ao carregar relatório' });

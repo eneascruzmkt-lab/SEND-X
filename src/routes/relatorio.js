@@ -1,16 +1,18 @@
 const { google } = require('googleapis');
 const { Router } = require('express');
+const db = require('../db');
 const router = Router();
 
-function getAuth() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  let keyJson;
+function parseServiceAccountKey(raw) {
   if (raw.trim().startsWith('{')) {
-    keyJson = JSON.parse(raw);
-  } else {
-    const cleaned = raw.replace(/\s/g, '');
-    keyJson = JSON.parse(Buffer.from(cleaned, 'base64').toString());
+    return JSON.parse(raw);
   }
+  const cleaned = raw.replace(/\s/g, '');
+  return JSON.parse(Buffer.from(cleaned, 'base64').toString());
+}
+
+function getAuth(serviceAccountKey) {
+  const keyJson = parseServiceAccountKey(serviceAccountKey);
   return new google.auth.GoogleAuth({
     credentials: keyJson,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -71,15 +73,19 @@ function sumRows(rows) {
  */
 router.get('/relatorio', async (req, res) => {
   try {
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY || !process.env.GOOGLE_SHEET_ID) {
-      return res.status(500).json({ error: 'Configuração do Google Sheets ausente' });
+    // Credenciais do usuário (DB) — cada conta precisa configurar a sua
+    const settings = await db.getUserSettings(req.userId);
+    const serviceAccountKey = settings.google_service_account_key;
+    const spreadsheetId = settings.google_sheet_id;
+
+    if (!serviceAccountKey || !spreadsheetId) {
+      return res.status(400).json({ error: 'Google Sheets nao configurado. Va em Configuracoes.' });
     }
 
     const tab = req.query.tab === 'DEIVID' ? 'DEIVID' : 'DANI';
     const periodo = req.query.periodo || 'ontem';
-    const auth = getAuth();
+    const auth = getAuth(serviceAccountKey);
     const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
 
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const today = now.getDate();

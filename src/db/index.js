@@ -123,6 +123,11 @@ async function init() {
       fired_at      TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Adiciona colunas Google Sheets (per-user) se não existirem
+  await pool.query(`
+    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_service_account_key TEXT;
+    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_sheet_id TEXT;
+  `);
   console.log('[db] PostgreSQL schema OK');
 }
 
@@ -166,14 +171,18 @@ module.exports = {
     if (existing.rows.length > 0) {
       await pool.query(`
         UPDATE user_settings SET sendpulse_id=$2, sendpulse_secret=$3,
-          telegram_token=$4, webhook_domain=$5, updated_at=NOW()
+          telegram_token=$4, webhook_domain=$5,
+          google_service_account_key=$6, google_sheet_id=$7, updated_at=NOW()
         WHERE user_id=$1
-      `, [userId, data.sendpulse_id, data.sendpulse_secret, data.telegram_token, data.webhook_domain]);
+      `, [userId, data.sendpulse_id, data.sendpulse_secret, data.telegram_token, data.webhook_domain,
+          data.google_service_account_key, data.google_sheet_id]);
     } else {
       await pool.query(`
-        INSERT INTO user_settings (user_id, sendpulse_id, sendpulse_secret, telegram_token, webhook_domain)
-        VALUES ($1, $2, $3, $4, $5)
-      `, [userId, data.sendpulse_id, data.sendpulse_secret, data.telegram_token, data.webhook_domain]);
+        INSERT INTO user_settings (user_id, sendpulse_id, sendpulse_secret, telegram_token, webhook_domain,
+          google_service_account_key, google_sheet_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [userId, data.sendpulse_id, data.sendpulse_secret, data.telegram_token, data.webhook_domain,
+          data.google_service_account_key, data.google_sheet_id]);
     }
     return this.getUserSettings(userId);
   },

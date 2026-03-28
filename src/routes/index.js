@@ -146,14 +146,17 @@ router.get('/settings', async (req, res) => {
     sendpulse_secret: settings.sendpulse_secret ? '••••••••' : '',
     telegram_token: settings.telegram_token ? '••••••••' : '',
     webhook_domain: settings.webhook_domain || '',
+    google_service_account_key: settings.google_service_account_key ? '••••••••' : '',
+    google_sheet_id: settings.google_sheet_id || '',
     has_sendpulse: !!(settings.sendpulse_id && settings.sendpulse_secret),
     has_telegram: !!settings.telegram_token,
+    has_google: !!(settings.google_service_account_key && settings.google_sheet_id),
   });
 });
 
 /** PUT /settings — atualizar configurações (não sobrescreve se mascarado) */
 router.put('/settings', async (req, res) => {
-  const { sendpulse_id, sendpulse_secret, telegram_token, webhook_domain } = req.body;
+  const { sendpulse_id, sendpulse_secret, telegram_token, webhook_domain, google_service_account_key, google_sheet_id } = req.body;
   const current = await db.getUserSettings(req.userId);
 
   // Se o valor é '••••••••', mantém o atual (campo mascarado = não alterou)
@@ -162,6 +165,8 @@ router.put('/settings', async (req, res) => {
     sendpulse_secret: (sendpulse_secret && sendpulse_secret !== '••••••••') ? sendpulse_secret : (current.sendpulse_secret ?? null),
     telegram_token: (telegram_token && telegram_token !== '••••••••') ? telegram_token : (current.telegram_token ?? null),
     webhook_domain: webhook_domain ?? current.webhook_domain ?? null,
+    google_service_account_key: (google_service_account_key && google_service_account_key !== '••••••••') ? google_service_account_key : (current.google_service_account_key ?? null),
+    google_sheet_id: google_sheet_id ?? current.google_sheet_id ?? null,
   });
 
   // Reinicia o bot Telegraf do usuário (caso o token tenha mudado)
@@ -173,8 +178,11 @@ router.put('/settings', async (req, res) => {
     sendpulse_secret: updated.sendpulse_secret ? '••••••••' : '',
     telegram_token: updated.telegram_token ? '••••••••' : '',
     webhook_domain: updated.webhook_domain || '',
+    google_service_account_key: updated.google_service_account_key ? '••••••••' : '',
+    google_sheet_id: updated.google_sheet_id || '',
     has_sendpulse: !!(updated.sendpulse_id && updated.sendpulse_secret),
     has_telegram: !!updated.telegram_token,
+    has_google: !!(updated.google_service_account_key && updated.google_sheet_id),
   });
 });
 

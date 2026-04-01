@@ -1,77 +1,175 @@
+/**
+ * ============================================================
+ *  Bot — Captura de mensagens dos grupos Telegram (Feed)
+ * ============================================================
+ *
+ *  Duas estratégias de captura (uma por usuário):
+ *
+ *  1. TELEGRAF (preferencial): Se o usuário tem telegram_token,
+ *     cria um bot Telegraf que recebe mensagens em tempo real.
+ *     Mais rápido e confiável.
+ *
+ *  2. POLLING SENDPULSE (fallback): Se não tem telegram_token,
+ *     faz polling da API SendPulse a cada 15s para buscar novas
+ *     mensagens. Mais lento e limitado.
+ *
+ *  Fluxo Telegraf:
+ *  ┌───────────────────────────────────────────────────────────┐
+ *  │  1. Mensagem chega no grupo Telegram                      │
+ *  │  2. Telegraf recebe via webhook/polling                   │
+ *  │  3. Identifica o par pelo chat.id (telegram_group_id)     │
+ *  │  4. Detecta tipo: text, photo, video, document            │
+ *  │  5. Se mídia: baixa do Telegram → upload catbox.moe       │
+ *  │     (fallback: busca URL no SendPulse)                    │
+ *  │  6. Dedup: verifica se mensagem duplicada (2min window)   │
+ *  │  7. Salva no banco (messages) + emite via Socket.io       │
+ *  └───────────────────────────────────────────────────────────┘
+ *
+ *  IMPORTANTE: Este módulo NÃO afeta schedules. Apenas popula
+ *  a tabela messages (feed ao vivo) que é limpa diariamente.
+ * ============================================================
+ */
+
 const sendpulse = require('../sendpulse');
 const db = require('../db');
 
-let io = null;
-let pollingInterval = null;
-let telegrafBot = null;
-const lastSeenMsg = {}; // par_id -> last message id
+let io = null;              // Referência ao Socket.io (injetada via start)
+let pollingInterval = null; // Intervalo do polling SendPulse
+const lastSeenMsg = {};     // Controle de dedup do polling: { [par_id]: last_msg_id }
 
+// Instâncias Telegraf por usuário: { [userId]: Telegraf }
+// Cada usuário com telegram_token tem seu próprio bot rodando
+const userBots = {};
+
+/**
+ * Inicia o bot manager: cria bots Telegraf para todos os usuários
+ * com telegram_token e inicia polling SendPulse como fallback.
+ */
 function start(socketIo) {
   io = socketIo;
 
-  // Method 1: Telegraf (if TELEGRAM_TOKEN is set) — captures ALL messages including media
-  if (process.env.TELEGRAM_TOKEN) {
-    startTelegraf();
-  }
+  // Inicia bots Telegraf para todos os usuários com token configurado
+  refreshAllBots();
 
-  // Method 2: SendPulse API polling — fallback for text messages
+  // Polling SendPulse como fallback para usuários sem Telegraf
+  // Roda a cada 15 segundos
   pollingInterval = setInterval(async () => {
     try {
-      const pares = db.getAllPares();
-      for (const par of pares) {
-        await pollParMessages(par);
+      // Busca usuários que têm pares ativos E credenciais SendPulse
+      const usersWithSP = await db.query(`
+        SELECT DISTINCT p.user_id FROM pares p
+        JOIN user_settings us ON us.user_id = p.user_id
+        WHERE p.ativo=1 AND us.sendpulse_id IS NOT NULL AND us.sendpulse_secret IS NOT NULL
+      `);
+
+      for (const { user_id } of usersWithSP) {
+        // Pula usuários que já têm bot Telegraf rodando (não precisa de polling)
+        if (userBots[user_id]) continue;
+
+        const settings = await db.getUserSettings(user_id);
+        const credentials = {
+          sendpulse_id: settings.sendpulse_id,
+          sendpulse_secret: settings.sendpulse_secret,
+        };
+        const pares = await db.getAllPares(user_id);
+        for (const par of pares) {
+          await pollParMessages(par, credentials);
+        }
       }
     } catch (err) {
       console.error('[feed] polling error:', err.message);
     }
   }, 15000);
 
-  setTimeout(async () => {
-    const pares = db.getAllPares();
-    for (const par of pares) {
-      await pollParMessages(par);
-    }
-  }, 3000);
-
-  console.log('[feed] polling SendPulse iniciado (15s)');
+  console.log('[feed] bot manager iniciado');
 }
 
-// ── Telegraf listener ───────────────────────────
-function startTelegraf() {
+/** Inicia bots Telegraf para todos os usuários com telegram_token */
+async function refreshAllBots() {
+  const users = await db.getUsersWithTelegram();
+  for (const { id, telegram_token } of users) {
+    await startUserBot(id, telegram_token);
+  }
+}
+
+/**
+ * Reinicia o bot de um usuário específico.
+ * Chamado quando o usuário atualiza suas configurações (PUT /settings).
+ */
+async function refreshUser(userId) {
+  // Para o bot existente se houver
+  if (userBots[userId]) {
+    try { userBots[userId].stop(); } catch {}
+    delete userBots[userId];
+  }
+  // Reinicia se tem token
+  const settings = await db.getUserSettings(userId);
+  if (settings.telegram_token) {
+    await startUserBot(userId, settings.telegram_token);
+  }
+}
+
+/**
+ * Cria e inicia um bot Telegraf para um usuário.
+ * O bot escuta mensagens e channel_posts de TODOS os grupos
+ * que o bot é membro, e filtra pelos pares cadastrados.
+ */
+async function startUserBot(userId, telegramToken) {
+  if (userBots[userId]) return; // Já tem bot rodando
+
   try {
     const { Telegraf } = require('telegraf');
-    telegrafBot = new Telegraf(process.env.TELEGRAM_TOKEN);
+    const bot = new Telegraf(telegramToken);
 
-    // 'message' for groups, 'channel_post' for channels
-    telegrafBot.on(['message', 'channel_post'], async (ctx) => {
+    // Escuta mensagens e posts de canal
+    bot.on(['message', 'channel_post'], async (ctx) => {
       try {
         const groupId = String(ctx.chat.id);
-        const par = db.getParByGroupId(groupId);
-        if (!par || !par.ativo) return;
+
+        // Verifica se esse grupo é um par cadastrado do usuário
+        const pares = await db.getAllPares(userId);
+        const par = pares.find(p => p.telegram_group_id === groupId);
+        if (!par || !par.ativo) return; // Grupo não é um par ativo
 
         const msg = ctx.message || ctx.channelPost || ctx.update?.channel_post;
         if (!msg) return;
 
+        // Detecta tipo de conteúdo e extrai file_id se houver mídia
         const msgType = detectTelegrafType(msg);
         const fileId = extractTelegrafFileId(msg);
         const text = msg.text || msg.caption || null;
 
-
-        // Download media to local uploads + get telegram public URL
+        // ── Download de mídia ──
+        // Tenta: Telegram Bot API → catbox.moe (URL pública permanente)
+        // Fallback: SendPulse chat history (para arquivos > 20MB)
         let localPreview = null;
         let publicMediaUrl = null;
         if (fileId && (msgType === 'photo' || msgType === 'video')) {
           try {
-            const result = await downloadTelegramFile(ctx, fileId, msgType);
+            const result = await downloadTelegramFile(ctx, fileId, msgType, telegramToken);
             localPreview = result.localPath;
             publicMediaUrl = result.publicUrl;
           } catch (e) {
             console.error('[feed] download error:', e.message);
-            // For large videos (>20MB), use t.me link from the public channel directly
-            const channelUsername = (par.channel_username || process.env.MEDIA_CHANNEL_USERNAME || '').replace('@', '');
-            if (channelUsername && msg.message_id) {
-              publicMediaUrl = `https://t.me/${channelUsername}/${msg.message_id}`;
-              console.log('[feed] large media — using channel link:', publicMediaUrl);
+            // Fallback: busca URL da mídia no histórico do SendPulse
+            try {
+              const settings = await db.getUserSettings(userId);
+              if (settings.sendpulse_id && settings.sendpulse_secret) {
+                const caption = msg.text || msg.caption || null;
+                // Espera SendPulse processar a mensagem
+                await new Promise(r => setTimeout(r, 3000));
+                const spUrl = await sendpulse.getMediaUrl(
+                  par.sendpulse_bot_id,
+                  { sendpulse_id: settings.sendpulse_id, sendpulse_secret: settings.sendpulse_secret },
+                  caption
+                );
+                if (spUrl) {
+                  publicMediaUrl = spUrl;
+                  console.log('[feed] got media URL from SendPulse:', spUrl.slice(0, 80));
+                }
+              }
+            } catch (e2) {
+              console.error('[feed] SendPulse media fallback error:', e2.message);
             }
           }
         }
@@ -81,55 +179,73 @@ function startTelegraf() {
           text,
           from_user: ctx.from?.username || ctx.from?.first_name || ctx.chat?.title || 'canal',
           message_type: msgType,
-          // file_id = local path for UI preview; store telegram URL in a data attribute
-          file_id: localPreview || fileId || null,
-          telegram_media_url: publicMediaUrl || null,
-          telegram_message_id: msg.message_id || null,
-          telegram_chat_id: groupId,
+          file_id: fileId || null,
+          telegram_media_url: publicMediaUrl || localPreview || null,
         };
 
-        // Dedup by message_id
-        const existing = db.getMessages(par.id, 30);
+        // ── Dedup: evita duplicatas ──
+        // Verifica se mensagem idêntica foi salva nos últimos 2 minutos
+        const existing = await db.getMessages(par.id, 30);
         const isDup = existing.some(e =>
           e.text === msgData.text &&
           e.file_id === msgData.file_id &&
           e.message_type === msgData.message_type &&
           e.created_at &&
-          (Date.now() - new Date(e.created_at).getTime()) < 120000
+          (Date.now() - new Date(e.created_at).getTime()) < 120000 // 2 min
         );
         if (isDup) return;
 
-        const saved = db.insertMessage(msgData);
+        // Salva no banco e notifica frontend via Socket.io
+        const saved = await db.insertMessage(msgData);
         if (io) io.to(`par_${par.id}`).emit('new_message', saved);
       } catch (err) {
         console.error('[feed/telegraf] error:', err.message);
       }
     });
 
-    telegrafBot.launch({ dropPendingUpdates: true });
-    console.log('[feed] Telegraf bot iniciado — captura de midia ativa');
+    // Erro runtime do Telegraf (não deve derrubar o processo)
+    bot.catch((err) => {
+      console.error(`[feed] Telegraf runtime error (user ${userId}):`, err.message);
+    });
+
+    // Inicia o bot (dropPendingUpdates evita processar mensagens antigas)
+    bot.launch({ dropPendingUpdates: true }).catch((err) => {
+      console.error(`[feed] Telegraf launch error (user ${userId}):`, err.message);
+      delete userBots[userId];
+    });
+
+    userBots[userId] = bot;
+    console.log(`[feed] Telegraf bot iniciado para user ${userId}`);
   } catch (err) {
-    console.error('[feed] Telegraf error:', err.message);
+    console.error(`[feed] Telegraf error (user ${userId}):`, err.message);
   }
 }
 
-async function downloadTelegramFile(ctx, fileId, type) {
+/**
+ * Baixa arquivo do Telegram Bot API e faz upload para catbox.moe
+ * para obter uma URL pública permanente (necessário para SendPulse).
+ *
+ * @returns {{ localPath: string, publicUrl: string }}
+ */
+async function downloadTelegramFile(ctx, fileId, type, telegramToken) {
   const fs = require('fs');
   const path = require('path');
   const crypto = require('crypto');
   const https = require('https');
   const axios = require('axios');
   const FormData = require('form-data');
+  const { execSync } = require('child_process');
 
+  // Obtém path do arquivo no Telegram
   const fileInfo = await ctx.telegram.getFile(fileId);
   const filePath = fileInfo.file_path;
-  const ext = path.extname(filePath) || (type === 'photo' ? '.jpg' : '.mp4');
-  const filename = crypto.randomBytes(12).toString('hex') + ext;
-  const localPath = path.join(__dirname, '..', '..', 'public', 'uploads', filename);
+  let ext = path.extname(filePath) || (type === 'photo' ? '.jpg' : '.mp4');
+  const baseName = crypto.randomBytes(12).toString('hex');
+  const originalFilename = baseName + ext;
+  const localPath = path.join(__dirname, '..', '..', 'public', 'uploads', originalFilename);
 
-  const telegramUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${filePath}`;
-
-  // Download locally for UI preview
+  // Download do Telegram Bot API
+  const telegramUrl = `https://api.telegram.org/file/bot${telegramToken}/${filePath}`;
   await new Promise((resolve, reject) => {
     const file = fs.createWriteStream(localPath);
     https.get(telegramUrl, (res) => {
@@ -138,96 +254,183 @@ async function downloadTelegramFile(ctx, fileId, type) {
     }).on('error', reject);
   });
 
-  // Upload to public host (SendPulse needs publicly accessible URL)
-  // Telegra.ph only supports images; for video use catbox.moe
-  let publicUrl = telegramUrl; // fallback
+  // Convert non-mp4 videos to mp4 for SendPulse compatibility
+  let uploadPath = localPath;
+  let filename = originalFilename;
+  if (type === 'video' && ext.toLowerCase() !== '.mp4') {
+    const mp4Filename = baseName + '.mp4';
+    const mp4Path = path.join(__dirname, '..', '..', 'public', 'uploads', mp4Filename);
+    try {
+      console.log(`[feed] Converting ${ext} to .mp4...`);
+      execSync(`ffmpeg -i "${localPath}" -c:v libx264 -c:a aac -movflags +faststart -y "${mp4Path}"`, {
+        timeout: 120000,
+        stdio: 'pipe',
+      });
+      // Remove original, use mp4
+      fs.unlinkSync(localPath);
+      uploadPath = mp4Path;
+      filename = mp4Filename;
+      ext = '.mp4';
+      console.log(`[feed] Converted to mp4: ${mp4Filename}`);
+    } catch (e) {
+      console.error('[feed] ffmpeg conversion failed, using original:', e.message);
+      // Fallback: keep original file
+    }
+  }
+
+  // Upload para catbox.moe (hospedagem gratuita de arquivos)
+  // Necessário porque o SendPulse precisa de URL pública para mídia
+  let publicUrl = telegramUrl;
   try {
     const form = new FormData();
-    if (type === 'video') {
-      // catbox.moe supports video up to 200MB, no expiration (retry once)
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const vForm = new FormData();
-          vForm.append('reqtype', 'fileupload');
-          vForm.append('fileToUpload', fs.createReadStream(localPath));
-          const res = await axios.post(
-            'https://catbox.moe/user/api.php',
-            vForm, { headers: vForm.getHeaders(), timeout: 120000, maxContentLength: 200 * 1024 * 1024 }
-          );
-          if (res.data && typeof res.data === 'string' && res.data.startsWith('https://')) {
-            publicUrl = res.data.trim();
-            console.log('[feed] video uploaded to catbox:', publicUrl);
-            break;
-          }
-          console.error(`[feed] catbox unexpected response (attempt ${attempt}):`, res.data);
-        } catch (uploadErr) {
-          console.error(`[feed] catbox upload attempt ${attempt} failed:`, uploadErr.message);
-          if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-    } else {
-      // Telegra.ph for images (fast, reliable)
-      form.append('file', fs.createReadStream(localPath));
-      const res = await axios.post(
-        'https://telegra.ph/upload',
-        form, { headers: form.getHeaders(), timeout: 30000 }
-      );
-      if (Array.isArray(res.data) && res.data[0]?.src) {
-        publicUrl = 'https://telegra.ph' + res.data[0].src;
-        console.log('[feed] image uploaded to telegra.ph:', publicUrl);
-      }
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', fs.createReadStream(uploadPath));
+    const res = await axios.post('https://catbox.moe/user/api.php', form, {
+      headers: form.getHeaders(),
+      timeout: 120000,
+      maxContentLength: 210 * 1024 * 1024,
+    });
+    if (res.data && res.data.startsWith('https://')) {
+      publicUrl = res.data.trim();
+      console.log('[feed] catbox.moe URL:', publicUrl);
     }
   } catch (e) {
-    console.error(`[feed] public upload failed (${type}), using telegram URL:`, e.message);
+    console.error('[feed] catbox upload failed, using telegram URL:', e.message);
   }
 
   return { localPath: `/uploads/${filename}`, publicUrl };
 }
 
+/**
+ * Converte texto + entities do Telegram em HTML.
+ * Preserva links, bold, italic, code. Se não há entities, retorna o texto puro.
+ *
+ * IMPORTANTE: Telegram entity offsets/lengths são em UTF-16 code units (igual a JS string.length).
+ * Emojis contam como 2 unidades. Usamos string.substring() que opera em UTF-16.
+ */
+function telegramToHtml(text, entities) {
+  if (!text) return null;
+  if (!entities || entities.length === 0) return text;
+
+  // Escape HTML chars in the original text first
+  function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  // Sort entities by offset ascending
+  const sorted = [...entities].sort((a, b) => a.offset - b.offset || a.length - b.length);
+
+  let result = '';
+  let lastIdx = 0;
+
+  for (const e of sorted) {
+    const start = e.offset;
+    const end = e.offset + e.length;
+
+    // Add text before this entity
+    if (start > lastIdx) {
+      result += escHtml(text.substring(lastIdx, start));
+    }
+
+    const inner = escHtml(text.substring(start, end));
+
+    switch (e.type) {
+      case 'text_link':
+        result += `<a href="${e.url}">${inner}</a>`;
+        break;
+      case 'bold':
+        result += `<b>${inner}</b>`;
+        break;
+      case 'italic':
+        result += `<i>${inner}</i>`;
+        break;
+      case 'underline':
+        result += `<u>${inner}</u>`;
+        break;
+      case 'strikethrough':
+        result += `<s>${inner}</s>`;
+        break;
+      case 'code':
+        result += `<code>${inner}</code>`;
+        break;
+      case 'url':
+        result += `<a href="${inner}">${inner}</a>`;
+        break;
+      default:
+        result += inner;
+        break;
+    }
+    lastIdx = end;
+  }
+
+  // Add remaining text after last entity
+  if (lastIdx < text.length) {
+    result += escHtml(text.substring(lastIdx));
+  }
+
+  return result;
+}
+
+/** Detecta tipo de conteúdo de uma mensagem Telegraf */
+const VIDEO_EXTENSIONS = ['.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp'];
+const VIDEO_MIMES = ['video/'];
+
 function detectTelegrafType(message) {
   if (message.photo && message.photo.length > 0) return 'photo';
   if (message.video) return 'video';
-  if (message.document) return 'document';
-  if (message.animation) return 'photo'; // GIFs
+  if (message.document) {
+    // Check if document is actually a video file (e.g. .mov sent as document)
+    const doc = message.document;
+    const mime = (doc.mime_type || '').toLowerCase();
+    const name = (doc.file_name || '').toLowerCase();
+    const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
+    if (mime.startsWith('video/') || VIDEO_EXTENSIONS.includes(ext)) return 'video';
+    return 'document';
+  }
+  if (message.animation) return 'photo'; // GIFs tratados como foto
   return 'text';
 }
 
+/** Extrai file_id da mídia de uma mensagem Telegraf (maior resolução para fotos) */
 function extractTelegrafFileId(message) {
-  if (message.photo && message.photo.length > 0) return message.photo[message.photo.length - 1].file_id;
+  if (message.photo && message.photo.length > 0) return message.photo[message.photo.length - 1].file_id; // Maior resolução
   if (message.video) return message.video.file_id;
   if (message.document) return message.document.file_id;
   if (message.animation) return message.animation.file_id;
   return null;
 }
 
-// ── SendPulse API polling (text fallback) ───────
-async function pollParMessages(par) {
-  // Skip if Telegraf is active for this group — it handles everything
-  if (telegrafBot) return;
-
+/**
+ * Polling de mensagens via API SendPulse (fallback para usuários sem Telegraf).
+ * Busca últimas 20 mensagens do grupo e salva as novas.
+ * Usa lastSeenMsg para evitar reprocessar mensagens já vistas.
+ */
+async function pollParMessages(par, credentials) {
   try {
-    const contacts = await sendpulse.listContacts(par.sendpulse_bot_id);
+    // Busca contatos do bot — procura o contato do grupo (type === 3)
+    const contacts = await sendpulse.listContacts(par.sendpulse_bot_id, credentials);
     const groupContact = contacts.find(c => c.type === 3);
     if (!groupContact) return;
 
-    const token = await sendpulse.getToken();
+    const token = await sendpulse.getToken(credentials);
     const axios = require('axios');
     const res = await axios.get(
       `https://api.sendpulse.com/telegram/chats/messages?contact_id=${groupContact.id}&size=20&order=desc`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 }
     );
 
+    // Filtra apenas mensagens recebidas (direction === 1), ignora enviadas
     const msgs = (res.data.data || res.data).filter(m => m.direction === 1);
     if (msgs.length === 0) return;
 
+    // Determina quais mensagens são novas (comparando com lastSeen)
     const lastSeen = lastSeenMsg[par.id];
     const newMsgs = lastSeen
       ? msgs.filter(m => m.id > lastSeen)
-      : msgs.slice(0, 10);
+      : msgs.slice(0, 10); // Primeira vez: pega últimas 10
 
     if (newMsgs.length === 0) return;
-    lastSeenMsg[par.id] = msgs[0].id;
+    lastSeenMsg[par.id] = msgs[0].id; // Atualiza marcador
 
+    // Processa novas mensagens (mais antiga primeiro)
     for (const m of newMsgs.reverse()) {
       const media = extractMedia(m.data);
       const msgData = {
@@ -239,7 +442,8 @@ async function pollParMessages(par) {
         created_at: m.created_at ? m.created_at.replace('+00:00', '').replace('T', ' ') : undefined,
       };
 
-      const existing = db.getMessages(par.id, 50);
+      // Dedup: verifica se mensagem já existe (por conteúdo + timestamp ~1min)
+      const existing = await db.getMessages(par.id, 50);
       const isDuplicate = existing.some(e =>
         e.text === msgData.text &&
         e.file_id === msgData.file_id &&
@@ -248,16 +452,22 @@ async function pollParMessages(par) {
       );
       if (isDuplicate) continue;
 
-      const saved = db.insertMessage(msgData);
+      const saved = await db.insertMessage(msgData);
       if (io) io.to(`par_${par.id}`).emit('new_message', saved);
     }
   } catch (err) {
+    // Ignora erros de rate limit (429) — normal no polling
     if (!err.message.includes('429')) {
       console.error(`[feed] poll error for par ${par.id}:`, err.message);
     }
   }
 }
 
+/**
+ * Extrai informação de mídia dos dados de uma mensagem SendPulse.
+ * Formatos variam: pode ser string (URL), objeto com file_id/url, ou array.
+ * @returns {{ type: string, url: string|null }}
+ */
 function extractMedia(data) {
   if (!data) return { type: 'text', url: null };
   if (data.photo) {
@@ -276,9 +486,12 @@ function extractMedia(data) {
   return { type: 'text', url: null };
 }
 
+/** Para todos os bots e o polling. Chamado no graceful shutdown. */
 function stop() {
   if (pollingInterval) clearInterval(pollingInterval);
-  if (telegrafBot) telegrafBot.stop();
+  for (const userId of Object.keys(userBots)) {
+    try { userBots[userId].stop(); } catch {}
+  }
 }
 
-module.exports = { start, stop };
+module.exports = { start, stop, refreshUser };

@@ -5,512 +5,488 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SEND X</title>
 <script src="/socket.io/socket.io.js"></script>
-<style>
-:root {
-  --bg: #0c0f0c;
-  --surface: #141a14;
-  --surface2: #1c261c;
-  --surface3: #243024;
-  --border: #2a3a2a;
-  --border-light: #223022;
-  --text: #e2efe2;
-  --text-secondary: #a3bfa3;
-  --muted: #6b8a6b;
-  --primary: #22c55e;
-  --primary-dark: #4ade80;
-  --primary-light: #166534;
-  --primary-bg: #0f2a1a;
-  --accent: #86efac;
-  --green: #22c55e;
-  --green-light: #0f2a1a;
-  --red: #f87171;
-  --red-light: #2a1010;
-  --orange: #fbbf24;
-  --orange-light: #2a2210;
-  --blue: #60a5fa;
-  --blue-light: #10182a;
-  --sidebar-w: 260px;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
-  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.2);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,.5);
-  --transition: 150ms ease;
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+      colors: {
+        surface: { DEFAULT: '#141a14', 2: '#1c261c', 3: '#243024' },
+        border: { DEFAULT: '#2a3a2a', light: '#223022' },
+      },
+    },
+  },
 }
+</script>
+<style type="text/tailwindcss">
+/* Animation */
+@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
-button { cursor: pointer; font-family: inherit; font-size: inherit; }
-input, textarea, select { font-family: inherit; font-size: 14px; }
+/* Classes used by JS-generated HTML */
+.badge-text { @apply bg-emerald-900/30 text-emerald-600 text-[11px] font-semibold px-2 py-0.5 rounded-full; }
+.badge-photo { @apply bg-blue-500/10 text-blue-400 text-[11px] font-semibold px-2 py-0.5 rounded-full; }
+.badge-video { @apply bg-purple-500/10 text-purple-400 text-[11px] font-semibold px-2 py-0.5 rounded-full; }
+.badge-pendente { @apply bg-amber-500/10 text-amber-400 text-[11px] font-semibold px-2 py-0.5 rounded-full; }
+.badge-enviado { @apply bg-green-500/10 text-green-400 text-[11px] font-semibold px-2 py-0.5 rounded-full; }
+.badge-erro { @apply bg-red-500/10 text-red-400 text-[11px] font-semibold px-2 py-0.5 rounded-full; }
+.badge-rec { @apply bg-amber-500/10 text-amber-400 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-amber-500/20; }
+.badge-live { @apply bg-red-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5; animation: livePulse 2s ease infinite; }
+.badge-live::before { content: ''; @apply w-1.5 h-1.5 rounded-full bg-white block; }
 
-/* ── Layout ──────────────────────────────────── */
-.app { display: flex; height: 100vh; }
+.msg-item { @apply bg-surface border border-border-light/60 p-3 px-4 rounded-lg flex items-start gap-3 transition-all duration-150; }
+.msg-item:hover { @apply border-green-500/40 shadow-md shadow-green-500/5; }
+.msg-body { @apply flex-1 min-w-0; }
+.msg-text { @apply text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-200; }
+.msg-meta { @apply text-xs text-gray-500 mt-1 flex items-center gap-2; }
 
-/* Sidebar */
-.sidebar { width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-.sidebar-header { padding: 20px; border-bottom: 1px solid var(--border-light); }
-.sidebar-header h1 { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -.5px; }
-.sidebar-header p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.sched-date-group { @apply mb-4; }
+.sched-date-label { @apply text-[11px] font-bold uppercase tracking-widest text-gray-600 mb-2 pb-1.5 border-b border-border-light/40 flex items-center gap-2; }
+.sched-date-label.is-today { @apply text-green-500/70 border-green-500/20; }
+.sched-date-count { @apply text-[10px] font-medium text-gray-600 bg-surface-2 rounded-full px-2 py-0.5; }
 
-.sidebar-section { padding: 12px 16px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+.sched-item { @apply bg-surface border border-border-light/60 rounded-lg mb-1.5 flex items-stretch gap-0 transition-all duration-150 overflow-hidden; }
+.sched-item:hover { @apply border-green-500/40 shadow-md shadow-green-500/5; }
+.sched-item:hover .sched-actions { @apply opacity-100 translate-x-0; }
+.sched-status-bar { @apply w-[3px] shrink-0 rounded-l-lg; }
+.sched-status-bar.st-pendente { @apply bg-amber-500; }
+.sched-status-bar.st-enviado { @apply bg-green-500; }
+.sched-status-bar.st-erro { @apply bg-red-500; }
 
-.sidebar-nav { flex: 1; overflow-y: auto; padding: 4px 8px; }
-.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); color: var(--text-secondary); font-size: 13px; font-weight: 500; border: none; background: none; width: 100%; text-align: left; transition: all var(--transition); }
-.nav-item:hover { background: var(--surface2); color: var(--text); }
-.nav-item.active { background: var(--primary-bg); color: var(--primary-dark); font-weight: 600; }
-.nav-item .icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-.nav-item .nav-badge { margin-left: auto; background: var(--primary); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+.sched-date-col { @apply shrink-0 w-16 flex flex-col items-center justify-center py-3 border-r border-border-light/30 text-center; }
+.sched-date-col .sched-hour { @apply text-sm font-bold text-gray-200 leading-tight; }
+.sched-date-col .sched-day { @apply text-[10px] text-gray-500 mt-0.5; }
 
-.sidebar-par { padding: 12px 16px; border-top: 1px solid var(--border-light); }
-.sidebar-par label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 6px; }
-.sidebar-par select { width: 100%; background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 7px 10px; border-radius: var(--radius); font-size: 13px; }
+.sched-body { @apply flex-1 min-w-0 py-3 px-4 flex items-center gap-3; }
+.sched-thumb { @apply w-12 h-12 rounded-lg object-cover shrink-0 bg-surface-2 border border-border/40; }
+.sched-thumb-placeholder { @apply w-12 h-12 rounded-lg shrink-0 bg-surface-2 border border-border/40 flex items-center justify-center text-gray-600 text-lg; }
+.sched-content { @apply flex-1 min-w-0; }
+.sched-text { @apply text-[13px] mb-1 whitespace-pre-wrap overflow-hidden line-clamp-2 leading-snug; }
+.sched-meta { @apply text-[11px] text-gray-500 flex gap-1.5 flex-wrap items-center; }
 
-/* Main */
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.sched-actions { @apply flex gap-1 shrink-0 items-center pr-3 opacity-0 translate-x-2 transition-all duration-200; }
+.sched-actions button { @apply bg-surface-2 border border-border/60 text-gray-400 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 hover:border-green-500/50 hover:text-green-400 hover:bg-green-500/5 cursor-pointer; font-family: inherit; }
 
-/* Topbar */
-.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; }
-.topbar h2 { font-size: 18px; font-weight: 700; color: var(--text); }
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+.filter-btn { @apply px-3.5 py-1.5 rounded-full border border-border/60 bg-surface text-gray-400 text-xs font-medium transition-all duration-150 hover:border-green-500/50 hover:text-green-400; }
+.filter-btn.active { @apply border-green-500/50 text-green-400 bg-green-500/5; }
 
-/* Content */
-.content { flex: 1; overflow-y: auto; padding: 24px 28px; }
-.panel { display: none; }
-.panel.active { display: block; }
+.send-type-option { @apply flex items-start gap-2.5 p-3 border border-border/60 rounded-lg cursor-pointer transition-all duration-150 hover:border-green-500/40; }
+.send-type-option.selected { @apply border-green-500/50 bg-green-500/5; }
 
-/* ── Cards & Components ──────────────────────── */
-.card { background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
-.card-header { padding: 16px 20px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; justify-content: space-between; }
-.card-header h3 { font-size: 14px; font-weight: 600; }
-.card-body { padding: 20px; }
+.nav-item { @apply flex items-center gap-2.5 py-2 px-3 rounded-lg text-gray-400 text-[13px] font-medium border-none bg-transparent w-full text-left transition-all duration-150 hover:bg-white/5 hover:text-gray-200; }
+.nav-item.active { @apply bg-green-500/10 text-green-400 font-semibold; }
 
-/* Badges */
-.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: .2px; }
-.badge-live { background: var(--red); color: #fff; animation: pulse 2s ease infinite; gap: 4px; }
-.badge-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
-.badge-text { background: var(--surface3); color: var(--muted); }
-.badge-photo { background: var(--blue-light); color: var(--blue); }
-.badge-video { background: #1a1030; color: #a78bfa; }
-.badge-pendente { background: var(--orange-light); color: var(--orange); }
-.badge-enviado { background: var(--green-light); color: var(--green); }
-.badge-erro { background: var(--red-light); color: var(--red); }
-.badge-grupo { background: var(--blue-light); color: var(--blue); }
-.badge-manual { background: #1a1030; color: #a78bfa; }
-.badge-rec { background: var(--orange-light); color: var(--orange); border: 1px solid #3a3010; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+.panel { @apply hidden; }
+.panel.active { @apply block; }
 
-/* Stats row */
-.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.stat-card { background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow-sm); }
-.stat-card .stat-val { font-size: 28px; font-weight: 800; line-height: 1; }
-.stat-card .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.stat-green .stat-val { color: var(--green); }
-.stat-orange .stat-val { color: var(--orange); }
-.stat-red .stat-val { color: var(--red); }
-.stat-blue .stat-val { color: var(--blue); }
+.empty-state { @apply text-center text-gray-500 py-16 px-5; }
 
-/* ── Feed ────────────────────────────────────── */
-.feed-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
-.feed-toolbar-left { display: flex; align-items: center; gap: 12px; }
-.feed-toolbar-left .badge-live { padding: 4px 10px; font-size: 12px; }
-.feed-count { font-size: 13px; color: var(--muted); }
+.par-card { @apply bg-surface border border-border-light/60 p-4 rounded-xl flex justify-between items-center shadow-sm transition-all duration-150 hover:border-green-500/40 hover:shadow-md hover:shadow-green-500/5; }
+.par-name { @apply font-semibold text-sm text-gray-200; }
+.par-detail { @apply text-xs text-gray-500 mt-0.5; }
 
-.msg-list { display: flex; flex-direction: column; gap: 4px; }
-.msg-item { background: var(--surface); border: 1px solid var(--border-light); padding: 12px 16px; border-radius: var(--radius); display: flex; align-items: flex-start; gap: 12px; transition: all var(--transition); }
-.msg-item:hover { border-color: var(--primary); box-shadow: var(--shadow); }
-.msg-item input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--primary); flex-shrink: 0; }
-.msg-body { flex: 1; min-width: 0; }
-.msg-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--text); }
-.msg-meta { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.upload-preview { @apply mt-2.5 relative inline-block; }
+.upload-preview img, .upload-preview video { @apply max-w-full max-h-44 rounded-lg block; }
+.up-remove { @apply absolute top-1 right-1 bg-black/70 text-white border-none rounded-full w-6 h-6 text-sm cursor-pointer flex items-center justify-center hover:bg-red-500; }
 
-/* ── Schedules ───────────────────────────────── */
-.filters { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
-.filter-btn { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 500; transition: all var(--transition); }
-.filter-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
-.filter-btn.active { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
-
-.sched-item { background: var(--surface); border: 1px solid var(--border-light); padding: 14px 18px; border-radius: var(--radius); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 16px; transition: all var(--transition); }
-.sched-item:hover { border-color: var(--primary); box-shadow: var(--shadow); }
-.sched-info { flex: 1; min-width: 0; }
-.sched-text { font-size: 14px; margin-bottom: 6px; white-space: pre-wrap; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.sched-meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.sched-actions { display: flex; gap: 4px; flex-shrink: 0; }
-.sched-actions button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-secondary); padding: 5px 12px; border-radius: var(--radius); font-size: 12px; font-weight: 500; transition: all var(--transition); }
-.sched-actions button:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
-
-/* ── Composer (Campaign-style) ───────────────── */
-.composer-layout { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
-@media (max-width: 900px) { .composer-layout { grid-template-columns: 1fr; } }
-
-.composer-editor { display: flex; flex-direction: column; gap: 16px; }
-
-.composer-step { background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
-.composer-step-header { padding: 14px 18px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px; }
-.step-number { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.composer-step-header span { font-size: 13px; font-weight: 600; color: var(--text); }
-.composer-step-body { padding: 18px; }
-
-/* Message blocks */
-.msg-blocks { display: flex; flex-direction: column; gap: 12px; }
-.msg-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; background: var(--surface2); position: relative; }
-.msg-block-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.msg-block-type { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
-.msg-block-remove { background: none; border: none; color: var(--muted); font-size: 18px; padding: 0 4px; line-height: 1; }
-.msg-block-remove:hover { color: var(--red); }
-
-.add-element-bar { display: flex; gap: 8px; flex-wrap: wrap; }
-.add-el-btn { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 500; transition: all var(--transition); }
-.add-el-btn:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
-.add-el-btn .el-icon { font-size: 16px; }
-
-/* Buttons editor */
-.buttons-list { display: flex; flex-direction: column; gap: 8px; }
-.btn-row { display: flex; gap: 8px; align-items: center; }
-.btn-row input { flex: 1; background: var(--surface); border: 1px solid var(--border); padding: 7px 10px; border-radius: var(--radius); color: var(--text); }
-.btn-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(34,197,94,.12); }
-.btn-row-remove { background: none; border: none; color: var(--muted); font-size: 16px; padding: 4px; }
-.btn-row-remove:hover { color: var(--red); }
-.add-btn-link { background: none; border: none; color: var(--primary-dark); font-size: 12px; font-weight: 600; padding: 4px 0; display: flex; align-items: center; gap: 4px; }
-.add-btn-link:hover { color: var(--primary); }
-
-/* Upload zone */
-.upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 20px; text-align: center; cursor: pointer; transition: all var(--transition); position: relative; }
-.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-bg); }
-.upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.upload-zone .uz-icon { font-size: 28px; margin-bottom: 6px; opacity: .5; }
-.upload-zone .uz-text { font-size: 12px; color: var(--muted); }
-.upload-zone .uz-text strong { color: var(--primary); }
-.upload-zone .uz-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.upload-preview { margin-top: 10px; position: relative; display: inline-block; }
-.upload-preview img, .upload-preview video { max-width: 100%; max-height: 180px; border-radius: var(--radius); display: block; }
-.upload-preview .up-remove { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.7); color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.upload-progress { margin-top: 8px; height: 4px; background: var(--surface3); border-radius: 2px; overflow: hidden; }
-.upload-progress .bar { height: 100%; background: var(--primary); transition: width 200ms; }
+.btn-row { @apply flex gap-2 items-center; }
+.btn-row input { @apply flex-1 bg-[#0c0f0c] border border-border/60 py-2 px-3 rounded-lg text-gray-200 text-sm transition-all focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10; }
+.btn-label { }
+.btn-url { }
+.btn-row-remove { @apply bg-transparent border-none text-gray-500 text-base p-1 hover:text-red-400 transition-colors; }
 
 /* Preview phone */
-.preview-container { position: sticky; top: 24px; }
-.preview-phone { background: #0a0f0a; border: 1px solid var(--border); border-radius: 28px; padding: 12px; box-shadow: var(--shadow-lg); }
-.preview-phone-screen { background: #0d120d; border-radius: 18px; min-height: 480px; display: flex; flex-direction: column; overflow: hidden; }
-.preview-phone-header { background: #111a11; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
-.preview-phone-header .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
-.preview-phone-header .name { color: #e6edf3; font-size: 13px; font-weight: 600; }
-.preview-phone-body { flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; }
-.preview-bubble { background: #1a2e1a; color: var(--text); border-radius: 12px 12px 12px 4px; padding: 10px 14px; max-width: 90%; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-.preview-bubble img { width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; }
-.preview-media-placeholder { width: 100%; height: 120px; border-radius: 8px; background: var(--surface3); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 24px; margin-bottom: 6px; }
-.preview-bubble .preview-caption { margin-top: 4px; }
-.preview-btn-row { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
-.preview-inline-btn { display: block; text-align: center; padding: 7px; background: transparent; border: 1px solid #22c55e; color: #22c55e; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 500; }
-.preview-time { font-size: 10px; color: var(--muted); text-align: right; margin-top: 2px; }
-.preview-label { text-align: center; font-size: 11px; color: var(--muted); padding: 8px; }
+.preview-phone { @apply bg-[#080b08] border border-border/60 rounded-[28px] p-3 shadow-2xl; }
+.preview-phone-screen { @apply bg-[#0a0e0a] rounded-[18px] min-h-[480px] flex flex-col overflow-hidden; }
+.preview-phone-header { @apply bg-[#101810] p-3 px-4 flex items-center gap-2.5; }
+.preview-phone-body { @apply flex-1 p-4 flex flex-col justify-end gap-2; }
+.preview-bubble { @apply bg-green-900/20 text-gray-200 rounded-xl rounded-bl-sm p-3 max-w-[90%] text-[13px] leading-relaxed whitespace-pre-wrap break-words; }
+.preview-bubble img { @apply w-full rounded-lg mb-1.5 block; }
+.preview-media-placeholder { @apply w-full h-28 rounded-lg bg-surface-3 flex items-center justify-center text-gray-500 text-2xl mb-1.5; }
+.preview-caption { @apply mt-1; }
+.preview-btn-row { @apply flex flex-col gap-1 mt-1.5; }
+.preview-inline-btn { @apply block text-center py-1.5 bg-transparent border border-green-500/60 text-green-400 rounded-md text-xs no-underline font-medium hover:bg-green-500/10; }
+.preview-time { @apply text-[10px] text-gray-600 text-right mt-0.5; }
+.preview-label { @apply text-center text-[11px] text-gray-600 p-2; }
 
-/* ── Buttons ─────────────────────────────────── */
-.btn { padding: 8px 18px; border-radius: var(--radius); border: none; font-size: 13px; font-weight: 600; transition: all var(--transition); display: inline-flex; align-items: center; gap: 6px; }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-dark); }
-.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-.btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
-.btn-secondary:hover { border-color: var(--primary); color: var(--primary-dark); }
-.btn-danger { background: var(--red-light); color: var(--red); border: 1px solid #3a1a1a; }
-.btn-danger:hover { background: var(--red); color: #fff; }
-.btn-sm { padding: 6px 12px; font-size: 12px; }
+/* Hist toggle */
+.hist-toggle-btn { @apply bg-transparent border border-transparent text-gray-500 text-xs font-semibold py-1.5 px-4 rounded-lg flex items-center gap-1.5 transition-all duration-150 cursor-pointer; font-family: inherit; }
+.hist-toggle-btn.active { @apply bg-green-500/10 text-green-400 border-green-500/30; }
+.hist-toggle-btn:not(.active):hover { @apply text-gray-200 bg-white/[0.03]; }
 
-/* ── Forms ────────────────────────────────────── */
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; }
-.form-group input, .form-group textarea, .form-group select {
-  width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--border);
-  padding: 9px 12px; border-radius: var(--radius); transition: border-color var(--transition), box-shadow var(--transition);
-}
-.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(34,197,94,.1); }
-.form-group textarea { resize: vertical; min-height: 100px; }
-.form-row { display: flex; gap: 12px; }
-.form-row > .form-group { flex: 1; }
-.form-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
-
-/* ── Modal ────────────────────────────────────── */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
-.modal-overlay.hidden { display: none; }
-.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; width: 90%; max-width: 480px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
-
-/* ── Config ───────────────────────────────────── */
-.pares-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 24px; }
-.par-card { background: var(--surface); border: 1px solid var(--border-light); padding: 16px; border-radius: var(--radius-lg); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); transition: all var(--transition); }
-.par-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
-.par-card .par-name { font-weight: 600; font-size: 14px; }
-.par-card .par-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.config-form { max-width: 480px; background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 20px; }
-
-/* Send type options */
-.send-type-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.send-type-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all var(--transition); }
-.send-type-option:hover { border-color: var(--primary); }
-.send-type-option.selected { border-color: var(--primary); background: var(--primary-bg); }
-.send-type-option input[type="radio"] { margin-top: 2px; accent-color: var(--primary); }
-.send-type-content { display: flex; flex-direction: column; gap: 2px; }
-.send-type-content strong { font-size: 13px; color: var(--text); }
-.send-type-content span { font-size: 11px; color: var(--muted); }
-
-.empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
-.empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
-.empty-state p { font-size: 14px; }
+/* Week Grid */
+.wg-col { @apply flex flex-col gap-1 min-h-[140px]; }
+.wg-col-header { @apply text-center text-[11px] font-semibold uppercase tracking-wide py-2 rounded-t-lg; }
+.wg-col-header.today { @apply text-green-400 bg-green-500/5; }
+.wg-col-header.other { @apply text-gray-500; }
+.wg-col-body { @apply flex flex-col gap-1 flex-1 p-1; }
+.wg-card { @apply bg-surface-2 border border-border/60 rounded-lg p-2 text-[11px] leading-relaxed transition-all hover:border-green-500/40 relative; }
+.wg-card.projected { @apply opacity-45 border-dashed; }
+.wg-card.wg-erro { @apply border-red-500/40 bg-red-500/[0.04]; }
+.wg-card.wg-erro:hover { @apply border-red-500/60; }
+.wg-card.rec-diario { border-left: 3px solid #22c55e; }
+.wg-card.rec-diasuteis { border-left: 3px solid #3b82f6; }
+.wg-card.rec-semanal { border-left: 3px solid #f59e0b; }
+.wg-card-time { @apply text-green-400 font-bold text-xs; }
+.wg-card-next { @apply text-green-400/70 text-[10px] font-medium; }
+.wg-card-text { @apply text-gray-300 mt-0.5 line-clamp-2 break-words; }
+.wg-card-bot { @apply text-green-400 text-[10px] mt-0.5 truncate; }
+.wg-card-meta { @apply flex flex-wrap gap-1 mt-1 items-center; }
+.wg-card-lastsend { @apply text-[10px] text-gray-500 mt-1 flex items-center gap-1; }
+.wg-card-error { @apply text-red-400 text-[10px] mt-1 line-clamp-1; }
+.wg-card-actions { @apply flex gap-1 mt-1.5; }
+.wg-card-actions button { @apply bg-surface border border-border/60 text-gray-400 px-2 py-1 rounded text-[10px] font-medium transition-all hover:border-green-500/40 hover:text-green-400 cursor-pointer; font-family: inherit; }
+.wg-card-actions button.wg-btn-danger { @apply hover:border-red-500/40 hover:text-red-400; }
+.wg-card-actions button.wg-btn-retry { @apply hover:border-green-500/40 hover:text-green-400; }
 </style>
 </head>
-<body>
-<div class="app">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <h1>SEND X</h1>
-      <p>Agendamento SendPulse</p>
+<body class="bg-[#0c0f0c] text-gray-200 font-sans text-sm leading-normal min-h-screen">
+
+<!-- Auth Page -->
+<div class="flex items-center justify-center min-h-screen p-5" id="authPage">
+  <div class="bg-surface border border-border/60 rounded-2xl p-10 w-full max-w-md shadow-2xl shadow-black/40">
+    <h1 class="text-3xl font-extrabold text-green-500 text-center tracking-tight">SEND X</h1>
+    <p class="text-center text-gray-500 text-xs mt-1 mb-7">Agendamento SendPulse</p>
+
+    <div class="flex mb-6 rounded-lg overflow-hidden border border-border/60">
+      <button class="auth-tab flex-1 py-2.5 text-center text-[13px] font-semibold bg-surface-2 text-gray-400 border-none transition-all duration-150 active" onclick="showAuthTab('login')">Entrar</button>
+      <button class="auth-tab flex-1 py-2.5 text-center text-[13px] font-semibold bg-surface-2 text-gray-400 border-none transition-all duration-150" onclick="showAuthTab('register')">Criar conta</button>
     </div>
-    <div class="sidebar-section">Menu</div>
-    <nav class="sidebar-nav">
+
+    <div class="bg-red-500/10 text-red-400 p-2 px-3 rounded-lg text-xs mb-3 hidden" id="authError"></div>
+
+    <!-- Login -->
+    <form class="auth-form" id="loginForm" onsubmit="doLogin(event)">
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Email</label>
+        <input type="email" id="loginEmail" placeholder="seu@email.com" required class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2.5 px-3 rounded-lg text-sm transition-all focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+      </div>
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Senha</label>
+        <input type="password" id="loginPassword" placeholder="Sua senha" required class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2.5 px-3 rounded-lg text-sm transition-all focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+      </div>
+      <button type="submit" class="w-full bg-green-500 hover:bg-green-400 text-white font-semibold py-2.5 rounded-lg transition-all duration-150 mt-1">Entrar</button>
+    </form>
+
+    <!-- Register -->
+    <form class="auth-form hidden" id="registerForm" onsubmit="doRegister(event)">
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Nome</label>
+        <input type="text" id="regName" placeholder="Seu nome" required class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2.5 px-3 rounded-lg text-sm transition-all focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+      </div>
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Email</label>
+        <input type="email" id="regEmail" placeholder="seu@email.com" required class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2.5 px-3 rounded-lg text-sm transition-all focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+      </div>
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Senha</label>
+        <input type="password" id="regPassword" placeholder="Minimo 6 caracteres" required minlength="6" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2.5 px-3 rounded-lg text-sm transition-all focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+      </div>
+      <button type="submit" class="w-full bg-green-500 hover:bg-green-400 text-white font-semibold py-2.5 rounded-lg transition-all duration-150 mt-1">Criar conta</button>
+    </form>
+  </div>
+</div>
+
+<!-- App -->
+<div class="hidden h-screen" id="appContainer">
+  <!-- Mobile topbar with hamburger -->
+  <div class="md:hidden bg-surface border-b border-border/40 py-3 px-4 flex items-center justify-between">
+    <h1 class="text-lg font-extrabold text-green-500">SEND X</h1>
+    <button onclick="document.getElementById('sidebar').classList.toggle('hidden')" class="text-gray-400 text-2xl">&#9776;</button>
+  </div>
+  <!-- Sidebar -->
+  <aside id="sidebar" class="hidden md:flex w-full md:w-64 bg-surface border-r border-border/40 flex-col flex-shrink-0 absolute md:relative z-40 h-full md:h-auto">
+    <div class="p-5 border-b border-border-light/40">
+      <h1 class="text-xl font-extrabold text-green-500 tracking-tight">SEND X</h1>
+      <p class="text-[11px] text-gray-500 mt-0.5">Agendamento SendPulse</p>
+    </div>
+    <div class="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Menu</div>
+    <nav class="flex-1 overflow-y-auto px-2 py-1">
       <button class="nav-item active" data-tab="dashboard" onclick="showPanel('dashboard')">
-        <span class="icon">&#9632;</span> Dashboard
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#9632;</span> Dashboard
+      </button>
+      <button class="nav-item" data-tab="relatorio" onclick="showPanel('relatorio')">
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#128202;</span> Relatorio
       </button>
       <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
-        <span class="icon">&#9673;</span> Feed ao vivo
-        <span class="nav-badge badge-live" style="padding:2px 6px;font-size:9px;animation:pulse 2s ease infinite">LIVE</span>
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#9673;</span> Feed ao vivo
+        <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">LIVE</span>
       </button>
       <button class="nav-item" data-tab="composer" onclick="showPanel('composer')">
-        <span class="icon">&#9998;</span> Nova campanha
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#9998;</span> Nova campanha
       </button>
       <button class="nav-item" data-tab="schedules" onclick="showPanel('schedules')">
-        <span class="icon">&#128339;</span> Historico
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#128339;</span> Historico
       </button>
       <button class="nav-item" data-tab="config" onclick="showPanel('config')">
-        <span class="icon">&#9881;</span> Configuracoes
+        <span class="w-5 h-5 flex items-center justify-center text-base">&#9881;</span> Configuracoes
       </button>
     </nav>
-    <div class="sidebar-par">
-      <label>Par ativo</label>
-      <select id="parSelect" onchange="switchPar()"></select>
+    <div class="p-3 px-4 border-t border-border-light/40">
+      <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Par ativo</label>
+      <select id="parSelect" onchange="switchPar()" class="w-full bg-surface-2 text-gray-200 border border-border/60 py-1.5 px-2.5 rounded-lg text-[13px] focus:outline-none focus:border-green-500/50"></select>
+    </div>
+    <div class="p-3 px-4 border-t border-border-light/40 flex items-center justify-between">
+      <span class="text-xs font-semibold text-gray-400" id="userName"></span>
+      <button class="bg-transparent border-none text-gray-500 text-[11px] py-1 px-2 rounded hover:text-red-400 hover:bg-red-500/10 transition-all" onclick="logout()">Sair</button>
     </div>
   </aside>
 
   <!-- Main -->
-  <div class="main">
-    <div class="topbar">
-      <h2 id="topbarTitle">Dashboard</h2>
-      <div class="topbar-right" id="topbarRight"></div>
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="bg-surface border-b border-border/40 py-3 sm:py-4 px-4 sm:px-7 flex items-center justify-between">
+      <h2 class="text-base sm:text-lg font-bold text-gray-100" id="topbarTitle">Dashboard</h2>
+      <div class="flex items-center gap-2.5" id="topbarRight"></div>
     </div>
 
-    <div class="content">
+    <div class="flex-1 overflow-y-auto p-3 sm:p-6 px-3 sm:px-7">
       <!-- Dashboard -->
       <div class="panel active" id="panel-dashboard">
-        <div class="stats-row" id="dashCounters"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
-          <div class="card">
-            <div class="card-header"><h3>Ultimos enviados</h3></div>
-            <div class="card-body" id="dashSent" style="max-height:300px;overflow-y:auto"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3 sm:gap-4" id="dashColumns"></div>
+      </div>
+
+      <!-- Relatório -->
+      <div class="panel" id="panel-relatorio">
+        <!-- Header bar -->
+        <div class="bg-surface border border-border-light/60 rounded-xl p-4 mb-6">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+            <!-- Tabs DANI / DEIVID -->
+            <div class="flex bg-[#0c0f0c] rounded-lg p-0.5">
+              <button class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400" id="tabDani" onclick="switchRelatorioTab('DANI')">DANI</button>
+              <button class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300" id="tabDeivid" onclick="switchRelatorioTab('DEIVID')">DEIVID</button>
+            </div>
+            <div class="w-px h-7 bg-border/40"></div>
+            <!-- Period filters -->
+            <div class="flex gap-1.5 flex-wrap">
+              <button class="filter-btn active" data-periodo="ontem" onclick="switchRelatorioPeriodo('ontem')">Ontem</button>
+              <button class="filter-btn" data-periodo="7d" onclick="switchRelatorioPeriodo('7d')">7 dias</button>
+              <button class="filter-btn" data-periodo="1m" onclick="switchRelatorioPeriodo('1m')">Mês</button>
+              <button class="filter-btn" data-periodo="3m" onclick="switchRelatorioPeriodo('3m')">3 meses</button>
+              <button class="filter-btn" data-periodo="custom" onclick="switchRelatorioPeriodo('custom')">Personalizado</button>
+            </div>
           </div>
-          <div class="card">
-            <div class="card-header"><h3>Pendentes</h3></div>
-            <div class="card-body" id="dashPending" style="max-height:300px;overflow-y:auto"></div>
+          <!-- Custom date range -->
+          <div id="relatorioCustomDates" class="flex flex-wrap gap-2 sm:gap-3 mt-4 pt-3 border-t border-border/30 items-center" style="display:none">
+            <label class="text-[11px] font-semibold text-gray-500 uppercase">De</label>
+            <input type="date" id="relDe" class="bg-[#0c0f0c] border border-border/60 py-1.5 px-3 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <label class="text-[11px] font-semibold text-gray-500 uppercase">Até</label>
+            <input type="date" id="relAte" class="bg-[#0c0f0c] border border-border/60 py-1.5 px-3 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <button onclick="loadRelatorio()" class="bg-green-500/10 border border-green-500/50 text-green-400 px-5 py-1.5 rounded-lg text-xs font-semibold hover:bg-green-500/20 transition-all">Aplicar</button>
           </div>
         </div>
-        <div class="card" style="margin-top:16px" id="dashErrorsCard" style="display:none">
-          <div class="card-header"><h3>Erros recentes</h3></div>
-          <div class="card-body" id="dashErrors" style="max-height:200px;overflow-y:auto"></div>
+        <!-- Content -->
+        <div id="relatorioContent">
+          <div class="empty-state">Carregando...</div>
         </div>
       </div>
 
       <!-- Feed -->
       <div class="panel" id="panel-feed">
-        <!-- Setup overlay -->
         <div id="feedSetup" style="display:none">
-          <div style="max-width:480px;margin:40px auto;text-align:center">
-            <div style="font-size:48px;margin-bottom:12px;opacity:.6">&#128279;</div>
-            <h3 style="font-size:18px;font-weight:700;margin-bottom:8px">Configurar Feed ao vivo</h3>
-            <p style="color:var(--muted);font-size:13px;margin-bottom:24px;line-height:1.6">
+          <div class="max-w-lg mx-auto mt-10 text-center">
+            <div class="text-5xl mb-3 opacity-50">&#128279;</div>
+            <h3 class="text-lg font-bold mb-2">Configurar Feed ao vivo</h3>
+            <p class="text-gray-500 text-[13px] mb-6 leading-relaxed">
               Para monitorar mensagens em tempo real, vincule um grupo/canal do Telegram a um bot da SendPulse.<br>
-              O bot monitor (<strong>sentinelalng_bot</strong>) captura as mensagens e o bot SendPulse faz os disparos.
+              O bot monitor captura as mensagens e o bot SendPulse faz os disparos.
             </p>
-            <div class="config-form" style="max-width:100%;text-align:left">
-              <div class="form-group">
-                <label>Nome do par</label>
-                <input type="text" id="setupNome" placeholder="Ex: Grupo VIP + Bot Vendas">
-                <div class="form-hint">Um nome para identificar essa conexao.</div>
+            <div id="feedSetupNeedsCreds" style="display:none" class="mb-4">
+              <div class="bg-amber-500/10 text-amber-400 p-3 rounded-lg text-[13px]">
+                Configure suas credenciais SendPulse primeiro em <strong>Configuracoes</strong>.
               </div>
-              <div class="form-group">
-                <label>ID do grupo/canal Telegram</label>
-                <input type="text" id="setupGroupId" placeholder="-100xxxxxxxxxx">
-                <div class="form-hint">Encontre o ID adicionando @RawDataBot ao grupo e vendo o chat.id.</div>
+            </div>
+            <div class="max-w-full text-left bg-surface border border-border-light/60 rounded-xl p-5" id="feedSetupForm">
+              <div class="mb-3.5">
+                <label class="block text-xs font-semibold text-gray-400 mb-1.5">Nome do par</label>
+                <input type="text" id="setupNome" placeholder="Ex: Grupo VIP + Bot Vendas" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+                <div class="text-[11px] text-gray-500 mt-1">Um nome para identificar essa conexao.</div>
               </div>
-              <div class="form-group">
-                <label>Bot SendPulse (para disparos)</label>
-                <select id="setupBotSelect"><option value="">Carregando bots...</option></select>
+              <div class="mb-3.5">
+                <label class="block text-xs font-semibold text-gray-400 mb-1.5">ID do grupo/canal Telegram</label>
+                <input type="text" id="setupGroupId" placeholder="-100xxxxxxxxxx" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+                <div class="text-[11px] text-gray-500 mt-1">Encontre o ID adicionando @RawDataBot ao grupo e vendo o chat.id.</div>
               </div>
-              <button class="btn btn-primary" onclick="submitSetup()" style="width:100%;justify-content:center;padding:10px">Conectar e ativar feed</button>
+              <div class="mb-3.5">
+                <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot SendPulse (para disparos)</label>
+                <select id="setupBotSelect" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"><option value="">Carregando bots...</option></select>
+              </div>
+              <button class="w-full bg-green-500 hover:bg-green-400 text-white font-semibold py-2.5 rounded-lg transition-all duration-150" onclick="submitSetup()">Conectar e ativar feed</button>
             </div>
           </div>
         </div>
-        <!-- Feed content -->
         <div id="feedContent" style="display:none">
-          <div class="feed-toolbar">
-            <div class="feed-toolbar-left">
-              <span class="badge badge-live">AO VIVO</span>
-              <span class="feed-count" id="msgCount">0 mensagens</span>
+          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <div class="flex items-center gap-3">
+              <span class="badge-live py-1 px-2.5 text-xs">AO VIVO</span>
+              <span class="text-[13px] text-gray-500" id="msgCount">0 mensagens</span>
             </div>
-            <button class="btn btn-primary btn-sm" id="btnAgendarSel" disabled onclick="openScheduleModal()">Agendar selecionadas</button>
+            <button class="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150" id="btnAgendarSel" disabled onclick="openScheduleModal()">Agendar selecionadas</button>
           </div>
-          <div class="msg-list" id="msgList">
-            <div class="empty-state"><div class="empty-icon">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>
+          <div class="flex flex-col gap-1" id="msgList">
+            <div class="empty-state"><div class="text-4xl mb-3 opacity-40">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>
           </div>
         </div>
       </div>
 
       <!-- Historico -->
       <div class="panel" id="panel-schedules">
-        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-          <div class="filters" id="schedFilters" style="margin-bottom:0">
-            <button class="filter-btn active" onclick="filterSched('all',this)">Todos</button>
-            <button class="filter-btn" onclick="filterSched('pendente',this)">Pendentes</button>
-            <button class="filter-btn" onclick="filterSched('enviado',this)">Enviados</button>
-            <button class="filter-btn" onclick="filterSched('erro',this)">Erros</button>
+        <!-- Toggle Lista / Programacao -->
+        <div class="flex justify-between items-center mb-4 gap-3 flex-wrap">
+          <div class="flex items-center gap-4 flex-wrap">
+            <div class="flex gap-0.5 bg-surface border border-border/60 rounded-[10px] p-[3px]" id="histViewToggle">
+              <button class="hist-toggle-btn active" onclick="switchHistView('list')">
+                <span class="text-sm">&#9776;</span> Lista
+              </button>
+              <button class="hist-toggle-btn" onclick="switchHistView('calendar')">
+                <span class="text-sm">&#128197;</span> <span id="histCalLabel">Programacao</span>
+              </button>
+            </div>
+            <div class="flex gap-1.5 items-center" id="schedFilters">
+              <button class="filter-btn active" onclick="filterSched('all',this)">Todos</button>
+              <button class="filter-btn" onclick="filterSched('pendente',this)">Pendentes</button>
+              <button class="filter-btn" onclick="filterSched('enviado',this)">Enviados</button>
+              <button class="filter-btn" onclick="filterSched('erro',this)">Erros</button>
+            </div>
+            <select id="schedBotFilter" onchange="renderSchedules()" class="py-1.5 px-3 rounded-full border border-border/60 bg-surface text-gray-300 text-xs focus:outline-none focus:border-green-500/50">
+              <option value="">Todos os bots</option>
+            </select>
           </div>
-          <select id="schedBotFilter" onchange="renderSchedules()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">
-            <option value="">Todos os bots</option>
-          </select>
         </div>
-        <div id="schedList"></div>
+
+        <!-- Vista Lista -->
+        <div id="schedListView">
+          <div id="schedList"></div>
+        </div>
+
+        <!-- Vista Programacao (calendario semanal de recorrentes) -->
+        <div id="schedCalView" style="display:none">
+          <div class="flex items-center gap-3 mb-4">
+            <button onclick="histCalNav(-1)" class="bg-surface border border-border/60 text-gray-400 w-8 h-8 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-sm">&#8249;</button>
+            <span class="text-[13px] font-semibold text-gray-200 min-w-[140px] text-center" id="histWeekLabel"></span>
+            <button onclick="histCalNav(1)" class="bg-surface border border-border/60 text-gray-400 w-8 h-8 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-sm">&#8250;</button>
+            <button onclick="histCalNav(0)" class="bg-surface border border-border/60 text-gray-400 h-8 px-3 rounded-lg flex items-center justify-center hover:border-green-500/30 hover:text-green-400 transition-all text-[11px] font-semibold">Hoje</button>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5" id="histWeekGrid"></div>
+          <div class="flex gap-4 items-center text-[11px] text-gray-500 mt-3.5 pt-3.5 border-t border-border-light/40">
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-green-500"></div> Diario</div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-blue-500"></div> Dias uteis</div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-sm bg-amber-500"></div> Semanal</div>
+          </div>
+        </div>
       </div>
 
       <!-- Composer -->
       <div class="panel" id="panel-composer">
-        <div class="composer-layout">
-          <div class="composer-editor">
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 sm:gap-6 items-start">
+          <div class="flex flex-col gap-4">
+            <div class="bg-surface border border-border-light/60 rounded-xl overflow-hidden shadow-sm">
 
-            <!-- Step 1: Bot -->
-            <div class="composer-step">
-              <div class="composer-step-header">
-                <span class="step-number">1</span>
-                <span>Selecione o bot de destino</span>
-              </div>
-              <div class="composer-step-body">
-                <select id="compBot" onchange="updatePreview()" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px">
+              <!-- Destino -->
+              <div class="p-4 pb-3.5">
+                <label class="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Destino</label>
+                <select id="compBot" onchange="updatePreview()" class="w-full py-2 px-3 border border-border/60 rounded-lg bg-[#0c0f0c] text-gray-200 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
                   <option value="">Carregando bots...</option>
                 </select>
               </div>
-            </div>
 
-            <!-- Step 2: Message content -->
-            <div class="composer-step">
-              <div class="composer-step-header">
-                <span class="step-number">2</span>
-                <span>Conteudo da mensagem</span>
-              </div>
-              <div class="composer-step-body">
-                <div class="msg-blocks" id="msgBlocks">
-                  <div class="msg-block" data-block="text">
-                    <div class="msg-block-header">
-                      <span class="msg-block-type">Texto</span>
+              <div class="mx-4 border-t border-border-light/20"></div>
+
+              <!-- Mensagem -->
+              <div class="p-4 pb-3.5">
+                <label class="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Mensagem</label>
+                <div class="flex flex-col gap-3" id="msgBlocks">
+                  <div class="border border-border/60 rounded-lg p-3.5 bg-surface-2" data-block="text">
+                    <div class="flex items-center justify-between mb-2.5">
+                      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Texto</span>
                     </div>
-                    <textarea id="compText" rows="4" placeholder="Digite sua mensagem... (ate 2.000 caracteres)" maxlength="2000" oninput="updatePreview();updateCharCount()" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:9px 12px;border-radius:var(--radius);resize:vertical;min-height:100px;color:var(--text)"></textarea>
-                    <div class="form-hint"><span id="charCount">0</span>/2000 caracteres</div>
+                    <textarea id="compText" rows="4" placeholder="Digite sua mensagem... (ate 2.000 caracteres)" maxlength="2000" oninput="updatePreview();updateCharCount()" class="w-full bg-[#0c0f0c] border border-border/60 py-2 px-3 rounded-lg resize-y min-h-[100px] text-gray-200 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10"></textarea>
+                    <div class="text-[11px] text-gray-500 mt-1"><span id="charCount">0</span>/2000 caracteres</div>
                   </div>
                 </div>
-                <div class="add-element-bar" style="margin-top:12px">
-                  <button class="add-el-btn" onclick="addMediaBlock('photo')" id="addPhotoBtn">
-                    <span class="el-icon">&#128247;</span> Imagem
+                <div class="flex gap-2 flex-wrap mt-3">
+                  <button class="flex items-center gap-1.5 py-2 px-3.5 border border-dashed border-border/60 rounded-lg bg-surface text-gray-400 text-xs font-medium transition-all hover:border-green-500/40 hover:text-green-400 hover:bg-green-500/5" onclick="addMediaBlock('photo')" id="addPhotoBtn">
+                    <span class="text-base">&#128247;</span> Imagem
                   </button>
-                  <button class="add-el-btn" onclick="addMediaBlock('video')" id="addVideoBtn">
-                    <span class="el-icon">&#127909;</span> Video
+                  <button class="flex items-center gap-1.5 py-2 px-3.5 border border-dashed border-border/60 rounded-lg bg-surface text-gray-400 text-xs font-medium transition-all hover:border-green-500/40 hover:text-green-400 hover:bg-green-500/5" onclick="addMediaBlock('video')" id="addVideoBtn">
+                    <span class="text-base">&#127909;</span> Video
                   </button>
                 </div>
               </div>
-            </div>
 
-            <!-- Step 3: Buttons -->
-            <div class="composer-step">
-              <div class="composer-step-header">
-                <span class="step-number">3</span>
-                <span>Botoes (opcional)</span>
-              </div>
-              <div class="composer-step-body">
-                <div class="buttons-list" id="btnEditor">
+              <div class="mx-4 border-t border-border-light/20"></div>
+
+              <!-- Botoes -->
+              <div class="p-4 pb-3.5">
+                <label class="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Botoes <span class="normal-case tracking-normal font-normal text-gray-600">— opcional</span></label>
+                <div class="flex flex-col gap-2" id="btnEditor">
                   <div class="btn-row">
                     <input type="text" placeholder="Texto do botao" class="btn-label" oninput="updatePreview()">
                     <input type="url" placeholder="https://..." class="btn-url" oninput="updatePreview()">
                     <button class="btn-row-remove" onclick="removeBtnRow(this)" title="Remover">&times;</button>
                   </div>
                 </div>
-                <button class="add-btn-link" onclick="addBtnRow()" id="addBtnBtn">+ Adicionar botao</button>
-                <div class="form-hint">Maximo 3 botoes. Tipo: URL externa.</div>
+                <button class="bg-transparent border-none text-green-400 text-xs font-semibold py-1 flex items-center gap-1 hover:text-green-300 mt-1" onclick="addBtnRow()" id="addBtnBtn">+ Adicionar botao</button>
+                <div class="text-[11px] text-gray-500 mt-1">Maximo 3 botoes. Tipo: URL externa.</div>
               </div>
-            </div>
 
-            <!-- Step 4: Envio -->
-            <div class="composer-step">
-              <div class="composer-step-header">
-                <span class="step-number">4</span>
-                <span>Quando enviar</span>
-              </div>
-              <div class="composer-step-body">
-                <div class="send-type-options">
+              <div class="mx-4 border-t border-border-light/20"></div>
+
+              <!-- Agendamento -->
+              <div class="p-4">
+                <label class="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Agendamento</label>
+                <div class="grid grid-cols-2 gap-2">
                   <label class="send-type-option selected" data-type="unico">
-                    <input type="radio" name="sendType" value="unico" checked onchange="sendTypeChanged()">
-                    <div class="send-type-content">
-                      <strong>Envio unico</strong>
-                      <span>Agendar para uma data e horario especificos</span>
-                    </div>
+                    <input type="radio" name="sendType" value="unico" checked onchange="sendTypeChanged()" class="mt-0.5 accent-green-500">
+                    <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Envio unico</strong><span class="text-[11px] text-gray-500">Agendar para uma data e horario especificos</span></div>
                   </label>
                   <label class="send-type-option" data-type="diario">
-                    <input type="radio" name="sendType" value="diario" onchange="sendTypeChanged()">
-                    <div class="send-type-content">
-                      <strong>Diario</strong>
-                      <span>Todos os dias no mesmo horario</span>
-                    </div>
+                    <input type="radio" name="sendType" value="diario" onchange="sendTypeChanged()" class="mt-0.5 accent-green-500">
+                    <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Diario</strong><span class="text-[11px] text-gray-500">Todos os dias no mesmo horario</span></div>
                   </label>
                   <label class="send-type-option" data-type="diasuteis">
-                    <input type="radio" name="sendType" value="diasuteis" onchange="sendTypeChanged()">
-                    <div class="send-type-content">
-                      <strong>Dias uteis</strong>
-                      <span>Segunda a sexta no mesmo horario</span>
-                    </div>
+                    <input type="radio" name="sendType" value="diasuteis" onchange="sendTypeChanged()" class="mt-0.5 accent-green-500">
+                    <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Dias uteis</strong><span class="text-[11px] text-gray-500">Segunda a sexta no mesmo horario</span></div>
                   </label>
                   <label class="send-type-option" data-type="semanal">
-                    <input type="radio" name="sendType" value="semanal" onchange="sendTypeChanged()">
-                    <div class="send-type-content">
-                      <strong>Semanal</strong>
-                      <span>Uma vez por semana no mesmo dia e horario</span>
-                    </div>
+                    <input type="radio" name="sendType" value="semanal" onchange="sendTypeChanged()" class="mt-0.5 accent-green-500">
+                    <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Semanal</strong><span class="text-[11px] text-gray-500">Uma vez por semana no mesmo dia e horario</span></div>
                   </label>
                 </div>
-
-                <div id="schedFields" style="margin-top:14px">
-                  <div class="form-row">
-                    <div class="form-group" id="dateGroup">
-                      <label>Data</label>
-                      <input type="date" id="compDate">
+                <div id="schedFields" class="mt-3.5">
+                  <div class="flex gap-3">
+                    <div class="flex-1" id="dateGroup">
+                      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label>
+                      <input type="text" id="compDate" placeholder="DD/MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
                     </div>
-                    <div class="form-group">
-                      <label>Horario</label>
-                      <input type="time" id="compTime">
+                    <div class="flex-1">
+                      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Horario</label>
+                      <input type="text" id="compTime" placeholder="HH:MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
                     </div>
                   </div>
-                  <div class="form-hint" id="schedHint">Escolha a data e horario do envio.</div>
+                  <div class="text-[11px] text-gray-500 mt-1.5" id="schedHint">Escolha a data e horario do envio.</div>
                 </div>
               </div>
+
             </div>
 
-            <div style="display:flex;gap:10px;padding-top:4px">
-              <button class="btn btn-primary" onclick="submitComposer(false)" style="padding:10px 28px;font-size:14px">Agendar campanha</button>
-              <button class="btn btn-primary" onclick="submitComposer(true)" style="padding:10px 28px;font-size:14px;background:var(--green)">Enviar agora</button>
-              <button class="btn btn-secondary" onclick="resetComposer()">Limpar</button>
+            <div class="flex gap-2.5 pt-1">
+              <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2.5 px-7 rounded-lg transition-all duration-150 text-sm" onclick="submitComposer(false)">Agendar campanha</button>
+              <button class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 px-7 rounded-lg transition-all duration-150 text-sm" onclick="submitComposer(true)">Enviar agora</button>
+              <button class="bg-surface border border-border/60 text-gray-400 font-medium py-2.5 px-5 rounded-lg transition-all duration-150 text-sm hover:border-green-500/40 hover:text-green-400" onclick="resetComposer()">Limpar</button>
             </div>
           </div>
 
           <!-- Preview -->
-          <div class="preview-container">
-            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Preview</div>
+          <div class="sticky top-6">
+            <div class="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-widest">Preview</div>
             <div class="preview-phone">
               <div class="preview-phone-screen">
                 <div class="preview-phone-header">
-                  <div class="avatar">B</div>
-                  <div class="name" id="previewBotName">Bot</div>
+                  <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">B</div>
+                  <div class="text-gray-200 text-[13px] font-semibold" id="previewBotName">Bot</div>
                 </div>
                 <div class="preview-phone-body" id="previewBody">
                   <div class="preview-label">A mensagem aparecera aqui</div>
@@ -523,27 +499,62 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 
       <!-- Config -->
       <div class="panel" id="panel-config">
-        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">Pares configurados</h3>
-        <div class="pares-grid" id="paresList"></div>
-        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">Criar novo par</h3>
-        <div class="config-form">
-          <div class="form-group">
-            <label>Nome do par</label>
-            <input type="text" id="cfgNome" placeholder="Ex: Grupo VIP + Bot Vendas">
+        <h3 class="text-base font-bold mb-4 flex items-center gap-2">
+          Credenciais da API
+          <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full" id="credsStatus"></span>
+        </h3>
+        <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5 mb-8">
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">SendPulse Client ID</label>
+            <input type="text" id="cfgSpId" placeholder="Encontre em sendpulse.com/integrations/api" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
           </div>
-          <div class="form-group">
-            <label>Telegram Group ID</label>
-            <input type="text" id="cfgGroupId" placeholder="-100xxxxxxxxxx">
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">SendPulse Client Secret</label>
+            <input type="password" id="cfgSpSecret" placeholder="Encontre em sendpulse.com/integrations/api" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
           </div>
-          <div class="form-group">
-            <label>Bot SendPulse</label>
-            <select id="cfgBotSelect"><option value="">Carregando bots...</option></select>
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Token do Bot Telegram (monitor)</label>
+            <input type="password" id="cfgTgToken" placeholder="Token do @BotFather" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <div class="text-[11px] text-gray-500 mt-1">Bot que captura mensagens dos grupos. Crie um com @BotFather.</div>
           </div>
-          <div class="form-group">
-            <label>Username do canal (opcional)</label>
-            <input type="text" id="cfgChannelUsername" placeholder="Ex: nucleartraderoficial">
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Dominio publico (webhook)</label>
+            <input type="url" id="cfgWebhook" placeholder="https://seu-app.up.railway.app" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <div class="text-[11px] text-gray-500 mt-1">URL publica do seu deploy (Railway, Render, etc). Necessaria para enviar midias.</div>
           </div>
-          <button class="btn btn-primary" onclick="createPar()">Criar par</button>
+          <hr class="border-border/40 my-4">
+          <h4 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">Google Sheets (Relatorio)</h4>
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Google Service Account Key (base64)</label>
+            <input type="password" id="cfgGoogleKey" placeholder="Cole a chave base64 da service account" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <div class="text-[11px] text-gray-500 mt-1">Chave JSON da conta de servico, codificada em base64. Gere em console.cloud.google.com.</div>
+          </div>
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Google Sheet ID</label>
+            <input type="text" id="cfgSheetId" placeholder="ID da planilha (encontre na URL)" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <div class="text-[11px] text-gray-500 mt-1">O ID esta na URL da planilha: docs.google.com/spreadsheets/d/<b>ID_AQUI</b>/edit</div>
+          </div>
+          <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-5 rounded-lg transition-all duration-150 text-sm" onclick="saveSettings()">Salvar credenciais</button>
+        </div>
+
+        <h3 class="text-base font-bold mb-4">Pares configurados</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 mb-6" id="paresList"></div>
+
+        <h3 class="text-base font-bold mb-4">Criar novo par</h3>
+        <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5">
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Nome do par</label>
+            <input type="text" id="cfgNome" placeholder="Ex: Grupo VIP + Bot Vendas" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+          </div>
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Telegram Group ID</label>
+            <input type="text" id="cfgGroupId" placeholder="-100xxxxxxxxxx" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+          </div>
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot SendPulse</label>
+            <select id="cfgBotSelect" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"><option value="">Carregando bots...</option></select>
+          </div>
+          <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-5 rounded-lg transition-all duration-150 text-sm" onclick="createPar()">Criar par</button>
         </div>
       </div>
     </div>
@@ -551,127 +562,147 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 </div>
 
 <!-- Schedule modal -->
-<div class="modal-overlay hidden" id="schedModal">
-  <div class="modal">
-    <h3>Enviar mensagens selecionadas</h3>
-    <div id="schedModalSummary" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden" id="schedModal">
+  <div class="bg-surface border border-border/60 rounded-2xl p-4 sm:p-6 w-[95%] sm:w-[90%] max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
+    <h3 class="text-base font-bold mb-4">Enviar mensagens selecionadas</h3>
+    <div id="schedModalSummary" class="text-[13px] text-gray-500 mb-3.5"></div>
 
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <label class="send-type-option selected" data-type="agora" style="flex:1;margin:0" onclick="modalModeChanged('agora')">
-        <input type="radio" name="modalMode" value="agora" checked>
-        <div class="send-type-content"><strong>Enviar agora</strong><span>Disparo imediato</span></div>
+    <div class="flex gap-2 mb-3.5">
+      <label class="send-type-option selected flex-1" data-type="agora" onclick="modalModeChanged('agora')">
+        <input type="radio" name="modalMode" value="agora" checked class="accent-green-500">
+        <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Enviar agora</strong><span class="text-[11px] text-gray-500">Disparo imediato</span></div>
       </label>
-      <label class="send-type-option" data-type="agendar" style="flex:1;margin:0" onclick="modalModeChanged('agendar')">
-        <input type="radio" name="modalMode" value="agendar">
-        <div class="send-type-content"><strong>Agendar</strong><span>Escolher data e hora</span></div>
+      <label class="send-type-option flex-1" data-type="agendar" onclick="modalModeChanged('agendar')">
+        <input type="radio" name="modalMode" value="agendar" class="accent-green-500">
+        <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Agendar</strong><span class="text-[11px] text-gray-500">Escolher data e hora</span></div>
       </label>
     </div>
 
+    <!-- Edição de texto, mídia preview e botões (só aparece com 1 mensagem selecionada) -->
+    <div id="modalEditFields" style="display:none">
+      <!-- Preview de mídia -->
+      <div id="modalMediaPreview" class="mb-3.5" style="display:none">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Mídia</label>
+        <div id="modalMediaContainer" class="rounded-lg overflow-hidden border border-border/60 bg-[#0c0f0c]"></div>
+      </div>
+      <!-- Texto editável -->
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Texto da mensagem</label>
+        <textarea id="modalText" rows="4" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 resize-y" placeholder="Texto da mensagem..."></textarea>
+      </div>
+      <!-- Botões -->
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Botões (máx 3)</label>
+        <div id="modalButtons" class="flex flex-col gap-2"></div>
+        <button type="button" onclick="addModalButton()" class="mt-2 text-[11px] text-green-400 hover:text-green-300 font-semibold transition-colors">+ Adicionar botão</button>
+      </div>
+    </div>
+
     <div id="modalSchedFields" style="display:none">
-      <div class="form-group">
-        <label>Tipo de envio</label>
-        <select id="modalRec" onchange="modalRecChanged()">
+      <div class="mb-3.5">
+        <label class="block text-xs font-semibold text-gray-400 mb-1.5">Tipo de envio</label>
+        <select id="modalRec" onchange="modalRecChanged()" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50">
           <option value="">Envio unico</option>
           <option value="diario">Diario</option>
           <option value="diasuteis">Dias uteis</option>
           <option value="semanal">Semanal</option>
         </select>
       </div>
-      <div class="form-row">
-        <div class="form-group" id="modalDateGroup"><label>Data</label><input type="date" id="modalDate"></div>
-        <div class="form-group"><label>Hora</label><input type="time" id="modalTime"></div>
+      <div class="flex gap-3">
+        <div class="flex-1" id="modalDateGroup"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label><input type="text" id="modalDate" placeholder="DD/MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
+        <div class="flex-1"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Hora</label><input type="text" id="modalTime" placeholder="HH:MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-      <button class="btn btn-secondary btn-sm" onclick="closeScheduleModal()">Cancelar</button>
-      <button class="btn btn-primary btn-sm" onclick="confirmScheduleSelected()" id="modalConfirmBtn">Enviar agora</button>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="bg-surface border border-border/60 text-gray-400 text-xs font-medium py-1.5 px-4 rounded-lg transition-all hover:border-green-500/40 hover:text-green-400" onclick="closeScheduleModal()">Cancelar</button>
+      <button class="bg-green-500 hover:bg-green-400 text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150" onclick="confirmScheduleSelected()" id="modalConfirmBtn">Enviar agora</button>
     </div>
   </div>
 </div>
 
 <!-- Edit modal -->
-<div class="modal-overlay hidden" id="editModal">
-  <div class="modal" style="max-width:600px">
-    <h3>Editar campanha</h3>
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden" id="editModal">
+  <div class="bg-surface border border-border/60 rounded-2xl p-4 sm:p-6 w-[95%] sm:w-[90%] max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
+    <h3 class="text-base font-bold mb-4">Editar campanha</h3>
     <input type="hidden" id="editId">
 
-    <div class="form-group">
-      <label>Bot de destino</label>
-      <select id="editBot" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)"></select>
+    <div class="mb-3.5">
+      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot de destino</label>
+      <select id="editBot" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></select>
     </div>
 
-    <div class="form-group">
-      <label>Tipo de midia</label>
-      <select id="editType" onchange="editTypeChanged()" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)">
+    <div class="mb-3.5">
+      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Tipo de midia</label>
+      <select id="editType" onchange="editTypeChanged()" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50">
         <option value="text">Texto</option>
         <option value="photo">Imagem</option>
         <option value="video">Video</option>
       </select>
     </div>
 
-    <div class="form-group" id="editMediaGroup" style="display:none">
-      <label>Midia</label>
-      <div class="upload-zone" id="editUploadZone"
-        ondragover="event.preventDefault();this.classList.add('dragover')"
-        ondragleave="this.classList.remove('dragover')"
-        ondrop="event.preventDefault();this.classList.remove('dragover');handleEditUpload(event.dataTransfer.files[0])">
-        <input type="file" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.gif" onchange="handleEditUpload(this.files[0])">
-        <div class="uz-icon">&#128206;</div>
-        <div class="uz-text">Arraste ou <strong>clique para selecionar</strong></div>
-        <div class="uz-hint">JPG, PNG (2MB) ou MP4 (20MB)</div>
+    <div class="mb-3.5" id="editMediaGroup" style="display:none">
+      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Midia</label>
+      <div class="border-2 border-dashed border-border/60 rounded-lg p-5 text-center cursor-pointer transition-all hover:border-green-500/40 hover:bg-green-500/5 relative" id="editUploadZone"
+        ondragover="event.preventDefault();this.classList.add('border-green-500/40','bg-green-500/5')"
+        ondragleave="this.classList.remove('border-green-500/40','bg-green-500/5')"
+        ondrop="event.preventDefault();this.classList.remove('border-green-500/40','bg-green-500/5');handleEditUpload(event.dataTransfer.files[0])">
+        <input type="file" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.gif" onchange="handleEditUpload(this.files[0])" class="absolute inset-0 opacity-0 cursor-pointer">
+        <div class="text-2xl mb-1 opacity-40">&#128206;</div>
+        <div class="text-xs text-gray-500">Arraste ou <strong class="text-green-400">clique para selecionar</strong></div>
+        <div class="text-[11px] text-gray-600 mt-1">JPG, PNG (10MB) ou MP4 (50MB)</div>
       </div>
       <div id="editUploadPreview"></div>
-      <div id="editUploadProgress" class="upload-progress" style="display:none"><div class="bar" style="width:0%"></div></div>
+      <div id="editUploadProgress" class="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden" style="display:none"><div class="bar h-full bg-green-500 transition-all duration-200" style="width:0%"></div></div>
       <input type="hidden" id="editMediaUrl" value="">
     </div>
 
-    <div class="form-group">
-      <label id="editTextLabel">Texto</label>
-      <textarea id="editText" rows="4" maxlength="2000"></textarea>
+    <div class="mb-3.5">
+      <label class="block text-xs font-semibold text-gray-400 mb-1.5" id="editTextLabel">Texto</label>
+      <textarea id="editText" rows="4" maxlength="2000" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm resize-y min-h-[100px] focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10"></textarea>
     </div>
 
-    <div class="form-group">
-      <label>Botoes inline (max 3)</label>
-      <div class="buttons-list" id="editBtnEditor">
+    <div class="mb-3.5">
+      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Botoes inline (max 3)</label>
+      <div class="flex flex-col gap-2" id="editBtnEditor">
         <div class="btn-row">
           <input type="text" placeholder="Texto do botao" class="btn-label">
           <input type="url" placeholder="https://..." class="btn-url">
           <button class="btn-row-remove" onclick="editRemoveBtnRow(this)">&times;</button>
         </div>
       </div>
-      <button class="add-btn-link" onclick="editAddBtnRow()" id="editAddBtnBtn">+ Adicionar botao</button>
+      <button class="bg-transparent border-none text-green-400 text-xs font-semibold py-1 flex items-center gap-1 hover:text-green-300 mt-1" onclick="editAddBtnRow()" id="editAddBtnBtn">+ Adicionar botao</button>
     </div>
 
-    <div class="form-group">
-      <label>Quando enviar</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
-        <label class="send-type-option selected" data-type="unico" style="margin:0">
-          <input type="radio" name="editSendType" value="unico" checked onchange="editSendTypeChanged()">
-          <div class="send-type-content"><strong>Unico</strong><span>Data e hora</span></div>
+    <div class="mb-3.5">
+      <label class="block text-xs font-semibold text-gray-400 mb-1.5">Quando enviar</label>
+      <div class="grid grid-cols-2 gap-1.5 mb-2.5">
+        <label class="send-type-option selected" data-type="unico">
+          <input type="radio" name="editSendType" value="unico" checked onchange="editSendTypeChanged()" class="accent-green-500">
+          <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Unico</strong><span class="text-[11px] text-gray-500">Data e hora</span></div>
         </label>
-        <label class="send-type-option" data-type="diario" style="margin:0">
-          <input type="radio" name="editSendType" value="diario" onchange="editSendTypeChanged()">
-          <div class="send-type-content"><strong>Diario</strong><span>Mesmo horario</span></div>
+        <label class="send-type-option" data-type="diario">
+          <input type="radio" name="editSendType" value="diario" onchange="editSendTypeChanged()" class="accent-green-500">
+          <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Diario</strong><span class="text-[11px] text-gray-500">Mesmo horario</span></div>
         </label>
-        <label class="send-type-option" data-type="diasuteis" style="margin:0">
-          <input type="radio" name="editSendType" value="diasuteis" onchange="editSendTypeChanged()">
-          <div class="send-type-content"><strong>Dias uteis</strong><span>Seg-sex</span></div>
+        <label class="send-type-option" data-type="diasuteis">
+          <input type="radio" name="editSendType" value="diasuteis" onchange="editSendTypeChanged()" class="accent-green-500">
+          <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Dias uteis</strong><span class="text-[11px] text-gray-500">Seg-sex</span></div>
         </label>
-        <label class="send-type-option" data-type="semanal" style="margin:0">
-          <input type="radio" name="editSendType" value="semanal" onchange="editSendTypeChanged()">
-          <div class="send-type-content"><strong>Semanal</strong><span>Mesmo dia</span></div>
+        <label class="send-type-option" data-type="semanal">
+          <input type="radio" name="editSendType" value="semanal" onchange="editSendTypeChanged()" class="accent-green-500">
+          <div class="flex flex-col gap-0.5"><strong class="text-[13px] text-gray-200">Semanal</strong><span class="text-[11px] text-gray-500">Mesmo dia</span></div>
         </label>
       </div>
-      <div class="form-row">
-        <div class="form-group" id="editDateGroup"><label>Data</label><input type="date" id="editDate"></div>
-        <div class="form-group"><label>Horario</label><input type="time" id="editTime"></div>
+      <div class="flex gap-3">
+        <div class="flex-1" id="editDateGroup"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Data</label><input type="text" id="editDate" placeholder="DD/MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
+        <div class="flex-1"><label class="block text-xs font-semibold text-gray-400 mb-1.5">Horario</label><input type="text" id="editTime" placeholder="HH:MM" maxlength="5" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"></div>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-      <button class="btn btn-secondary btn-sm" onclick="closeEditModal()">Cancelar</button>
-      <button class="btn btn-primary btn-sm" onclick="saveEdit()">Salvar</button>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="bg-surface border border-border/60 text-gray-400 text-xs font-medium py-1.5 px-4 rounded-lg transition-all hover:border-green-500/40 hover:text-green-400" onclick="closeEditModal()">Cancelar</button>
+      <button class="bg-green-500 hover:bg-green-400 text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150" onclick="saveEdit()">Salvar</button>
     </div>
   </div>
 </div>
@@ -685,17 +716,111 @@ let schedules = [];
 let schedFilter = 'all';
 let selectedMsgs = new Set();
 let mediaBlock = null;
+let authToken = localStorage.getItem('sendx_token');
+let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+
+// ── Auth ─────────────────────────────────────────
+function showAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active', 'bg-green-500/10', 'text-green-400'));
+  document.querySelectorAll('.auth-form').forEach(f => f.classList.add('hidden'));
+  const activeTab = document.querySelector(`.auth-tab:nth-child(${tab === 'login' ? 1 : 2})`);
+  activeTab.classList.add('active', 'bg-green-500/10', 'text-green-400');
+  document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.remove('hidden');
+  document.getElementById('authError').style.display = 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) return showAuthError(data.error);
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('sendx_token', authToken);
+    enterApp();
+  } catch { showAuthError('Erro de conexao'); }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  const name = document.getElementById('regName').value;
+  const email = document.getElementById('regEmail').value;
+  const password = document.getElementById('regPassword').value;
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) return showAuthError(data.error);
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('sendx_token', authToken);
+    enterApp();
+  } catch { showAuthError('Erro de conexao'); }
+}
+
+function logout() {
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem('sendx_token');
+  document.getElementById('authPage').style.display = '';
+  document.getElementById('appContainer').classList.remove('flex', 'flex-col', 'md:flex-row');
+  document.getElementById('appContainer').classList.add('hidden');
+}
+
+async function checkAuth() {
+  if (!authToken) return false;
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) { logout(); return false; }
+    currentUser = await res.json();
+    return true;
+  } catch { logout(); return false; }
+}
+
+function enterApp() {
+  document.getElementById('authPage').style.display = 'none';
+  document.getElementById('appContainer').classList.remove('hidden');
+  document.getElementById('appContainer').classList.add('flex', 'flex-col', 'md:flex-row');
+  document.getElementById('userName').textContent = currentUser.name;
+  init();
+}
 
 // ── API ─────────────────────────────────────────
 async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
   const res = await fetch('/api' + path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  return res.json();
+  if (res.status === 401) { logout(); throw new Error('Sessao expirada'); }
+  const data = await res.json();
+  if (!res.ok && data.error) {
+    alert(data.error);
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 // ── Init ────────────────────────────────────────
@@ -709,6 +834,7 @@ async function init() {
   }
   loadBots();
   loadDashboard();
+  loadSettings();
   checkFeedSetup();
 }
 
@@ -727,13 +853,66 @@ async function switchPar() {
   await Promise.all([loadFeed(), loadSchedules(), loadDashboard()]);
 }
 
+// ── Settings ────────────────────────────────────
+async function loadSettings() {
+  try {
+    const s = await api('/settings');
+    document.getElementById('cfgSpId').value = s.sendpulse_id || '';
+    document.getElementById('cfgSpSecret').value = s.sendpulse_secret || '';
+    document.getElementById('cfgTgToken').value = s.telegram_token || '';
+    document.getElementById('cfgWebhook').value = s.webhook_domain || '';
+    document.getElementById('cfgGoogleKey').value = s.google_service_account_key || '';
+    document.getElementById('cfgSheetId').value = s.google_sheet_id || '';
+    updateCredsStatus(s);
+  } catch {}
+}
+
+function updateCredsStatus(s) {
+  const el = document.getElementById('credsStatus');
+  const parts = [];
+  if (s.has_sendpulse) parts.push('SendPulse');
+  if (s.has_telegram) parts.push('Telegram');
+  if (s.has_google) parts.push('Sheets');
+  if (parts.length === 3) {
+    el.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-green-500/10 text-green-400';
+    el.textContent = 'Tudo conectado';
+  } else if (parts.length > 0) {
+    el.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400';
+    el.textContent = parts.join(' + ');
+  } else {
+    el.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400';
+    el.textContent = 'Nao configurado';
+  }
+}
+
+async function saveSettings() {
+  const data = {
+    sendpulse_id: document.getElementById('cfgSpId').value.trim(),
+    sendpulse_secret: document.getElementById('cfgSpSecret').value.trim(),
+    telegram_token: document.getElementById('cfgTgToken').value.trim(),
+    webhook_domain: document.getElementById('cfgWebhook').value.trim(),
+    google_service_account_key: document.getElementById('cfgGoogleKey').value.trim(),
+    google_sheet_id: document.getElementById('cfgSheetId').value.trim(),
+  };
+  try {
+    const s = await api('/settings', { method: 'PUT', body: data });
+    updateCredsStatus(s);
+    alert('Credenciais salvas!');
+    loadBots();
+  } catch (err) {
+    alert('Erro ao salvar: ' + err.message);
+  }
+}
+
 // ── Feed ────────────────────────────────────────
 function checkFeedSetup() {
   const hasSetup = pares.length > 0;
   document.getElementById('feedSetup').style.display = hasSetup ? 'none' : '';
   document.getElementById('feedContent').style.display = hasSetup ? '' : 'none';
   if (!hasSetup) {
-    // Populate bot dropdown in setup
+    const needsCreds = botsList.length === 0;
+    document.getElementById('feedSetupNeedsCreds').style.display = needsCreds ? '' : 'none';
+    document.getElementById('feedSetupForm').style.display = needsCreds ? 'none' : '';
     const sel = document.getElementById('setupBotSelect');
     if (botsList.length > 0) {
       sel.innerHTML = botsList.map(b => `<option value="${b.id}">@${b.username || b.name} (${b.subscribers} inscritos)</option>`).join('');
@@ -749,7 +928,7 @@ async function submitSetup() {
   const botNome = sel.options[sel.selectedIndex]?.text || '';
   if (!nome || !groupId || !botId) return alert('Preencha todos os campos');
 
-  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: botId, sendpulse_bot_nome: botNome, channel_username: null }});
+  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: botId, sendpulse_bot_nome: botNome }});
   pares = await api('/pares');
   renderParSelect();
   if (pares.length > 0) {
@@ -765,7 +944,7 @@ async function loadFeed() {
   const msgs = await api(`/messages?par_id=${currentPar.id}`);
   const list = document.getElementById('msgList');
   if (msgs.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="text-4xl mb-3 opacity-40">&#128225;</div><p>Aguardando mensagens do grupo...</p></div>';
   } else {
     list.innerHTML = msgs.map(renderMsg).join('');
   }
@@ -779,27 +958,13 @@ function renderMsg(m) {
   const labels = { text:'texto', photo:'imagem', video:'video', document:'doc' };
   const time = m.created_at ? m.created_at.slice(11, 16) : '';
   const fileId = m.file_id || '';
-  const isLocal = fileId.startsWith('/uploads/');
+  const previewSrc = m.telegram_media_url || (fileId.startsWith('/uploads/') ? fileId : '');
 
   let mediaHtml = '';
-  const needsUpload = (m.message_type === 'video' || m.message_type === 'photo') && fileId && !isLocal;
-  if (m.message_type === 'photo' && fileId) {
-    if (isLocal) {
-      mediaHtml = `<img src="${fileId}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
-    }
-  } else if (m.message_type === 'video' && fileId) {
-    if (isLocal) {
-      mediaHtml = `<video src="${fileId}" style="max-width:180px;max-height:120px;border-radius:6px;margin-bottom:6px;display:block" controls></video>`;
-    }
-  }
-  if (needsUpload) {
-    mediaHtml = `<div style="background:var(--bg-dark);border-radius:6px;padding:8px;margin-bottom:6px;text-align:center">
-      <div style="font-size:11px;color:var(--warning);margin-bottom:4px">Video grande - upload necessario</div>
-      <label style="display:inline-block;padding:4px 12px;background:var(--primary);color:#fff;border-radius:4px;cursor:pointer;font-size:11px">
-        Fazer upload
-        <input type="file" accept="video/*,image/*" style="display:none" onchange="uploadMsgMedia(${m.id}, this)">
-      </label>
-    </div>`;
+  if (m.message_type === 'photo' && previewSrc) {
+    mediaHtml = `<img src="${esc(previewSrc)}" style="max-width:180px;max-height:120px;border-radius:8px;margin-bottom:6px;display:block;object-fit:cover" onerror="this.style.display='none'">`;
+  } else if (m.message_type === 'video' && previewSrc) {
+    mediaHtml = `<video src="${esc(previewSrc)}" style="max-width:180px;max-height:120px;border-radius:8px;margin-bottom:6px;display:block" controls></video>`;
   }
 
   const uid = 'msg_' + m.id;
@@ -810,21 +975,21 @@ function renderMsg(m) {
 
   let textHtml = '';
   if (text) {
-    textHtml = `<div class="msg-text" id="${uid}" style="overflow:hidden">${esc(displayText)}</div>`;
+    textHtml = `<div class="msg-text" id="${uid}">${esc(displayText)}</div>`;
     if (truncated) {
-      textHtml += `<button onclick="toggleExpand('${uid}',this)" style="background:none;border:none;color:var(--primary);font-size:11px;padding:2px 0;cursor:pointer">Ver mais</button>`;
+      textHtml += `<button onclick="toggleExpand('${uid}',this)" class="bg-transparent border-none text-green-400 text-[11px] py-0.5 cursor-pointer hover:text-green-300">Ver mais</button>`;
     }
   } else if (!fileId) {
-    textHtml = '<div class="msg-text" style="color:var(--muted)">[vazio]</div>';
+    textHtml = '<div class="msg-text text-gray-500">[vazio]</div>';
   }
 
   return `<div class="msg-item">
-    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||fileId)}" data-tgmsgid="${m.telegram_message_id||''}" data-tgchatid="${esc(m.telegram_chat_id||'')}" onchange="toggleMsg(this)">
+    <input type="checkbox" data-id="${m.id}" data-type="${m.message_type}" data-text="${esc(text)}" data-fileid="${esc(fileId)}" data-mediaurl="${esc(m.telegram_media_url||'')}" onchange="toggleMsg(this)" class="mt-0.5 w-4 h-4 accent-green-500 shrink-0">
     <div class="msg-body">
       ${mediaHtml}
       ${textHtml}
       <div class="msg-meta">
-        <span class="badge ${badges[m.message_type]||'badge-text'}">${labels[m.message_type]||m.message_type}</span>
+        <span class="${badges[m.message_type]||'badge-text'}">${labels[m.message_type]||m.message_type}</span>
         <span>${esc(m.from_user)}</span><span>${time}</span>
       </div>
     </div>
@@ -848,27 +1013,6 @@ function toggleExpand(uid, btn) {
   }
 }
 
-async function uploadMsgMedia(msgId, input) {
-  const file = input.files[0];
-  if (!file) return;
-  const label = input.closest('label');
-  const origText = label.textContent;
-  label.textContent = 'Enviando...';
-  label.style.opacity = '0.6';
-  try {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`/api/messages/${msgId}/upload`, { method: 'POST', body: form });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro no upload');
-    loadFeed();
-  } catch (err) {
-    alert('Erro no upload: ' + err.message);
-    label.textContent = origText;
-    label.style.opacity = '1';
-  }
-}
-
 function toggleMsg(cb) { const id = Number(cb.dataset.id); if (cb.checked) selectedMsgs.add(id); else selectedMsgs.delete(id); updateSelBtn(); }
 function updateSelBtn() {
   const btn = document.getElementById('btnAgendarSel');
@@ -881,11 +1025,57 @@ function openScheduleModal() {
   if (selectedMsgs.size === 0) return;
   document.getElementById('schedModalSummary').textContent = `${selectedMsgs.size} mensagem(ns) selecionada(s)`;
   const now = new Date();
-  document.getElementById('modalDate').value = now.toISOString().slice(0, 10);
+  document.getElementById('modalDate').value = toDateInputFormat(now.toISOString());
   document.getElementById('modalTime').value = now.toTimeString().slice(0, 5);
   modalModeChanged('agora');
   document.querySelector('input[name="modalMode"][value="agora"]').checked = true;
+
+  // Se 1 mensagem selecionada, mostrar campos de edição + preview de mídia
+  const editFields = document.getElementById('modalEditFields');
+  const mediaPreview = document.getElementById('modalMediaPreview');
+  const mediaContainer = document.getElementById('modalMediaContainer');
+  if (selectedMsgs.size === 1) {
+    const msgId = [...selectedMsgs][0];
+    const cb = document.querySelector(`#msgList input[data-id="${msgId}"]`);
+    document.getElementById('modalText').value = cb?.dataset.text || '';
+    document.getElementById('modalButtons').innerHTML = '';
+
+    // Preview de mídia
+    const mediaUrl = cb?.dataset.mediaurl || '';
+    const msgType = cb?.dataset.type || 'text';
+    if (mediaUrl && mediaUrl.startsWith('http') && (msgType === 'photo' || msgType === 'video')) {
+      if (msgType === 'photo') {
+        mediaContainer.innerHTML = `<img src="${mediaUrl}" class="w-full max-h-48 object-contain rounded-lg">`;
+      } else {
+        mediaContainer.innerHTML = `<video src="${mediaUrl}" controls class="w-full max-h-48 rounded-lg"></video>`;
+      }
+      mediaPreview.style.display = 'block';
+    } else {
+      mediaContainer.innerHTML = '';
+      mediaPreview.style.display = 'none';
+    }
+
+    editFields.style.display = 'block';
+  } else {
+    editFields.style.display = 'none';
+    mediaPreview.style.display = 'none';
+    mediaContainer.innerHTML = '';
+  }
+
   document.getElementById('schedModal').classList.remove('hidden');
+}
+
+function addModalButton() {
+  const container = document.getElementById('modalButtons');
+  if (container.children.length >= 3) return;
+  const idx = container.children.length;
+  container.insertAdjacentHTML('beforeend', `
+    <div class="btn-row">
+      <input type="text" placeholder="Texto do botão" class="modal-btn-label">
+      <input type="text" placeholder="https://..." class="modal-btn-url">
+      <button type="button" class="btn-row-remove" onclick="this.parentElement.remove()">✕</button>
+    </div>
+  `);
 }
 function closeScheduleModal() { document.getElementById('schedModal').classList.add('hidden'); }
 
@@ -913,28 +1103,46 @@ async function confirmScheduleSelected() {
     const date = document.getElementById('modalDate').value;
     const time = document.getElementById('modalTime').value;
     if (!time) return alert('Informe o horario');
-    if ((rec === '' || rec === 'semanal') && !date) return alert('Informe a data');
+    if ((rec === '' || rec === 'semanal') && !date) return alert('Informe a data (DD/MM)');
+    if ((rec === '' || rec === 'semanal') && !parseDateInput(date)) return alert('Data invalida. Use DD/MM');
     recurrence = rec || null;
     scheduled_at = calcScheduledAt(rec || 'unico', date, time);
   } else {
-    scheduled_at = new Date().toISOString().slice(0, 19);
+    scheduled_at = new Date().toISOString();
   }
 
   const btn = document.getElementById('modalConfirmBtn');
   btn.disabled = true; btn.textContent = 'Enviando...';
 
+  // Collect edited text and buttons (only when 1 message selected)
+  let editedText = null;
+  let editedButtons = null;
+  if (selectedMsgs.size === 1 && document.getElementById('modalEditFields').style.display !== 'none') {
+    editedText = document.getElementById('modalText').value || null;
+    const btnRows = document.querySelectorAll('#modalButtons .btn-row');
+    if (btnRows.length > 0) {
+      const btns = [];
+      btnRows.forEach(row => {
+        const label = row.querySelector('.modal-btn-label')?.value?.trim();
+        const url = row.querySelector('.modal-btn-url')?.value?.trim();
+        if (label && url) btns.push({ text: label, url });
+      });
+      if (btns.length > 0) editedButtons = btns;
+    }
+  }
+
   try {
     for (const cb of checkboxes) {
       const mediaUrl = cb.dataset.mediaurl || null;
-      const fileId = cb.dataset.fileid || null;
+      const telegramFileId = cb.dataset.fileid || null;
+      const hasMedia = (mediaUrl && mediaUrl.startsWith('http')) || (telegramFileId && !telegramFileId.startsWith('/'));
       const sched = await api('/schedules', { method: 'POST', body: {
         par_id: currentPar.id, origem: 'grupo',
-        content_type: cb.dataset.type || 'text',
-        content_text: cb.dataset.text || null,
-        content_file_id: fileId,
-        content_media_url: mediaUrl || null,
-        telegram_message_id: cb.dataset.tgmsgid || null,
-        telegram_chat_id: cb.dataset.tgchatid || null,
+        content_type: hasMedia ? (cb.dataset.type || 'text') : 'text',
+        content_text: editedText !== null ? editedText : (cb.dataset.text || null),
+        content_media_url: (mediaUrl && mediaUrl.startsWith('http')) ? mediaUrl : null,
+        content_file_id: (telegramFileId && !telegramFileId.startsWith('/')) ? telegramFileId : null,
+        buttons: editedButtons,
         scheduled_at, recurrence,
       }});
 
@@ -960,11 +1168,82 @@ async function sendNow(id) {
   }
 }
 
+// ── Mascara DD/MM nos campos de data ─────────────
+document.addEventListener('input', (e) => {
+  const dateIds = ['compDate', 'modalDate', 'editDate'];
+  const timeIds = ['compTime', 'modalTime', 'editTime'];
+  if (dateIds.includes(e.target.id)) {
+    let v = e.target.value.replace(/\D/g, '');
+    if (v.length > 4) v = v.slice(0, 4);
+    if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+    e.target.value = v;
+  }
+  if (timeIds.includes(e.target.id)) {
+    let v = e.target.value.replace(/\D/g, '');
+    if (v.length > 4) v = v.slice(0, 4);
+    if (v.length > 2) v = v.slice(0, 2) + ':' + v.slice(2);
+    e.target.value = v;
+  }
+});
+
+// Converte DD/MM para YYYY-MM-DD (ano atual)
+function parseDateInput(val) {
+  if (!val) return null;
+  const parts = val.split('/');
+  if (parts.length !== 2) return null;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  if (!day || !month || day < 1 || day > 31 || month < 1 || month > 12) return null;
+  const year = new Date().getFullYear();
+  return { y: year, mo: month, d: day };
+}
+
+// Converte ISO ou YYYY-MM-DD para DD/MM
+function toDateInputFormat(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+// ── Helpers de data local ────────────────────────
+function toLocalDateStr(iso) {
+  if (!iso) return 'sem-data';
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function toLocalTimeStr(iso) {
+  if (!iso) return '--:--';
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function todayLocalStr() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
 // ── Schedules ───────────────────────────────────
+let histViewInitialized = false;
 async function loadSchedules() {
-  schedules = await api('/schedules');
+  const all = await api('/schedules');
+  schedules = currentPar ? all.filter(s => s.par_id === currentPar.id) : all;
   populateBotFilter();
   renderSchedules();
+
+  // Atualizar contador de recorrentes no toggle
+  const recCount = schedules.filter(s => s.recurrence && (s.status === 'pendente' || s.status === 'erro')).length;
+  const label = document.getElementById('histCalLabel');
+  if (label) label.textContent = recCount > 0 ? `Programacao (${recCount})` : 'Programacao';
+
+  // Visao padrao inteligente (so na primeira vez)
+  if (!histViewInitialized) {
+    histViewInitialized = true;
+    if (recCount > 0) {
+      switchHistView('calendar');
+    }
+  }
+
+  // Se ja esta na view calendar, re-renderizar
+  if (currentHistView === 'calendar') renderHistCalendar(schedules);
 }
 
 function populateBotFilter() {
@@ -985,70 +1264,133 @@ function filterSched(f, btn) {
   renderSchedules();
 }
 
+function schedDateLabel(dateStr) {
+  if (!dateStr) return 'Sem data';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const d = new Date(dateStr + 'T00:00:00');
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const days = ['Domingo','Segunda','Terca','Quarta','Quinta','Sexta','Sabado'];
+  if (d.getTime() === today.getTime()) return 'Hoje';
+  if (d.getTime() === yesterday.getTime()) return 'Ontem';
+  const diff = today - d;
+  if (diff > 0 && diff < 7 * 86400000) return days[d.getDay()];
+  return `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
 function renderSchedules() {
   let list = schedules;
   const botFilter = document.getElementById('schedBotFilter').value;
   if (['pendente','enviado','erro'].includes(schedFilter)) list = list.filter(s => s.status === schedFilter);
   if (botFilter) list = list.filter(s => (s.sendpulse_bot_id || s.sendpulse_bot_nome) === botFilter);
   const el = document.getElementById('schedList');
-  if (list.length === 0) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128197;</div><p>Nenhum registro encontrado.</p></div>'; return; }
-  el.innerHTML = list.map(s => {
-    const dt = s.scheduled_at ? s.scheduled_at.replace('T', ' ').slice(0, 16) : '';
-    const recBadge = s.recurrence ? `<span class="badge badge-rec">${s.recurrence}</span>` : '';
-    const botLabel = s.sendpulse_bot_nome ? `<span style="color:var(--primary);font-size:11px">${esc(s.sendpulse_bot_nome)}</span>` : '';
-    const typeBadge = s.content_type !== 'text' ? `<span class="badge badge-${s.content_type}">${s.content_type}</span>` : '';
-    const text = s.content_text || `[${s.content_type}]`;
-    const actions = [];
-    if (s.status === 'pendente') {
-      actions.push(`<button onclick="sendNow(${s.id})" style="background:var(--primary);color:#fff;border-color:var(--primary)">Enviar agora</button>`);
-      actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
-      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
-      actions.push(`<button onclick="cancelSchedule(${s.id})">Cancelar</button>`);
-    }
-    if (s.status === 'erro') {
-      actions.push(`<button onclick="sendNow(${s.id})" style="background:var(--primary);color:#fff;border-color:var(--primary)">Enviar agora</button>`);
-      actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
-      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
-    }
-    if (s.status === 'enviado') {
-      actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
-    }
-    return `<div class="sched-item"><div class="sched-info">
-      <div class="sched-text">${esc(text.slice(0,150))}</div>
-      <div class="sched-meta">
-        <span class="badge badge-${s.status}">${s.status}</span> ${typeBadge} ${recBadge} ${botLabel} <span>${dt}</span>
-        ${s.error_msg ? `<span style="color:var(--red);font-size:11px">${esc(s.error_msg.slice(0,80))}</span>` : ''}
-      </div></div><div class="sched-actions">${actions.join('')}</div></div>`;
+  if (list.length === 0) { el.innerHTML = '<div class="empty-state"><div class="text-4xl mb-3 opacity-40">&#128197;</div><p>Nenhum registro encontrado.</p></div>'; return; }
+
+  // Ordenar por data desc
+  list = [...list].sort((a, b) => (b.scheduled_at || '').localeCompare(a.scheduled_at || ''));
+
+  // Agrupar por data LOCAL
+  const groups = new Map();
+  list.forEach(s => {
+    const dateKey = toLocalDateStr(s.scheduled_at);
+    if (!groups.has(dateKey)) groups.set(dateKey, []);
+    groups.get(dateKey).push(s);
+  });
+
+  const todayStr = todayLocalStr();
+
+  el.innerHTML = [...groups.entries()].map(([dateKey, items]) => {
+    const label = schedDateLabel(dateKey === 'sem-data' ? null : dateKey);
+    const isToday = dateKey === todayStr;
+
+    const itemsHtml = items.map(s => {
+      const time = toLocalTimeStr(s.scheduled_at);
+      const dayShort = s.scheduled_at ? new Date(s.scheduled_at).toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0,3) : '';
+      const recBadge = s.recurrence ? `<span class="badge-rec">${s.recurrence}</span>` : '';
+      const botLabel = s.sendpulse_bot_nome ? `<span class="text-green-400">${esc(s.sendpulse_bot_nome)}</span>` : '';
+      const typeBadge = s.content_type !== 'text' ? `<span class="badge-${s.content_type}">${s.content_type}</span>` : '';
+      const text = s.content_text || `[${s.content_type}]`;
+
+      // Thumbnail
+      let thumbHtml = '';
+      if (s.content_media_url && s.content_media_url.startsWith('http')) {
+        if (s.content_type === 'photo') {
+          thumbHtml = `<img src="${esc(s.content_media_url)}" class="sched-thumb" alt="">`;
+        } else if (s.content_type === 'video') {
+          thumbHtml = `<div class="sched-thumb-placeholder">&#9654;</div>`;
+        }
+      }
+
+      // Actions
+      const actions = [];
+      if (s.status === 'pendente') {
+        actions.push(`<button onclick="sendNow(${s.id})" class="!bg-green-500 !text-white !border-green-500">Enviar</button>`);
+        actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+        actions.push(`<button onclick="cancelSchedule(${s.id})">Cancelar</button>`);
+      }
+      if (s.status === 'erro') {
+        actions.push(`<button onclick="sendNow(${s.id})" class="!bg-green-500 !text-white !border-green-500">Retentar</button>`);
+        actions.push(`<button onclick="editSchedule(${s.id})">Editar</button>`);
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+      }
+      if (s.status === 'enviado') {
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+      }
+
+      return `<div class="sched-item">
+        <div class="sched-status-bar st-${s.status}"></div>
+        <div class="sched-date-col">
+          <div class="sched-hour">${time}</div>
+          <div class="sched-day">${dayShort}</div>
+        </div>
+        <div class="sched-body">
+          ${thumbHtml}
+          <div class="sched-content">
+            <div class="sched-text">${esc(text.slice(0,150))}</div>
+            <div class="sched-meta">
+              <span class="badge-${s.status}">${s.status}</span> ${typeBadge} ${recBadge} ${botLabel}
+              ${s.error_msg ? `<span class="text-red-400">${esc(s.error_msg.slice(0,60))}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="sched-actions">${actions.join('')}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="sched-date-group">
+      <div class="sched-date-label ${isToday ? 'is-today' : ''}">
+        ${label}
+        <span class="sched-date-count">${items.length}</span>
+      </div>
+      ${itemsHtml}
+    </div>`;
   }).join('');
 }
 
 async function cancelSchedule(id) { if (!confirm('Cancelar?')) return; await api(`/schedules/${id}`,{method:'DELETE'}); loadSchedules(); loadDashboard(); }
-async function duplicateSchedule(id) {
+function duplicateSchedule(id) {
   const s = schedules.find(x => x.id === id); if (!s) return;
-  await api('/schedules',{method:'POST',body:{par_id:s.par_id,sendpulse_bot_id:s.sendpulse_bot_id,sendpulse_bot_nome:s.sendpulse_bot_nome,origem:s.origem,content_type:s.content_type,content_text:s.content_text,content_file_id:s.content_file_id,content_media_url:s.content_media_url,buttons:s.buttons?JSON.parse(s.buttons):null,scheduled_at:new Date().toISOString().slice(0,16)+':00',recurrence:s.recurrence}});
-  loadSchedules(); loadDashboard();
-}
-async function retrySchedule(id) {
-  const now = new Date(); now.setMinutes(now.getMinutes()+1);
-  await api(`/schedules/${id}`,{method:'PUT',body:{status:'pendente',scheduled_at:now.toISOString().slice(0,19)}});
-  loadSchedules(); loadDashboard();
+  // Abrir edit modal em modo duplicar (cria novo ao salvar)
+  editSchedule(id);
+  document.getElementById('editId').value = 'new_' + id;
+  // Limpar data/hora para o usuario escolher
+  document.getElementById('editDate').value = '';
+  document.getElementById('editTime').value = '';
 }
 
-// ── Edit modal (full composer) ──────────────────
+// ── Edit modal ──────────────────────────────────
 function editSchedule(id) {
   const s = schedules.find(x => x.id === id); if (!s) return;
   document.getElementById('editId').value = s.id;
 
-  // Bot
   const botSel = document.getElementById('editBot');
   botSel.innerHTML = botsList.map(b => `<option value="${b.id}">@${b.username || b.name} (${b.subscribers} inscritos)</option>`).join('');
   botSel.value = s.sendpulse_bot_id || '';
 
-  // Type
   document.getElementById('editType').value = s.content_type || 'text';
   editTypeChanged();
 
-  // Media
   document.getElementById('editMediaUrl').value = s.content_media_url || '';
   const editPreview = document.getElementById('editUploadPreview');
   const editZone = document.getElementById('editUploadZone');
@@ -1063,13 +1405,12 @@ function editSchedule(id) {
     </div>`;
   }
 
-  // Text
   document.getElementById('editText').value = s.content_text || '';
 
-  // Buttons
   const editor = document.getElementById('editBtnEditor');
   editor.innerHTML = '';
-  const btns = s.buttons ? JSON.parse(s.buttons) : [];
+  let btns = [];
+  try { btns = s.buttons ? JSON.parse(s.buttons) : []; } catch(e) {}
   if (btns.length === 0) btns.push({ text: '', url: '' });
   btns.forEach(b => {
     const row = document.createElement('div'); row.className = 'btn-row';
@@ -1078,16 +1419,14 @@ function editSchedule(id) {
   });
   document.getElementById('editAddBtnBtn').style.display = btns.length >= 3 ? 'none' : '';
 
-  // Send type
   const sendType = s.recurrence || 'unico';
   const radio = document.querySelector(`input[name="editSendType"][value="${sendType}"]`);
   if (radio) radio.checked = true;
   editSendTypeChanged();
 
-  // Date/Time
   if (s.scheduled_at) {
-    document.getElementById('editDate').value = s.scheduled_at.slice(0, 10);
-    document.getElementById('editTime').value = s.scheduled_at.slice(11, 16);
+    document.getElementById('editDate').value = toDateInputFormat(s.scheduled_at);
+    document.getElementById('editTime').value = toLocalTimeStr(s.scheduled_at);
   }
 
   document.getElementById('editModal').classList.remove('hidden');
@@ -1103,7 +1442,7 @@ function editTypeChanged() {
 async function handleEditUpload(file) {
   if (!file) return;
   const type = document.getElementById('editType').value;
-  const maxSize = type === 'photo' ? 2*1024*1024 : 20*1024*1024;
+  const maxSize = type === 'photo' ? 10*1024*1024 : 50*1024*1024;
   if (file.size > maxSize) return alert('Arquivo muito grande. Max: ' + (maxSize/1024/1024) + ' MB');
 
   const progressEl = document.getElementById('editUploadProgress');
@@ -1119,6 +1458,7 @@ async function handleEditUpload(file) {
       xhr.onload = () => { if (xhr.status === 200) resolve(JSON.parse(xhr.responseText)); else reject(new Error('Upload falhou')); };
       xhr.onerror = () => reject(new Error('Erro de rede'));
       xhr.open('POST', '/api/upload');
+      xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
       xhr.send(formData);
     });
     document.getElementById('editMediaUrl').value = result.url;
@@ -1143,7 +1483,8 @@ function editSendTypeChanged() {
   document.querySelectorAll('#editModal .send-type-option').forEach(el => el.classList.remove('selected'));
   const opt = document.querySelector(`#editModal .send-type-option[data-type="${type}"]`);
   if (opt) opt.classList.add('selected');
-  document.getElementById('editDateGroup').style.display = (type === 'diario' || type === 'diasuteis') ? 'none' : '';
+  // Sempre mostrar campo data no edit (permite ajustar a data de inicio da recorrencia)
+  document.getElementById('editDateGroup').style.display = '';
 }
 
 function editAddBtnRow() {
@@ -1167,7 +1508,10 @@ function editGetButtons() {
   document.querySelectorAll('#editBtnEditor .btn-row').forEach(r => {
     const text = r.querySelector('.btn-label').value.trim();
     const url = r.querySelector('.btn-url').value.trim();
-    if (text && url) btns.push({ text, type: 'web_url', url });
+    if (text && url) {
+      if (!/^https?:\/\/.+/i.test(url)) { alert('URL do botão inválida: deve começar com http:// ou https://'); return null; }
+      btns.push({ text, type: 'web_url', url });
+    }
   });
   return btns.length > 0 ? btns : null;
 }
@@ -1175,17 +1519,22 @@ function editGetButtons() {
 function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
 
 async function saveEdit() {
-  const id = document.getElementById('editId').value;
+  const rawId = document.getElementById('editId').value;
+  const isDuplicate = rawId.startsWith('new_');
+  const origId = isDuplicate ? rawId.replace('new_', '') : rawId;
   const time = document.getElementById('editTime').value;
   if (!time) return alert('Informe o horario');
   const date = document.getElementById('editDate').value;
   const sendType = document.querySelector('input[name="editSendType"]:checked')?.value || 'unico';
-  if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
+  if (!date) return alert('Informe a data (DD/MM)');
+  const p = parseDateInput(date);
+  if (!p) return alert('Data invalida. Use o formato DD/MM');
 
   const botSel = document.getElementById('editBot');
-  const scheduled_at = calcScheduledAt(sendType, date, time);
+  const [h, m] = time.split(':').map(Number);
+  const scheduled_at = new Date(p.y, p.mo - 1, p.d, h, m, 0).toISOString();
 
-  await api(`/schedules/${id}`, { method: 'PUT', body: {
+  const body = {
     sendpulse_bot_id: botSel.value,
     sendpulse_bot_nome: botSel.options[botSel.selectedIndex]?.text?.split(' (')[0] || '',
     content_type: document.getElementById('editType').value,
@@ -1195,89 +1544,353 @@ async function saveEdit() {
     scheduled_at,
     recurrence: sendType === 'unico' ? null : sendType,
     status: 'pendente',
-  }});
-  closeEditModal(); loadSchedules();
+  };
+
+  if (isDuplicate) {
+    // Duplicar: criar novo schedule
+    const original = schedules.find(s => s.id == origId);
+    body.par_id = original?.par_id || (currentPar ? currentPar.id : null);
+    body.origem = original?.origem || 'manual';
+    body.content_file_id = original?.content_file_id || null;
+    await api('/schedules', { method: 'POST', body });
+  } else {
+    // Editar: atualizar existente
+    await api(`/schedules/${rawId}`, { method: 'PUT', body });
+  }
+  closeEditModal(); loadSchedules(); loadDashboard();
 }
 
 // ── Dashboard ───────────────────────────────────
 async function loadDashboard() {
-  // Load all schedules for dashboard
-  const all = await api('/schedules');
-  const enviados = all.filter(s => s.status === 'enviado');
-  const pendentes = all.filter(s => s.status === 'pendente');
-  const erros = all.filter(s => s.status === 'erro');
-  const today = new Date().toISOString().slice(0, 10);
-  const agendadosHoje = pendentes.filter(s => s.scheduled_at && s.scheduled_at.startsWith(today));
+  const allSchedules = await api('/schedules');
+  const today = todayLocalStr();
+  const container = document.getElementById('dashColumns');
 
-  // Counters
-  document.getElementById('dashCounters').innerHTML = `
-    <div class="stat-card stat-green"><div class="stat-val">${enviados.length}</div><div class="stat-label">Enviados</div></div>
-    <div class="stat-card stat-orange"><div class="stat-val">${pendentes.length}</div><div class="stat-label">Pendentes</div></div>
-    <div class="stat-card stat-orange"><div class="stat-val">${agendadosHoje.length}</div><div class="stat-label">Agendados hoje</div></div>
-    <div class="stat-card stat-red"><div class="stat-val">${erros.length}</div><div class="stat-label">Erros</div></div>`;
-
-  // Ultimos enviados
-  const sentEl = document.getElementById('dashSent');
-  if (enviados.length === 0) {
-    sentEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Nenhum envio ainda.</div>';
-  } else {
-    sentEl.innerHTML = enviados.slice(-10).reverse().map(s => {
-      const dt = s.scheduled_at ? s.scheduled_at.replace('T',' ').slice(0,16) : '';
-      const bot = s.sendpulse_bot_nome || '';
-      return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
-          <span class="badge badge-enviado" style="flex-shrink:0">enviado</span>
-        </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${bot} &middot; ${dt}</div>
-      </div>`;
-    }).join('');
+  if (!pares || pares.length === 0) {
+    container.innerHTML = '<div class="text-gray-500 text-[13px]">Nenhum par configurado.</div>';
+    return;
   }
 
-  // Pendentes
-  const pendEl = document.getElementById('dashPending');
-  if (pendentes.length === 0) {
-    pendEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Nenhum pendente.</div>';
-  } else {
-    pendEl.innerHTML = pendentes.map(s => {
-      const dt = s.scheduled_at ? s.scheduled_at.replace('T',' ').slice(0,16) : '';
-      const bot = s.sendpulse_bot_nome || '';
-      const rec = s.recurrence ? `<span class="badge badge-rec" style="margin-left:4px">${s.recurrence}</span>` : '';
-      return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
-          <div style="flex-shrink:0">
-            <span class="badge badge-pendente">pendente</span>${rec}
+  container.innerHTML = pares.map(par => {
+    const parScheds = allSchedules.filter(s => s.par_id === par.id);
+    const enviados = parScheds.filter(s => s.status === 'enviado').length;
+    const pendentes = parScheds.filter(s => s.status === 'pendente');
+    const agendadosHoje = pendentes.filter(s => s.scheduled_at && toLocalDateStr(s.scheduled_at) === today).length;
+    const recorrentes = pendentes.filter(s => s.recurrence);
+
+    // Msgs recebidas
+    const msgCount = par._msgCount ?? '—';
+
+    // Bot info
+    const botNome = par.sendpulse_bot_nome || '—';
+    const botInfo = botsList ? botsList.find(b => b.id === par.sendpulse_bot_id) : null;
+    const inscritos = botInfo ? botInfo.subscribers : null;
+
+    // Recorrentes detalhes
+    const recHtml = recorrentes.length === 0
+      ? '<span class="text-gray-600">nenhum</span>'
+      : recorrentes.map(s => {
+          const t = toLocalTimeStr(s.scheduled_at);
+          return `<span class="badge-rec">${s.recurrence}</span> <span class="text-gray-400">${t}</span>`;
+        }).join('<br>');
+
+    // Pendentes lista
+    const pendHtml = pendentes.length === 0
+      ? '<div class="text-gray-600 text-[11px]">nenhum</div>'
+      : pendentes.slice(0, 5).map(s => {
+          const dt = toLocalDateStr(s.scheduled_at).slice(5) + ' ' + toLocalTimeStr(s.scheduled_at);
+          const rec = s.recurrence ? `<span class="badge-rec" style="font-size:9px;padding:1px 4px">${s.recurrence}</span>` : '';
+          return `<div class="text-[11px] text-gray-400 py-0.5">${dt} ${rec} <span class="text-gray-500">${esc((s.content_text||'[midia]').slice(0,30))}</span></div>`;
+        }).join('');
+
+    return `<div class="bg-surface border border-border-light/60 rounded-xl shadow-sm overflow-hidden">
+      <div class="p-4 px-5 border-b border-border-light/40 bg-green-500/[0.04]">
+        <h3 class="text-sm font-bold text-green-400">${esc(par.nome)}</h3>
+        <div class="text-[11px] text-gray-500 mt-1">${esc(botNome)}${inscritos != null ? ` &middot; ${inscritos} inscritos` : ''}</div>
+      </div>
+      <div class="p-4 px-5">
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-green-400">${enviados}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Enviados</div>
+          </div>
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-amber-400">${agendadosHoje}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Agendados hoje</div>
+          </div>
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-blue-400">${msgCount}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Msgs recebidas</div>
+          </div>
+          <div class="bg-[#0c0f0c] rounded-lg p-3 text-center">
+            <div class="text-xl font-extrabold text-purple-400">${recorrentes.length}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Recorrentes</div>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${bot} &middot; ${dt}
-          <button onclick="sendNow(${s.id})" style="margin-left:8px;background:var(--primary);color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">Enviar</button>
-        </div>
-      </div>`;
-    }).join('');
+        ${recorrentes.length > 0 ? `
+        <div class="mb-3">
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Programacoes ativas</div>
+          <div class="text-[12px]">${recHtml}</div>
+        </div>` : ''}
+        ${pendentes.length > 0 ? `
+        <div>
+          <div class="text-[11px] font-semibold text-gray-400 mb-1.5">Proximos envios</div>
+          ${pendHtml}
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Carregar contagem de mensagens para cada par
+  for (const par of pares) {
+    try {
+      const msgs = await api(`/messages?par_id=${par.id}`);
+      par._msgCount = msgs.length;
+    } catch { par._msgCount = 0; }
+  }
+  // Re-render com contagens atualizadas
+  if (document.getElementById('panel-dashboard').classList.contains('active')) {
+    const updatedContainer = document.getElementById('dashColumns');
+    // Atualizar só os contadores de msgs sem re-render completo
+    pares.forEach((par, i) => {
+      const cols = updatedContainer.querySelectorAll('.bg-surface');
+      if (cols[i]) {
+        const msgEl = cols[i].querySelectorAll('.text-blue-400')[0];
+        if (msgEl) msgEl.textContent = par._msgCount ?? 0;
+      }
+    });
+  }
+}
+
+// ── Hist Calendar (Programacao) ──────────────────
+let histCalOffset = 0;
+let currentHistView = 'list'; // 'list' or 'calendar'
+
+function switchHistView(view) {
+  currentHistView = view;
+  const btns = document.querySelectorAll('#histViewToggle .hist-toggle-btn');
+  btns.forEach(b => b.classList.remove('active'));
+  btns[view === 'list' ? 0 : 1].classList.add('active');
+
+  document.getElementById('schedListView').style.display = view === 'list' ? '' : 'none';
+  document.getElementById('schedCalView').style.display = view === 'calendar' ? '' : 'none';
+  document.getElementById('schedFilters').style.display = view === 'list' ? 'flex' : 'none';
+  document.getElementById('schedBotFilter').style.display = view === 'list' ? '' : 'none';
+
+  if (view === 'calendar') renderHistCalendar(schedules);
+}
+
+function histCalNav(dir) {
+  if (dir === 0) histCalOffset = 0;
+  else histCalOffset += dir;
+  renderHistCalendar(schedules);
+}
+
+function getWeekDays(offset) {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + (offset * 7));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+function fmtDateISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function projectRecurrents(allSchedules, weekDays) {
+  const items = [];
+  const weekStart = fmtDateISO(weekDays[0]);
+  const weekEnd = fmtDateISO(weekDays[6]);
+
+  allSchedules.forEach(s => {
+    if (!s.recurrence || !s.scheduled_at) return;
+    if (s.status !== 'pendente' && s.status !== 'erro') return;
+
+    const schedDate = toLocalDateStr(s.scheduled_at);
+    const schedTime = toLocalTimeStr(s.scheduled_at);
+    const origDate = new Date(s.scheduled_at);
+    const origDayOfWeek = origDate.getDay();
+
+    weekDays.forEach(day => {
+      const dayStr = fmtDateISO(day);
+      const dow = day.getDay();
+
+      if (s.recurrence === 'diario') {
+        if (dayStr >= schedDate) {
+          items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
+        }
+      } else if (s.recurrence === 'diasuteis') {
+        if (dow >= 1 && dow <= 5 && dayStr >= schedDate) {
+          items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
+        }
+      } else if (s.recurrence === 'semanal') {
+        if (dow === origDayOfWeek && dayStr >= schedDate) {
+          items.push({ ...s, displayDate: dayStr, scheduled_at_display: `${dayStr}T${schedTime}`, projected: dayStr !== schedDate });
+        }
+      }
+    });
+  });
+
+  return items;
+}
+
+function getNextSendLabel(scheduledTime) {
+  const now = new Date();
+  const [h, m] = scheduledTime.split(':').map(Number);
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+  const diff = target - now;
+  if (diff <= 0) return null;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `em ${mins}min`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `em ${hrs}h${remMins}min` : `em ${hrs}h`;
+}
+
+function getLastSendInfo(scheduleId, allSchedules) {
+  // Procura schedules enviados com mesmo content_text ou bot que possam ser envios passados dessa recorrencia
+  const current = allSchedules.find(s => s.id === scheduleId);
+  if (!current) return null;
+  const past = allSchedules
+    .filter(s => s.id !== scheduleId && s.status === 'enviado' && s.sendpulse_bot_id === current.sendpulse_bot_id && s.content_text === current.content_text)
+    .sort((a, b) => (b.scheduled_at || '').localeCompare(a.scheduled_at || ''));
+  if (past.length === 0) return null;
+  const last = past[0];
+  const dt = last.scheduled_at ? toLocalDateStr(last.scheduled_at).slice(5) + ' ' + toLocalTimeStr(last.scheduled_at) : '';
+  return { status: 'enviado', date: dt };
+}
+
+function getBotSubscribers(botId) {
+  if (!botId || !botsList) return null;
+  const bot = botsList.find(b => b.id === botId);
+  return bot ? bot.subscribers : null;
+}
+
+function renderHistCalendar(allSchedules) {
+  const weekDays = getWeekDays(histCalOffset);
+  const todayStr = fmtDateISO(new Date());
+  const dayLabels = ['Seg','Ter','Qua','Qui','Sex','Sab','Dom'];
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  const d0 = weekDays[0], d6 = weekDays[6];
+  document.getElementById('histWeekLabel').textContent =
+    `${d0.getDate()} ${months[d0.getMonth()]} — ${d6.getDate()} ${months[d6.getMonth()]}`;
+
+  const items = projectRecurrents(allSchedules, weekDays);
+
+  const grid = document.getElementById('histWeekGrid');
+  grid.innerHTML = weekDays.map((day, i) => {
+    const dayStr = fmtDateISO(day);
+    const isToday = dayStr === todayStr;
+    const dayItems = items
+      .filter(it => it.displayDate === dayStr)
+      .sort((a, b) => {
+        const tA = toLocalTimeStr(a.scheduled_at_display || a.scheduled_at);
+        const tB = toLocalTimeStr(b.scheduled_at_display || b.scheduled_at);
+        return tA.localeCompare(tB);
+      });
+
+    const cardsHtml = dayItems.length === 0
+      ? '<div class="text-[10px] text-gray-600 text-center py-6">—</div>'
+      : dayItems.map(s => {
+          const time = toLocalTimeStr(s.scheduled_at_display || s.scheduled_at);
+          const text = s.content_text || `[${s.content_type}]`;
+          const recClass = s.recurrence ? `rec-${s.recurrence}` : '';
+          const erroClass = s.status === 'erro' ? 'wg-erro' : '';
+          const projClass = s.projected ? 'projected' : '';
+          const recBadge = s.recurrence ? `<span class="badge-rec" style="font-size:10px;padding:1px 6px">${s.recurrence}</span>` : '';
+          const errMsg = s.status === 'erro' && s.error_msg ? `<div class="wg-card-error">${esc(s.error_msg.slice(0, 50))}</div>` : '';
+
+          // Alcance: bot + inscritos
+          const subs = getBotSubscribers(s.sendpulse_bot_id);
+          const botLine = s.sendpulse_bot_nome
+            ? `<div class="wg-card-bot">${esc(s.sendpulse_bot_nome)}${subs != null ? ` <span class="text-gray-500">· ${subs} inscr.</span>` : ''}</div>`
+            : '';
+
+          // Status do ultimo envio
+          const lastSend = getLastSendInfo(s.id, allSchedules);
+          const lastSendHtml = lastSend
+            ? `<div class="wg-card-lastsend"><span class="text-green-500">&#10003;</span> ${lastSend.date}</div>`
+            : `<div class="wg-card-lastsend"><span class="text-gray-600">—</span> <span class="text-gray-600">sem envios</span></div>`;
+
+          // Indicador proximo envio
+          let nextLabel = '';
+          if (isToday && s.status === 'pendente') {
+            const lbl = getNextSendLabel(time);
+            if (lbl) nextLabel = `<div class="wg-card-next">${lbl}</div>`;
+          }
+
+          // Acoes
+          let actions = `<button onclick="editSchedule(${s.id})">Editar</button>`;
+          if (s.status === 'erro') {
+            actions += `<button class="wg-btn-retry" onclick="sendNow(${s.id})">Retentar</button>`;
+          }
+          if (s.recurrence) {
+            actions += `<button onclick="skipOneSchedule(${s.id})">Pular proximo</button>`;
+          }
+          actions += `<button class="wg-btn-danger" onclick="deleteRecSchedule(${s.id})">Excluir ${s.recurrence ? 'tudo' : ''}</button>`;
+
+          return `<div class="wg-card ${recClass} ${erroClass} ${projClass}">
+            <div class="wg-card-time">${time}</div>
+            ${nextLabel}
+            <div class="wg-card-text">${esc(text.slice(0, 30))}</div>
+            ${botLine}
+            <div class="wg-card-meta">${s.status === 'erro' ? '<span class="badge-erro" style="font-size:10px;padding:1px 6px">erro</span>' : ''} ${recBadge}</div>
+            ${lastSendHtml}
+            ${errMsg}
+            <div class="wg-card-actions">${actions}</div>
+          </div>`;
+        }).join('');
+
+    return `<div class="wg-col">
+      <div class="wg-col-header ${isToday ? 'today' : 'other'}">
+        ${dayLabels[i]}<br><span class="text-[13px]">${day.getDate()}</span>
+      </div>
+      <div class="wg-col-body ${isToday ? 'bg-green-500/[0.03] rounded-b-lg border border-green-500/10 border-t-0' : ''}">${cardsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+async function skipOneSchedule(id) {
+  const s = schedules.find(x => x.id === id);
+  if (!s || !s.recurrence) return;
+  if (!confirm('Pular o proximo envio e avancar para o seguinte?')) return;
+
+  const current = new Date(s.scheduled_at);
+  let next = new Date(current);
+
+  if (s.recurrence === 'diario') {
+    next.setDate(next.getDate() + 1);
+  } else if (s.recurrence === 'diasuteis') {
+    do { next.setDate(next.getDate() + 1); } while (next.getDay() === 0 || next.getDay() === 6);
+  } else if (s.recurrence === 'semanal') {
+    next.setDate(next.getDate() + 7);
   }
 
-  // Erros
-  const errEl = document.getElementById('dashErrors');
-  const errCard = document.getElementById('dashErrorsCard');
-  if (erros.length === 0) {
-    if (errCard) errCard.style.display = 'none';
-  } else {
-    if (errCard) errCard.style.display = '';
-    errEl.innerHTML = erros.slice(-5).reverse().map(s => {
-      const dt = s.scheduled_at ? s.scheduled_at.replace('T',' ').slice(0,16) : '';
-      return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span>${esc((s.content_text||'[midia]').slice(0,60))}</span>
-          <span class="badge badge-erro" style="flex-shrink:0">erro</span>
-        </div>
-        <div style="font-size:11px;color:var(--red);margin-top:2px">${esc((s.error_msg||'').slice(0,100))}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${dt}
-          <button onclick="sendNow(${s.id})" style="margin-left:8px;background:var(--primary);color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">Retentar</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
+  await api(`/schedules/${id}`, { method: 'PUT', body: {
+    scheduled_at: next.toISOString(),
+    status: 'pendente',
+  }});
+  loadSchedules();
+  loadDashboard();
+}
+
+async function deleteRecSchedule(id) {
+  const s = schedules.find(x => x.id === id);
+  const msg = s && s.recurrence
+    ? 'Excluir esta programacao recorrente?\n\nIsso cancela TODOS os envios futuros deste conteudo.\nOs envios ja realizados nao serao afetados.'
+    : 'Excluir este agendamento?';
+  if (!confirm(msg)) return;
+  await api(`/schedules/${id}`, { method: 'DELETE' });
+  loadSchedules();
+  loadDashboard();
 }
 
 // ── Composer ────────────────────────────────────
@@ -1285,8 +1898,9 @@ function getSendType() { return document.querySelector('input[name="sendType"]:c
 
 function sendTypeChanged() {
   const type = getSendType();
-  document.querySelectorAll('.send-type-option').forEach(el => el.classList.remove('selected'));
-  document.querySelector(`.send-type-option[data-type="${type}"]`).classList.add('selected');
+  document.querySelectorAll('#panel-composer .send-type-option').forEach(el => el.classList.remove('selected'));
+  const opt = document.querySelector(`#panel-composer .send-type-option[data-type="${type}"]`);
+  if (opt) opt.classList.add('selected');
 
   const dateGroup = document.getElementById('dateGroup');
   const hint = document.getElementById('schedHint');
@@ -1307,47 +1921,45 @@ function sendTypeChanged() {
 }
 
 function calcScheduledAt(type, date, time) {
-  if (type === 'unico' || type === 'semanal') {
-    return `${date}T${time}:00`;
-  }
-  // diario / diasuteis: calculate next valid date at given time
-  const now = new Date();
   const [h, m] = time.split(':').map(Number);
+  if (type === 'unico' || type === 'semanal') {
+    const p = parseDateInput(date);
+    if (!p) return null;
+    return new Date(p.y, p.mo - 1, p.d, h, m, 0).toISOString();
+  }
+  const now = new Date();
   let target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
 
-  if (target <= now) target.setDate(target.getDate() + 1); // if time already passed, start tomorrow
+  if (target <= now) target.setDate(target.getDate() + 1);
 
   if (type === 'diasuteis') {
     while (target.getDay() === 0 || target.getDay() === 6) target.setDate(target.getDate() + 1);
   }
-  const y = target.getFullYear();
-  const mo = String(target.getMonth() + 1).padStart(2, '0');
-  const d = String(target.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${d}T${time}:00`;
+  return target.toISOString();
 }
 
 function addMediaBlock(type) {
   if (mediaBlock) return;
   mediaBlock = { type, url: '' };
   const accept = type === 'photo' ? '.jpg,.jpeg,.png,.webp' : '.mp4,.webm,.gif';
-  const hint = type === 'photo' ? 'JPG ou PNG, max 2 MB' : 'MP4, max 20 MB';
+  const hint = type === 'photo' ? 'JPG ou PNG, max 10 MB' : 'MP4, max 50 MB';
   const blocks = document.getElementById('msgBlocks');
-  const html = `<div class="msg-block" data-block="${type}" id="mediaBlockEl">
-    <div class="msg-block-header">
-      <span class="msg-block-type">${type === 'photo' ? '&#128247; Imagem' : '&#127909; Video'}</span>
-      <button class="msg-block-remove" onclick="removeMediaBlock()">&times;</button>
+  const html = `<div class="border border-border/60 rounded-lg p-3.5 bg-surface-2" data-block="${type}" id="mediaBlockEl">
+    <div class="flex items-center justify-between mb-2.5">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">${type === 'photo' ? '&#128247; Imagem' : '&#127909; Video'}</span>
+      <button class="bg-transparent border-none text-gray-500 text-lg px-1 leading-none hover:text-red-400 transition-colors" onclick="removeMediaBlock()">&times;</button>
     </div>
-    <div class="upload-zone" id="compUploadZone"
-      ondragover="event.preventDefault();this.classList.add('dragover')"
-      ondragleave="this.classList.remove('dragover')"
-      ondrop="event.preventDefault();this.classList.remove('dragover');handleUpload(event.dataTransfer.files[0],'comp')">
-      <input type="file" accept="${accept}" onchange="handleUpload(this.files[0],'comp')">
-      <div class="uz-icon">${type === 'photo' ? '&#128247;' : '&#127909;'}</div>
-      <div class="uz-text">Arraste o arquivo ou <strong>clique para selecionar</strong></div>
-      <div class="uz-hint">${hint}</div>
+    <div class="border-2 border-dashed border-border/60 rounded-lg p-5 text-center cursor-pointer transition-all hover:border-green-500/40 hover:bg-green-500/5 relative" id="compUploadZone"
+      ondragover="event.preventDefault();this.classList.add('border-green-500/40','bg-green-500/5')"
+      ondragleave="this.classList.remove('border-green-500/40','bg-green-500/5')"
+      ondrop="event.preventDefault();this.classList.remove('border-green-500/40','bg-green-500/5');handleUpload(event.dataTransfer.files[0],'comp')">
+      <input type="file" accept="${accept}" onchange="handleUpload(this.files[0],'comp')" class="absolute inset-0 opacity-0 cursor-pointer">
+      <div class="text-2xl mb-1 opacity-40">${type === 'photo' ? '&#128247;' : '&#127909;'}</div>
+      <div class="text-xs text-gray-500">Arraste o arquivo ou <strong class="text-green-400">clique para selecionar</strong></div>
+      <div class="text-[11px] text-gray-600 mt-1">${hint}</div>
     </div>
     <div id="compUploadPreview"></div>
-    <div id="compUploadProgress" class="upload-progress" style="display:none"><div class="bar" style="width:0%"></div></div>
+    <div id="compUploadProgress" class="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden" style="display:none"><div class="bar h-full bg-green-500 transition-all duration-200" style="width:0%"></div></div>
     <input type="hidden" id="compMediaUrl" value="">
   </div>`;
   blocks.insertAdjacentHTML('afterbegin', html);
@@ -1366,7 +1978,7 @@ function removeMediaBlock() {
 
 async function handleUpload(file, ctx) {
   if (!file) return;
-  const maxSize = mediaBlock?.type === 'photo' ? 2*1024*1024 : 20*1024*1024;
+  const maxSize = mediaBlock?.type === 'photo' ? 10*1024*1024 : 50*1024*1024;
   if (file.size > maxSize) return alert('Arquivo muito grande. Max: ' + (maxSize/1024/1024) + ' MB');
 
   const progressEl = document.getElementById(ctx + 'UploadProgress');
@@ -1388,15 +2000,14 @@ async function handleUpload(file, ctx) {
       xhr.onload = () => { if (xhr.status === 200) resolve(JSON.parse(xhr.responseText)); else reject(new Error('Upload falhou')); };
       xhr.onerror = () => reject(new Error('Erro de rede'));
       xhr.open('POST', '/api/upload');
+      xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
       xhr.send(formData);
     });
 
-    // Set URL
     const urlInput = document.getElementById(ctx + 'MediaUrl');
     if (urlInput) urlInput.value = result.url;
     if (mediaBlock) mediaBlock.url = result.url;
 
-    // Show preview
     if (zoneEl) zoneEl.style.display = 'none';
     if (previewEl) {
       const isImg = mediaBlock?.type === 'photo';
@@ -1448,7 +2059,10 @@ function getButtons() {
   document.querySelectorAll('#btnEditor .btn-row').forEach(r => {
     const text = r.querySelector('.btn-label').value.trim();
     const url = r.querySelector('.btn-url').value.trim();
-    if (text && url) btns.push({ text, type: 'web_url', url });
+    if (text && url) {
+      if (!/^https?:\/\/.+/i.test(url)) { alert('URL do botão inválida: deve começar com http:// ou https://'); return null; }
+      btns.push({ text, type: 'web_url', url });
+    }
   });
   return btns.length > 0 ? btns : null;
 }
@@ -1473,10 +2087,9 @@ function updatePreview() {
     html = '<div class="preview-label">A mensagem aparecera aqui</div>';
   }
   body.innerHTML = html;
-  // Bot name in preview
   const botSel = document.getElementById('compBot');
   const name = botSel.options[botSel.selectedIndex]?.text || 'Bot';
-  document.getElementById('previewBotName').textContent = name.split(' (')[0]; // strip subscriber count
+  document.getElementById('previewBotName').textContent = name.split(' (')[0];
 }
 
 function resetComposer() {
@@ -1504,13 +2117,14 @@ async function submitComposer(immediate) {
 
   let scheduled_at, recurrence = null;
   if (immediate) {
-    scheduled_at = new Date().toISOString().slice(0, 19);
+    scheduled_at = new Date().toISOString();
   } else {
     const sendType = getSendType();
     const time = document.getElementById('compTime').value;
     if (!time) return alert('Informe o horario');
     const date = document.getElementById('compDate').value;
-    if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data');
+    if ((sendType === 'unico' || sendType === 'semanal') && !date) return alert('Informe a data (DD/MM)');
+    if ((sendType === 'unico' || sendType === 'semanal') && !parseDateInput(date)) return alert('Data invalida. Use DD/MM');
     scheduled_at = calcScheduledAt(sendType, date, time);
     recurrence = sendType === 'unico' ? null : sendType;
   }
@@ -1523,6 +2137,7 @@ async function submitComposer(immediate) {
     content_type: mediaBlock ? mediaBlock.type : 'text',
     content_text: text,
     content_media_url: mediaUrl,
+    content_file_id: null,
     buttons: getButtons(),
     scheduled_at,
     recurrence,
@@ -1561,20 +2176,18 @@ function renderPares() {
   if (pares.length === 0) { el.innerHTML = '<div class="empty-state"><p>Nenhum par cadastrado.</p></div>'; return; }
   el.innerHTML = pares.map(p => `<div class="par-card"><div>
     <div class="par-name">${esc(p.nome)}</div>
-    <div class="par-detail">Grupo: ${esc(p.telegram_group_id)} &middot; Bot: ${esc(p.sendpulse_bot_nome || p.sendpulse_bot_id)}${p.channel_username ? ' &middot; Canal: @' + esc(p.channel_username) : ''}</div>
-  </div><button class="btn btn-danger btn-sm" onclick="deletePar(${p.id})">Desativar</button></div>`).join('');
+    <div class="par-detail">Grupo: ${esc(p.telegram_group_id)} &middot; Bot: ${esc(p.sendpulse_bot_nome || p.sendpulse_bot_id)}</div>
+  </div><button class="bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-medium py-1.5 px-3 rounded-lg transition-all hover:bg-red-500 hover:text-white" onclick="deletePar(${p.id})">Desativar</button></div>`).join('');
 }
 
 async function createPar() {
   const nome = document.getElementById('cfgNome').value.trim();
   const groupId = document.getElementById('cfgGroupId').value.trim();
   const sel = document.getElementById('cfgBotSelect');
-  const channelUsername = document.getElementById('cfgChannelUsername').value.trim();
   if (!nome || !groupId || !sel.value) return alert('Preencha todos os campos');
-  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: sel.value, sendpulse_bot_nome: sel.options[sel.selectedIndex]?.text || '', channel_username: channelUsername || null }});
+  await api('/pares', { method: 'POST', body: { nome, telegram_group_id: groupId, sendpulse_bot_id: sel.value, sendpulse_bot_nome: sel.options[sel.selectedIndex]?.text || '' }});
   document.getElementById('cfgNome').value = '';
   document.getElementById('cfgGroupId').value = '';
-  document.getElementById('cfgChannelUsername').value = '';
   pares = await api('/pares');
   renderParSelect(); renderPares();
 }
@@ -1586,8 +2199,100 @@ async function deletePar(id) {
   renderParSelect(); renderPares();
 }
 
+// ── Relatório ──────────────────────────────────
+let relatorioTab = 'DANI';
+let relatorioPeriodo = 'ontem';
+
+function switchRelatorioTab(tab) {
+  relatorioTab = tab;
+  const dani = document.getElementById('tabDani');
+  const deivid = document.getElementById('tabDeivid');
+  if (tab === 'DANI') {
+    dani.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400';
+    deivid.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
+  } else {
+    deivid.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400';
+    dani.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
+  }
+  loadRelatorio();
+}
+
+function switchRelatorioPeriodo(periodo) {
+  relatorioPeriodo = periodo;
+  document.querySelectorAll('[data-periodo]').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodo));
+  document.getElementById('relatorioCustomDates').style.display = periodo === 'custom' ? 'flex' : 'none';
+  if (periodo !== 'custom') loadRelatorio();
+}
+
+async function loadRelatorio() {
+  const container = document.getElementById('relatorioContent');
+  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    // Verifica se Google Sheets está configurado antes de carregar
+    const s = await api('/settings');
+    if (!s.has_google) {
+      container.innerHTML = '<div class="empty-state" style="max-width:420px;margin:2rem auto;text-align:center;">'
+        + '<div style="font-size:2rem;margin-bottom:.5rem;">&#9888;</div>'
+        + '<div style="font-weight:600;margin-bottom:.5rem;">Google Sheets nao configurado</div>'
+        + '<div style="font-size:.85rem;color:#888;">Va em <b>Configuracoes</b> e preencha a <b>Google Service Account Key</b> e o <b>Google Sheet ID</b> para acessar o relatorio.</div>'
+        + '</div>';
+      return;
+    }
+    let url = `/relatorio?tab=${relatorioTab}&periodo=${relatorioPeriodo}`;
+    if (relatorioPeriodo === 'custom') {
+      const de = document.getElementById('relDe').value;
+      const ate = document.getElementById('relAte').value;
+      if (!de || !ate) { container.innerHTML = '<div class="empty-state">Selecione as datas</div>'; return; }
+      // Convert YYYY-MM-DD to DD/MM/YYYY
+      const fmtDate = d => d.split('-').reverse().join('/');
+      url += `&de=${fmtDate(de)}&ate=${fmtDate(ate)}`;
+    }
+    const data = await api(url);
+    container.innerHTML = renderRelatorio(data);
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar relatório</div>';
+  }
+}
+
+function fmtMoney(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function fmtInt(v) { return Math.round(v).toLocaleString('pt-BR'); }
+
+function renderRelatorioCard(icon, label, value, isMoney, isNetPL) {
+  const formatted = isMoney ? fmtMoney(value) : fmtInt(value);
+  let valueColor = 'text-gray-100';
+  let borderAccent = 'border-border-light/60';
+  if (isNetPL && value > 0) { valueColor = 'text-green-400'; borderAccent = 'border-green-500/30'; }
+  if (isNetPL && value < 0) { valueColor = 'text-red-400'; borderAccent = 'border-red-500/30'; }
+  return `<div class="bg-surface border ${borderAccent} rounded-xl p-5 flex flex-col gap-2 hover:border-green-500/30 transition-all duration-200">
+    <div class="flex items-center gap-2">
+      <span class="text-base opacity-50">${icon}</span>
+      <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">${label}</span>
+    </div>
+    <span class="text-2xl font-bold ${valueColor} tracking-tight">${formatted}</span>
+  </div>`;
+}
+
+function renderRelatorio(data) {
+  const t = data.total;
+  return `
+    <div class="flex items-center gap-3 mb-5">
+      <span class="text-sm font-bold text-gray-200">${data.tab}</span>
+      <span class="text-[11px] text-gray-500 bg-surface-2 px-2.5 py-0.5 rounded-full">${data.periodoLabel}</span>
+    </div>
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      ${renderRelatorioCard('💰', 'Gasto', t.gasto, true, false)}
+      ${renderRelatorioCard('👥', 'FTDs', t.ftds, false, false)}
+      ${renderRelatorioCard('💵', 'FTD Amount', t.ftdAmount, true, false)}
+      ${renderRelatorioCard('🏦', 'Deposits Amount', t.depositsAmount, true, false)}
+      ${renderRelatorioCard('📱', 'Inscritos Telegram', t.telegramJoins, false, false)}
+      ${renderRelatorioCard('📊', 'Net P&L', t.netPL, true, true)}
+    </div>`;
+}
+
 // ── Panels ──────────────────────────────────────
 function showPanel(name) {
+  // Close sidebar on mobile when navigating
+  if (window.innerWidth < 768) document.getElementById('sidebar').classList.add('hidden');
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const panel = document.getElementById(`panel-${name}`);
@@ -1597,9 +2302,10 @@ function showPanel(name) {
   document.getElementById('topbarTitle').textContent = titles[name] || '';
   if (name === 'dashboard') loadDashboard();
   if (name === 'feed') checkFeedSetup();
-  if (name === 'config') renderPares();
+  if (name === 'config') { renderPares(); loadSettings(); }
   if (name === 'schedules') loadSchedules();
   if (name === 'composer') updatePreview();
+  if (name === 'relatorio') loadRelatorio();
 }
 
 // ── Socket ──────────────────────────────────────
@@ -1610,14 +2316,16 @@ socket.on('new_message', (msg) => {
   list.insertAdjacentHTML('afterbegin', renderMsg(msg));
   loadDashboard();
 });
-socket.on('messages_updated', () => { loadFeed(); });
 socket.on('schedule_update', () => { loadSchedules(); loadDashboard(); });
 socket.on('dispatch_fired', () => { loadDashboard(); });
 
 // ── Boot ────────────────────────────────────────
-init();
-sendTypeChanged();
-setInterval(updatePreview, 2000);
+(async () => {
+  const ok = await checkAuth();
+  if (ok) enterApp();
+  // Initialize first auth tab as active
+  showAuthTab('login');
+})();
 </script>
 </body>
 </html>

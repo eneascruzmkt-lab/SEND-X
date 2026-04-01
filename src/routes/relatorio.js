@@ -19,7 +19,7 @@ function getAuth(serviceAccountKey) {
   });
 }
 
-const COL = { gasto: 1, ftds: 2, ftdAmount: 3, depositsAmount: 5, telegramJoins: 7, netPL: 9 };
+const COL = { gasto: 1, ftds: 2, ftdAmount: 3, custoFTD: 4, depositsAmount: 5, telegramJoins: 7, netPL: 9 };
 
 function parseNum(val) {
   if (!val || val === '' || val === '-') return 0;
@@ -38,13 +38,14 @@ function extractRow(row) {
     gasto: parseNum(row[COL.gasto]),
     ftds: parseNum(row[COL.ftds]),
     ftdAmount: parseNum(row[COL.ftdAmount]),
+    custoFTD: parseNum(row[COL.custoFTD]),
     depositsAmount: parseNum(row[COL.depositsAmount]),
     telegramJoins: parseNum(row[COL.telegramJoins]),
     netPL: parseNum(row[COL.netPL]),
   };
 }
 
-const EMPTY = { gasto: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
+const EMPTY = { gasto: 0, ftds: 0, ftdAmount: 0, custoFTD: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
 
 function sumRows(rows) {
   const total = { ...EMPTY };
@@ -57,6 +58,8 @@ function sumRows(rows) {
     total.telegramJoins += r.telegramJoins;
     total.netPL += r.netPL;
   }
+  // Custo por FTD = gasto / ftds (recalcula a partir dos totais)
+  total.custoFTD = total.ftds > 0 ? total.gasto / total.ftds : 0;
   Object.keys(total).forEach(k => { total[k] = Math.round(total[k] * 100) / 100; });
   return total;
 }

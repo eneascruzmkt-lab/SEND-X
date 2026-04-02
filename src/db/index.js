@@ -128,6 +128,7 @@ async function init() {
     ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_service_account_key TEXT;
     ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_sheet_id TEXT;
   `);
+  await pool.query(`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS api_key TEXT;`);
   // Tabela de mapeamento mês → planilha
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sheet_months (

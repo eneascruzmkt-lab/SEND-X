@@ -121,13 +121,22 @@ router.get('/auth/me', auth, async (req, res) => {
   res.json(user);
 });
 
-/** GET /config/sheet-id — endpoint PÚBLICO pro scraper (sem auth) */
+/** GET /config/sheet-id — endpoint pro scraper (autenticado via api_key) */
 router.get('/config/sheet-id', async (req, res) => {
   try {
+    const apiKey = req.query.key;
     const month = req.query.month; // YYYY-MM
+    if (!apiKey) return res.status(401).json({ error: 'API key obrigatória (?key=...)' });
+    if (!month) return res.status(400).json({ error: 'Parâmetro month obrigatório (?month=YYYY-MM)' });
+
+    // Find user by api_key
+    const users = await db.query('SELECT user_id FROM user_settings WHERE api_key=$1', [apiKey]);
+    if (users.length === 0) return res.status(401).json({ error: 'API key inválida' });
+    const userId = users[0].user_id;
+
     const result = await db.query(
-      'SELECT sheet_id FROM sheet_months WHERE month_key=$1 ORDER BY id LIMIT 1',
-      [month]
+      'SELECT sheet_id FROM sheet_months WHERE user_id=$1 AND month_key=$2',
+      [userId, month]
     );
     if (result.length === 0) return res.status(404).json({ error: 'Planilha não configurada para ' + month });
     res.json({ sheet_id: result[0].sheet_id });
@@ -163,10 +172,23 @@ router.get('/settings', async (req, res) => {
     webhook_domain: settings.webhook_domain || '',
     google_service_account_key: settings.google_service_account_key ? '••••••••' : '',
     google_sheet_id: settings.google_sheet_id || '',
+    api_key: settings.api_key || '',
     has_sendpulse: !!(settings.sendpulse_id && settings.sendpulse_secret),
     has_telegram: !!settings.telegram_token,
-    has_google: !!(settings.google_service_account_key && settings.google_sheet_id),
+    has_google: !!(settings.google_service_account_key),
   });
+});
+
+/** PUT /settings/api-key — gerar/atualizar API key */
+router.put('/settings/api-key', async (req, res) => {
+  try {
+    const { api_key } = req.body;
+    if (!api_key) return res.status(400).json({ error: 'api_key obrigatória' });
+    await db.query('UPDATE user_settings SET api_key=$1 WHERE user_id=$2', [api_key, req.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /** PUT /settings — atualizar configurações (não sobrescreve se mascarado) */

@@ -532,6 +532,16 @@ tailwind.config = {
           <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-5 rounded-lg transition-all duration-150 text-sm" onclick="saveSettings()">Salvar credenciais</button>
         </div>
 
+        <h3 class="text-base font-bold mb-4 mt-8">API Key (Scraper)</h3>
+        <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5 mb-8">
+          <div class="text-[11px] text-gray-500 mb-3">Chave usada pelo scraper para acessar suas planilhas. Adicione como SENDX_API_KEY no Railway do scraper.</div>
+          <div class="flex gap-2 items-center">
+            <input type="text" id="cfgApiKey" readonly class="flex-1 bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm font-mono">
+            <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-150 text-sm" onclick="generateApiKey()">Gerar nova</button>
+            <button class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-150 text-sm" onclick="navigator.clipboard.writeText(document.getElementById('cfgApiKey').value);alert('Copiado!')">Copiar</button>
+          </div>
+        </div>
+
         <h3 class="text-base font-bold mb-4 mt-8">Planilhas por mes</h3>
         <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5 mb-8">
           <div class="text-[11px] text-gray-500 mb-3">Cada mes tem sua propria planilha. O scraper e o relatorio usam automaticamente a planilha do mes correto.</div>
@@ -875,9 +885,20 @@ async function loadSettings() {
     document.getElementById('cfgTgToken').value = s.telegram_token || '';
     document.getElementById('cfgWebhook').value = s.webhook_domain || '';
     document.getElementById('cfgGoogleKey').value = s.google_service_account_key || '';
-    document.getElementById('cfgSheetId').value = s.google_sheet_id || '';
+    document.getElementById('cfgApiKey').value = s.api_key || '';
     updateCredsStatus(s);
   } catch {}
+}
+
+async function generateApiKey() {
+  const key = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
+  try {
+    await api('/settings/api-key', { method: 'PUT', body: { api_key: key } });
+    document.getElementById('cfgApiKey').value = key;
+    alert('Nova API key gerada! Atualize SENDX_API_KEY no Railway do scraper.');
+  } catch (err) {
+    alert('Erro: ' + err.message);
+  }
 }
 
 function updateCredsStatus(s) {

@@ -120,16 +120,31 @@ router.get('/relatorio', async (req, res) => {
     let periodoLabel = '';
 
     if (periodo === 'ontem') {
-      if (today === 1) {
-        return res.json({ total: { ...EMPTY }, periodoLabel: 'Sem dados', tab });
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yesterdayDay = yesterday.getDate();
+      const yesterdayMonth = yesterday.getMonth();
+      const yesterdayYear = yesterday.getFullYear();
+
+      let targetRows = allRows;
+      // If yesterday is in a different month, read from that month's sheet
+      if (yesterdayMonth !== month || yesterdayYear !== year) {
+        const prevMonthKey = `${yesterdayYear}-${String(yesterdayMonth + 1).padStart(2, '0')}`;
+        const prevSheetId = await db.getSheetIdForMonth(req.userId, prevMonthKey);
+        if (prevSheetId) {
+          const prevRange = `${tab}!A2:J32`;
+          const prevResult = await sheets.spreadsheets.values.get({ spreadsheetId: prevSheetId, range: prevRange });
+          targetRows = prevResult.data.values || [];
+        } else {
+          return res.json({ total: { ...EMPTY }, periodoLabel: 'Planilha de ' + prevMonthKey + ' nao configurada', tab });
+        }
       }
-      const yesterdayDay = today - 1;
-      // Yesterday = row index (yesterdayDay - 1) since rows start at day 1
-      const row = allRows[yesterdayDay - 1];
+
+      const row = targetRows[yesterdayDay - 1];
       filteredRows = row ? [row] : [];
       const dd = String(yesterdayDay).padStart(2, '0');
-      const mm = String(month + 1).padStart(2, '0');
-      periodoLabel = `${dd}/${mm}/${year}`;
+      const mm = String(yesterdayMonth + 1).padStart(2, '0');
+      periodoLabel = `${dd}/${mm}/${yesterdayYear}`;
 
     } else if (periodo === '7d') {
       const endDate = new Date(year, month, today - 1); // yesterday

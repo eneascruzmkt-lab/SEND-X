@@ -128,6 +128,17 @@ async function init() {
     ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_service_account_key TEXT;
     ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_sheet_id TEXT;
   `);
+  // Tabela de mapeamento mês → planilha
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sheet_months (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      month_key  TEXT NOT NULL,
+      sheet_id   TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, month_key)
+    );
+  `);
   console.log('[db] PostgreSQL schema OK');
 }
 
@@ -462,6 +473,36 @@ module.exports = {
       erros: parseInt(erros.rows[0].c),
       msgs_hoje: parseInt(msgs.rows[0].c),
     };
+  },
+
+  // ── Sheet Months ─────────────────────────────────────
+  // Mapeamento mês (YYYY-MM) → Google Sheet ID
+
+  async getSheetMonths(userId) {
+    const res = await pool.query('SELECT * FROM sheet_months WHERE user_id=$1 ORDER BY month_key DESC', [userId]);
+    return res.rows;
+  },
+
+  async upsertSheetMonth(userId, monthKey, sheetId) {
+    await pool.query(`
+      INSERT INTO sheet_months (user_id, month_key, sheet_id) VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, month_key) DO UPDATE SET sheet_id = $3
+    `, [userId, monthKey, sheetId]);
+  },
+
+  async deleteSheetMonth(userId, monthKey) {
+    await pool.query('DELETE FROM sheet_months WHERE user_id=$1 AND month_key=$2', [userId, monthKey]);
+  },
+
+  async getSheetIdForMonth(userId, monthKey) {
+    const res = await pool.query('SELECT sheet_id FROM sheet_months WHERE user_id=$1 AND month_key=$2', [userId, monthKey]);
+    return res.rows[0]?.sheet_id || null;
+  },
+
+  async getCurrentSheetId(userId) {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return this.getSheetIdForMonth(userId, monthKey);
   },
 
   /** Query genérica — usar com cuidado, preferir métodos específicos */

@@ -422,6 +422,58 @@ router.get('/sendpulse/bots', async (req, res) => {
   }
 });
 
+// ── Sheet Months (mapeamento mês → planilha) ──────────
+
+/** GET /sheet-months — lista planilhas por mês */
+router.get('/sheet-months', auth, async (req, res) => {
+  try {
+    const rows = await db.getSheetMonths(req.userId);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /sheet-months — adiciona/atualiza mês */
+router.post('/sheet-months', auth, async (req, res) => {
+  try {
+    const { month_key, sheet_id } = req.body;
+    if (!month_key || !sheet_id) return res.status(400).json({ error: 'month_key e sheet_id obrigatórios' });
+    await db.upsertSheetMonth(req.userId, month_key, sheet_id);
+    const rows = await db.getSheetMonths(req.userId);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /sheet-months/:monthKey — remove mês */
+router.delete('/sheet-months/:monthKey', auth, async (req, res) => {
+  try {
+    await db.deleteSheetMonth(req.userId, req.params.monthKey);
+    const rows = await db.getSheetMonths(req.userId);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /config/sheet-id — endpoint PÚBLICO pro scraper (sem auth) */
+router.get('/config/sheet-id', async (req, res) => {
+  try {
+    const month = req.query.month; // YYYY-MM
+    // Pega o primeiro usuário que tem sheet_months configurado
+    const result = await db.query(
+      'SELECT sheet_id FROM sheet_months WHERE month_key=$1 ORDER BY id LIMIT 1',
+      [month]
+    );
+    if (result.length === 0) return res.status(404).json({ error: 'Planilha não configurada para ' + month });
+    res.json({ sheet_id: result[0].sheet_id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const relatorioRoutes = require('./relatorio');
 router.use(relatorioRoutes);
 

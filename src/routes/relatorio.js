@@ -76,13 +76,21 @@ function sumRows(rows) {
  */
 router.get('/relatorio', async (req, res) => {
   try {
-    // Credenciais do usuário (DB) — cada conta precisa configurar a sua
+    // Credenciais do usuário (DB)
     const settings = await db.getUserSettings(req.userId);
     const serviceAccountKey = settings.google_service_account_key;
-    const spreadsheetId = settings.google_sheet_id;
 
-    if (!serviceAccountKey || !spreadsheetId) {
+    if (!serviceAccountKey) {
       return res.status(400).json({ error: 'Google Sheets nao configurado. Va em Configuracoes.' });
+    }
+
+    // Busca sheet_id do mês atual no mapeamento, fallback pra settings
+    const now2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const currentMonthKey = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}`;
+    const spreadsheetId = await db.getSheetIdForMonth(req.userId, currentMonthKey) || settings.google_sheet_id;
+
+    if (!spreadsheetId) {
+      return res.status(400).json({ error: 'Planilha nao configurada para ' + currentMonthKey + '. Va em Configuracoes.' });
     }
 
     const tab = req.query.tab === 'DEIVID' ? 'DEIVID' : 'DANI';

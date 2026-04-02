@@ -529,12 +529,24 @@ tailwind.config = {
             <input type="password" id="cfgGoogleKey" placeholder="Cole a chave base64 da service account" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
             <div class="text-[11px] text-gray-500 mt-1">Chave JSON da conta de servico, codificada em base64. Gere em console.cloud.google.com.</div>
           </div>
-          <div class="mb-3.5">
-            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Google Sheet ID</label>
-            <input type="text" id="cfgSheetId" placeholder="ID da planilha (encontre na URL)" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
-            <div class="text-[11px] text-gray-500 mt-1">O ID esta na URL da planilha: docs.google.com/spreadsheets/d/<b>ID_AQUI</b>/edit</div>
-          </div>
           <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-5 rounded-lg transition-all duration-150 text-sm" onclick="saveSettings()">Salvar credenciais</button>
+        </div>
+
+        <h3 class="text-base font-bold mb-4 mt-8">Planilhas por mes</h3>
+        <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5 mb-8">
+          <div class="text-[11px] text-gray-500 mb-3">Cada mes tem sua propria planilha. O scraper e o relatorio usam automaticamente a planilha do mes correto.</div>
+          <div id="sheetMonthsList" class="space-y-2 mb-4"></div>
+          <div class="flex gap-2 items-end">
+            <div class="flex-1">
+              <label class="block text-xs font-semibold text-gray-400 mb-1.5">Mes (YYYY-MM)</label>
+              <input type="month" id="cfgNewMonth" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs font-semibold text-gray-400 mb-1.5">Sheet ID</label>
+              <input type="text" id="cfgNewSheetId" placeholder="ID da planilha" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            </div>
+            <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-150 text-sm whitespace-nowrap" onclick="addSheetMonth()">Adicionar</button>
+          </div>
         </div>
 
         <h3 class="text-base font-bold mb-4">Pares configurados</h3>
@@ -835,6 +847,7 @@ async function init() {
   loadBots();
   loadDashboard();
   loadSettings();
+  loadSheetMonths();
   checkFeedSetup();
 }
 
@@ -892,7 +905,7 @@ async function saveSettings() {
     telegram_token: document.getElementById('cfgTgToken').value.trim(),
     webhook_domain: document.getElementById('cfgWebhook').value.trim(),
     google_service_account_key: document.getElementById('cfgGoogleKey').value.trim(),
-    google_sheet_id: document.getElementById('cfgSheetId').value.trim(),
+    google_sheet_id: '',
   };
   try {
     const s = await api('/settings', { method: 'PUT', body: data });
@@ -901,6 +914,53 @@ async function saveSettings() {
     loadBots();
   } catch (err) {
     alert('Erro ao salvar: ' + err.message);
+  }
+}
+
+// ── Sheet Months ────────────────────────────────
+async function loadSheetMonths() {
+  try {
+    const rows = await api('/sheet-months');
+    const list = document.getElementById('sheetMonthsList');
+    if (rows.length === 0) {
+      list.innerHTML = '<div class="text-xs text-gray-500">Nenhuma planilha configurada.</div>';
+      return;
+    }
+    list.innerHTML = rows.map(r => `
+      <div class="flex items-center justify-between bg-[#0c0f0c] border border-border/40 rounded-lg px-3 py-2">
+        <div>
+          <span class="text-sm font-semibold text-gray-200">${r.month_key}</span>
+          <span class="text-xs text-gray-500 ml-2">${r.sheet_id}</span>
+        </div>
+        <button class="text-red-400 hover:text-red-300 text-xs font-semibold" onclick="deleteSheetMonth('${r.month_key}')">Remover</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Erro ao carregar planilhas:', err);
+  }
+}
+
+async function addSheetMonth() {
+  const monthInput = document.getElementById('cfgNewMonth').value;
+  const sheetId = document.getElementById('cfgNewSheetId').value.trim();
+  if (!monthInput || !sheetId) return alert('Preencha o mes e o Sheet ID');
+  try {
+    await api('/sheet-months', { method: 'POST', body: { month_key: monthInput, sheet_id: sheetId } });
+    document.getElementById('cfgNewMonth').value = '';
+    document.getElementById('cfgNewSheetId').value = '';
+    loadSheetMonths();
+  } catch (err) {
+    alert('Erro: ' + err.message);
+  }
+}
+
+async function deleteSheetMonth(monthKey) {
+  if (!confirm('Remover planilha de ' + monthKey + '?')) return;
+  try {
+    await api('/sheet-months/' + monthKey, { method: 'DELETE' });
+    loadSheetMonths();
+  } catch (err) {
+    alert('Erro: ' + err.message);
   }
 }
 
@@ -2303,7 +2363,7 @@ function showPanel(name) {
   document.getElementById('topbarTitle').textContent = titles[name] || '';
   if (name === 'dashboard') loadDashboard();
   if (name === 'feed') checkFeedSetup();
-  if (name === 'config') { renderPares(); loadSettings(); }
+  if (name === 'config') { renderPares(); loadSettings(); loadSheetMonths(); }
   if (name === 'schedules') loadSchedules();
   if (name === 'composer') updatePreview();
   if (name === 'relatorio') loadRelatorio();

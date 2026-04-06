@@ -149,8 +149,7 @@ router.get('/relatorio', async (req, res) => {
     let periodoLabel = '';
 
     if (periodo === 'ontem') {
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
+      const yesterday = new Date(year, month, today - 1);
       filteredRows = await fetchRowsForRange(sheets, req.userId, tab, yesterday, yesterday, settings);
       const dd = String(yesterday.getDate()).padStart(2, '0');
       const mm = String(yesterday.getMonth() + 1).padStart(2, '0');

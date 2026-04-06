@@ -171,6 +171,13 @@ router.get('/relatorio', async (req, res) => {
       const mesNome = now.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
       periodoLabel = `${mesNome.charAt(0).toUpperCase() + mesNome.slice(1)} ${year}`;
 
+    } else if (periodo === 'lastm') {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // last day of previous month
+      filteredRows = await fetchRowsForRange(sheets, req.userId, tab, startDate, endDate, settings);
+      const mesNome = startDate.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
+      periodoLabel = `${mesNome.charAt(0).toUpperCase() + mesNome.slice(1)} ${startDate.getFullYear()}`;
+
     } else if (periodo === '3m') {
       const startDate = new Date(year, month - 2, 1);
       const endDate = new Date(year, month, today - 1);

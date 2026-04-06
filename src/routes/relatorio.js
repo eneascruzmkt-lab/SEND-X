@@ -64,6 +64,58 @@ function sumRows(rows) {
   return total;
 }
 
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.trim().split('/');
+  if (parts.length !== 3) return null;
+  return new Date(parts[2], parts[1] - 1, parts[0]);
+}
+
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Returns all months (YYYY-MM) between two dates, inclusive.
+ */
+function getMonthsBetween(startDate, endDate) {
+  const months = [];
+  const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  while (cur <= endDate) {
+    months.push(monthKey(cur));
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return months;
+}
+
+/**
+ * Fetches rows from all sheets that cover startDate..endDate, filtered by date range.
+ */
+async function fetchRowsForRange(sheets, userId, tab, startDate, endDate, settings) {
+  const months = getMonthsBetween(startDate, endDate);
+  const allFiltered = [];
+
+  for (const mk of months) {
+    const sheetId = await db.getSheetIdForMonth(userId, mk) || settings.google_sheet_id;
+    if (!sheetId) continue;
+
+    try {
+      const range = `${tab}!A2:J32`;
+      const result = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+      const rows = result.data.values || [];
+
+      for (const row of rows) {
+        const d = parseDate(row[0]);
+        if (d && d >= startDate && d <= endDate) allFiltered.push(row);
+      }
+    } catch (err) {
+      console.warn(`[Relatorio] Could not read sheet for ${mk}: ${err.message}`);
+    }
+  }
+
+  return allFiltered;
+}
+
 /**
  * GET /relatorio?tab=DANI|DEIVID&periodo=ontem|7d|1m|3m|custom&de=DD/MM/YYYY&ate=DD/MM/YYYY
  *
@@ -76,21 +128,11 @@ function sumRows(rows) {
  */
 router.get('/relatorio', async (req, res) => {
   try {
-    // Credenciais do usuário (DB)
     const settings = await db.getUserSettings(req.userId);
     const serviceAccountKey = settings.google_service_account_key;
 
     if (!serviceAccountKey) {
       return res.status(400).json({ error: 'Google Sheets nao configurado. Va em Configuracoes.' });
-    }
-
-    // Busca sheet_id do mês atual no mapeamento, fallback pra settings
-    const now2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-    const currentMonthKey = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}`;
-    const spreadsheetId = await db.getSheetIdForMonth(req.userId, currentMonthKey) || settings.google_sheet_id;
-
-    if (!spreadsheetId) {
-      return res.status(400).json({ error: 'Planilha nao configurada para ' + currentMonthKey + '. Va em Configuracoes.' });
     }
 
     const tab = req.query.tab === 'DEIVID' ? 'DEIVID' : 'DANI';
@@ -103,92 +145,42 @@ router.get('/relatorio', async (req, res) => {
     const month = now.getMonth();
     const year = now.getFullYear();
 
-    // Read all rows of current month (A2:J32 covers days 1-31)
-    const allRange = `${tab}!A2:J32`;
-    const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: allRange });
-    const allRows = result.data.values || [];
-
-    // Parse date from column A (DD/MM/YYYY) and filter rows
-    function parseDate(dateStr) {
-      if (!dateStr) return null;
-      const parts = dateStr.trim().split('/');
-      if (parts.length !== 3) return null;
-      return new Date(parts[2], parts[1] - 1, parts[0]);
-    }
-
     let filteredRows = [];
     let periodoLabel = '';
 
     if (periodo === 'ontem') {
       const yesterday = new Date(now);
       yesterday.setDate(now.getDate() - 1);
-      const yesterdayDay = yesterday.getDate();
-      const yesterdayMonth = yesterday.getMonth();
-      const yesterdayYear = yesterday.getFullYear();
-
-      let targetRows = allRows;
-      // If yesterday is in a different month, read from that month's sheet
-      if (yesterdayMonth !== month || yesterdayYear !== year) {
-        const prevMonthKey = `${yesterdayYear}-${String(yesterdayMonth + 1).padStart(2, '0')}`;
-        const prevSheetId = await db.getSheetIdForMonth(req.userId, prevMonthKey);
-        if (prevSheetId) {
-          const prevRange = `${tab}!A2:J32`;
-          const prevResult = await sheets.spreadsheets.values.get({ spreadsheetId: prevSheetId, range: prevRange });
-          targetRows = prevResult.data.values || [];
-        } else {
-          return res.json({ total: { ...EMPTY }, periodoLabel: 'Planilha de ' + prevMonthKey + ' nao configurada', tab });
-        }
-      }
-
-      const row = targetRows[yesterdayDay - 1];
-      filteredRows = row ? [row] : [];
-      const dd = String(yesterdayDay).padStart(2, '0');
-      const mm = String(yesterdayMonth + 1).padStart(2, '0');
-      periodoLabel = `${dd}/${mm}/${yesterdayYear}`;
+      filteredRows = await fetchRowsForRange(sheets, req.userId, tab, yesterday, yesterday, settings);
+      const dd = String(yesterday.getDate()).padStart(2, '0');
+      const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+      periodoLabel = `${dd}/${mm}/${yesterday.getFullYear()}`;
 
     } else if (periodo === '7d') {
-      const endDate = new Date(year, month, today - 1); // yesterday
+      const endDate = new Date(year, month, today - 1);
       const startDate = new Date(endDate);
-      startDate.setDate(startDate.getDate() - 6); // 7 days back
-
-      for (const row of allRows) {
-        const d = parseDate(row[0]);
-        if (d && d >= startDate && d <= endDate) filteredRows.push(row);
-      }
-
-      // If 7d spans previous month, also read that sheet
-      if (startDate.getMonth() !== month) {
-        // Need to read previous month's sheet too — but sheets are per-month
-        // For now, only show data available in current month's tab
-      }
-
+      startDate.setDate(startDate.getDate() - 6);
+      filteredRows = await fetchRowsForRange(sheets, req.userId, tab, startDate, endDate, settings);
       const fmt = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
       periodoLabel = `${fmt(startDate)} — ${fmt(endDate)}/${year}`;
 
     } else if (periodo === '1m') {
-      const lastDay = Math.min(today - 1, 31);
-      filteredRows = allRows.slice(0, lastDay);
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month, today - 1);
+      filteredRows = await fetchRowsForRange(sheets, req.userId, tab, startDate, endDate, settings);
       const mesNome = now.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
       periodoLabel = `${mesNome.charAt(0).toUpperCase() + mesNome.slice(1)} ${year}`;
 
     } else if (periodo === '3m') {
-      // Current month
-      const lastDay = Math.min(today - 1, 31);
-      filteredRows = allRows.slice(0, lastDay);
-
-      // Read 2 previous months
-      for (let i = 1; i <= 2; i++) {
-        const prevMonth = new Date(year, month - i, 1);
-        const prevMonthName = prevMonth.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
-        // Previous months would be in different sheet tabs or same tab with different data
-        // Since the sheet resets monthly (same tab), we can only show current month
-        // TODO: if historical sheets exist, read them here
-      }
-      periodoLabel = 'Últimos 3 meses (dados do mês atual)';
+      const startDate = new Date(year, month - 2, 1);
+      const endDate = new Date(year, month, today - 1);
+      filteredRows = await fetchRowsForRange(sheets, req.userId, tab, startDate, endDate, settings);
+      const fmtMonth = d => d.toLocaleString('pt-BR', { month: 'short', timeZone: 'America/Sao_Paulo' });
+      periodoLabel = `${fmtMonth(startDate)}/${startDate.getFullYear()} — ${fmtMonth(endDate)}/${endDate.getFullYear()}`;
 
     } else if (periodo === 'custom') {
-      const deStr = req.query.de; // DD/MM/YYYY
-      const ateStr = req.query.ate; // DD/MM/YYYY
+      const deStr = req.query.de;
+      const ateStr = req.query.ate;
       if (!deStr || !ateStr) {
         return res.status(400).json({ error: 'Parâmetros de e ate são obrigatórios para período personalizado' });
       }
@@ -197,16 +189,11 @@ router.get('/relatorio', async (req, res) => {
       if (!startDate || !endDate) {
         return res.status(400).json({ error: 'Formato de data inválido. Use DD/MM/YYYY' });
       }
-
-      for (const row of allRows) {
-        const d = parseDate(row[0]);
-        if (d && d >= startDate && d <= endDate) filteredRows.push(row);
-      }
+      filteredRows = await fetchRowsForRange(sheets, req.userId, tab, startDate, endDate, settings);
       periodoLabel = `${deStr} — ${ateStr}`;
     }
 
     const total = sumRows(filteredRows);
-
     res.json({ total, periodoLabel, tab });
   } catch (err) {
     console.error('[Relatorio] Error:', err.message);

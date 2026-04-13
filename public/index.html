@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SEND X</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23141a14'/%3E%3Cpath d='M7 11l9 5-9 5V11z' fill='%2322c55e'/%3E%3Cpath d='M17 11l9 5-9 5V11z' fill='%2322c55e' opacity='.5'/%3E%3C/svg%3E">
 <script src="/socket.io/socket.io.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -206,23 +207,23 @@ tailwind.config = {
     <div class="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Menu</div>
     <nav class="flex-1 overflow-y-auto px-2 py-1">
       <button class="nav-item active" data-tab="dashboard" onclick="showPanel('dashboard')">
-        <span class="w-5 h-5 flex items-center justify-center text-base">&#9632;</span> Dashboard
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="11" y="2" width="7" height="7" rx="1.5" fill="currentColor" opacity=".5"/><rect x="2" y="11" width="7" height="7" rx="1.5" fill="currentColor" opacity=".5"/><rect x="11" y="11" width="7" height="7" rx="1.5" fill="currentColor" opacity=".3"/></svg> Dashboard
       </button>
       <button class="nav-item" data-tab="relatorio" onclick="showPanel('relatorio')">
-        <span class="w-5 h-5 flex items-center justify-center text-base">&#128202;</span> Relatorio
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><rect x="3" y="10" width="3" height="7" rx="1" fill="currentColor" opacity=".4"/><rect x="8.5" y="6" width="3" height="11" rx="1" fill="currentColor" opacity=".7"/><rect x="14" y="3" width="3" height="14" rx="1" fill="currentColor"/></svg> Relatorio
       </button>
       <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
-        <span class="w-5 h-5 flex items-center justify-center text-base">&#9673;</span> Feed ao vivo
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><path d="M10 3a7 7 0 017 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".5"/><path d="M10 6a4 4 0 014 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".7"/></svg> Feed ao vivo
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">LIVE</span>
       </button>
       <button class="nav-item" data-tab="composer" onclick="showPanel('composer')">
-        <span class="w-5 h-5 flex items-center justify-center text-base">&#9998;</span> Nova campanha
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5 5.5l3 3" stroke="currentColor" stroke-width="1.6"/></svg> Nova campanha
       </button>
       <button class="nav-item" data-tab="schedules" onclick="showPanel('schedules')">
-        <span class="w-5 h-5 flex items-center justify-center text-base">&#128339;</span> Historico
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v4.5l3 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Historico
       </button>
       <button class="nav-item" data-tab="config" onclick="showPanel('config')">
-        <span class="w-5 h-5 flex items-center justify-center text-base">&#9881;</span> Configuracoes
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.5 1.5M14.3 14.3l1.5 1.5M4.2 15.8l1.5-1.5M14.3 5.7l1.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Configuracoes
       </button>
     </nav>
     <div class="p-3 px-4 border-t border-border-light/40">
@@ -2347,7 +2348,7 @@ function renderRelatorioCard(icon, label, value, isMoney, isNetPL) {
   if (isNetPL && value < 0) { valueColor = 'text-red-400'; borderAccent = 'border-red-500/30'; }
   return `<div class="bg-surface border ${borderAccent} rounded-xl p-5 flex flex-col gap-2 hover:border-green-500/30 transition-all duration-200">
     <div class="flex items-center gap-2">
-      <span class="text-base opacity-50">${icon}</span>
+      <span class="w-4 h-4 text-green-500/50">${icon}</span>
       <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">${label}</span>
     </div>
     <span class="text-2xl font-bold ${valueColor} tracking-tight">${formatted}</span>
@@ -2362,15 +2363,15 @@ function renderRelatorio(data) {
       <span class="text-[11px] text-gray-500 bg-surface-2 px-2.5 py-0.5 rounded-full">${data.periodoLabel}</span>
     </div>
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
-      ${renderRelatorioCard('💰', 'Gasto', t.gasto, true, false)}
-      ${renderRelatorioCard('🔗', 'Cliques no Link', t.cliques, false, false)}
-      ${renderRelatorioCard('📝', 'Cadastros', t.cadastros, false, false)}
-      ${renderRelatorioCard('👥', 'FTDs', t.ftds, false, false)}
-      ${renderRelatorioCard('💵', 'FTD Amount', t.ftdAmount, true, false)}
-      ${renderRelatorioCard('🎯', 'Custo por FTD', t.custoFTD, true, false)}
-      ${renderRelatorioCard('🏦', 'Deposits Amount', t.depositsAmount, true, false)}
-      ${renderRelatorioCard('📱', 'Inscritos Telegram', t.telegramJoins, false, false)}
-      ${renderRelatorioCard('📊', 'Net P&L', t.netPL, true, true)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.5 4a.75.75 0 011.5 0v2.5h2a.75.75 0 010 1.5h-2.75A.75.75 0 017.5 8.25V5z" opacity=".9"/></svg>', 'Gasto', t.gasto, true, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 2A1.5 1.5 0 005 3.5v1A1.5 1.5 0 006.5 6h3A1.5 1.5 0 0011 4.5v-1A1.5 1.5 0 009.5 2h-3zM8 8a4 4 0 00-4 4v1.5a.5.5 0 00.5.5h7a.5.5 0 00.5-.5V12a4 4 0 00-4-4z" opacity=".9"/><path d="M13 7l-2 2m0-2l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none" opacity=".6"/></svg>', 'Cliques no Link', t.cliques, false, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11zM5.5 4h5M5.5 6.5h5M5.5 9h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".9"/></svg>', 'Cadastros', t.cadastros, false, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="5" r="2.5" opacity=".9"/><circle cx="11" cy="5.5" r="2" opacity=".5"/><path d="M1 13c0-2.5 2-4.5 5-4.5s5 2 5 4.5" opacity=".8"/><path d="M10 13c0-1.8 1-3.5 3.5-3.5" stroke="currentColor" stroke-width="1.5" fill="none" opacity=".4"/></svg>', 'FTDs', t.ftds, false, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="3" width="12" height="10" rx="2" opacity=".2"/><path d="M2 6h12M6 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".9"/></svg>', 'FTD Amount', t.ftdAmount, true, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6" opacity=".3" fill="currentColor"/><path d="M8 4v4l2.5 2.5" opacity=".9"/></svg>', 'Custo por FTD', t.custoFTD, true, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V3z" opacity=".2"/><path d="M5 8h6M5 5h6M5 11h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".9"/></svg>', 'Deposits Amount', t.depositsAmount, true, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l5 3-5 3V2z" opacity=".9"/><path d="M8 5l5 3-5 3V5z" opacity=".5"/></svg>', 'Inscritos Telegram', t.telegramJoins, false, false)}
+      ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l3-4 3 2 4-6" opacity=".9"/><path d="M10 4h4v4" opacity=".6"/></svg>', 'Net P&L', t.netPL, true, true)}
     </div>`;
 }
 

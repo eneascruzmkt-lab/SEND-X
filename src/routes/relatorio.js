@@ -19,7 +19,7 @@ function getAuth(serviceAccountKey) {
   });
 }
 
-const COL = { gasto: 1, ftds: 2, ftdAmount: 3, custoFTD: 4, depositsAmount: 5, telegramJoins: 7, netPL: 9 };
+const COL = { gasto: 1, cadastros: 2, cliques: 3, ftds: 4, ftdAmount: 5, depositsAmount: 7, telegramJoins: 9, netPL: 11 };
 
 function parseNum(val) {
   if (!val || val === '' || val === '-') return 0;
@@ -36,29 +36,32 @@ function parseNum(val) {
 function extractRow(row) {
   return {
     gasto: parseNum(row[COL.gasto]),
+    cadastros: parseNum(row[COL.cadastros]),
+    cliques: parseNum(row[COL.cliques]),
     ftds: parseNum(row[COL.ftds]),
     ftdAmount: parseNum(row[COL.ftdAmount]),
-    custoFTD: parseNum(row[COL.custoFTD]),
     depositsAmount: parseNum(row[COL.depositsAmount]),
     telegramJoins: parseNum(row[COL.telegramJoins]),
     netPL: parseNum(row[COL.netPL]),
   };
 }
 
-const EMPTY = { gasto: 0, ftds: 0, ftdAmount: 0, custoFTD: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
+const EMPTY = { gasto: 0, cadastros: 0, cliques: 0, ftds: 0, ftdAmount: 0, depositsAmount: 0, telegramJoins: 0, netPL: 0 };
 
 function sumRows(rows) {
   const total = { ...EMPTY };
   for (const row of rows) {
     const r = extractRow(row);
     total.gasto += r.gasto;
+    total.cadastros += r.cadastros;
+    total.cliques += r.cliques;
     total.ftds += r.ftds;
     total.ftdAmount += r.ftdAmount;
     total.depositsAmount += r.depositsAmount;
     total.telegramJoins += r.telegramJoins;
     total.netPL += r.netPL;
   }
-  // Custo por FTD = gasto / ftds (recalcula a partir dos totais)
+  // Custo por FTD = recalcula a partir dos totais (fórmula na planilha, calculamos aqui também)
   total.custoFTD = total.ftds > 0 ? total.gasto / total.ftds : 0;
   Object.keys(total).forEach(k => { total[k] = Math.round(total[k] * 100) / 100; });
   return total;
@@ -100,7 +103,7 @@ async function fetchRowsForRange(sheets, userId, tab, startDate, endDate, settin
     if (!sheetId) continue;
 
     try {
-      const range = `${tab}!A2:J32`;
+      const range = `${tab}!A2:L32`;
       const result = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
       const rows = result.data.values || [];
 

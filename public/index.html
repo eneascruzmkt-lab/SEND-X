@@ -2363,6 +2363,8 @@ function renderRelatorio(data) {
     </div>
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
       ${renderRelatorioCard('💰', 'Gasto', t.gasto, true, false)}
+      ${renderRelatorioCard('🔗', 'Cliques no Link', t.cliques, false, false)}
+      ${renderRelatorioCard('📝', 'Cadastros', t.cadastros, false, false)}
       ${renderRelatorioCard('👥', 'FTDs', t.ftds, false, false)}
       ${renderRelatorioCard('💵', 'FTD Amount', t.ftdAmount, true, false)}
       ${renderRelatorioCard('🎯', 'Custo por FTD', t.custoFTD, true, false)}

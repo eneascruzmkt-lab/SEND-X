@@ -262,7 +262,8 @@ tailwind.config = {
             <div class="w-px h-7 bg-border/40"></div>
             <!-- Period filters -->
             <div class="flex gap-1.5 flex-wrap">
-              <button class="filter-btn active" data-periodo="ontem" onclick="switchRelatorioPeriodo('ontem')">Ontem</button>
+              <button class="filter-btn active" data-periodo="hoje" onclick="switchRelatorioPeriodo('hoje')">Hoje</button>
+              <button class="filter-btn" data-periodo="ontem" onclick="switchRelatorioPeriodo('ontem')">Ontem</button>
               <button class="filter-btn" data-periodo="7d" onclick="switchRelatorioPeriodo('7d')">7 dias</button>
               <button class="filter-btn" data-periodo="1m" onclick="switchRelatorioPeriodo('1m')">Mês atual</button>
               <button class="filter-btn" data-periodo="lastm" onclick="switchRelatorioPeriodo('lastm')">Mês passado</button>
@@ -2284,7 +2285,7 @@ async function deletePar(id) {
 
 // ── Relatório ──────────────────────────────────
 let relatorioTab = 'DANI';
-let relatorioPeriodo = 'ontem';
+let relatorioPeriodo = 'hoje';
 
 function switchRelatorioTab(tab) {
   relatorioTab = tab;

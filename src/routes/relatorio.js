@@ -158,6 +158,24 @@ router.get('/relatorio', async (req, res) => {
       const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
       periodoLabel = `${dd}/${mm}/${yesterday.getFullYear()}`;
 
+    } else if (periodo === 'hoje') {
+      const row = today + 1; // day 1 = row 2
+      const mk = monthKey(now);
+      const sheetId = await db.getSheetIdForMonth(req.userId, mk) || settings.google_sheet_id;
+
+      try {
+        const range = `${tab}!A${row}:L${row}`;
+        const result = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+        const rows = result.data.values || [];
+        if (rows.length > 0) filteredRows = rows;
+      } catch (err) {
+        console.warn(`[Relatorio] Could not read today's row: ${err.message}`);
+      }
+
+      const dd = String(today).padStart(2, '0');
+      const mm = String(month + 1).padStart(2, '0');
+      periodoLabel = `Hoje (${dd}/${mm}/${year})`;
+
     } else if (periodo === '7d') {
       const endDate = new Date(year, month, today - 1);
       const startDate = new Date(endDate);

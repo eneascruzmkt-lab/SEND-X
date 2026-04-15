@@ -1176,7 +1176,10 @@ function modalModeChanged(mode) {
 
 function modalRecChanged() {
   const rec = document.getElementById('modalRec').value;
-  document.getElementById('modalDateGroup').style.display = (rec === 'diario' || rec === 'diasuteis') ? 'none' : '';
+  const dateGroup = document.getElementById('modalDateGroup');
+  const dateLabel = dateGroup.querySelector('label');
+  dateGroup.style.display = (rec === 'diario' || rec === 'diasuteis') ? 'none' : '';
+  dateLabel.textContent = (rec === 'semanal') ? 'Data de inicio' : 'Data';
 }
 
 async function confirmScheduleSelected() {
@@ -1997,8 +2000,10 @@ function sendTypeChanged() {
   const dateGroup = document.getElementById('dateGroup');
   const hint = document.getElementById('schedHint');
 
+  const dateLabel = dateGroup.querySelector('label');
   if (type === 'unico') {
     dateGroup.style.display = '';
+    dateLabel.textContent = 'Data';
     hint.textContent = 'Escolha a data e horario do envio.';
   } else if (type === 'diario') {
     dateGroup.style.display = 'none';
@@ -2008,6 +2013,7 @@ function sendTypeChanged() {
     hint.textContent = 'O primeiro envio sera no proximo dia util no horario escolhido. Depois, segunda a sexta no mesmo horario.';
   } else if (type === 'semanal') {
     dateGroup.style.display = '';
+    dateLabel.textContent = 'Data de inicio';
     hint.textContent = 'A data define o dia da semana. O envio se repete toda semana nesse dia e horario.';
   }
 }

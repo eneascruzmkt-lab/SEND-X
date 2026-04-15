@@ -56,6 +56,7 @@ tailwind.config = {
 .sched-status-bar.st-pendente { @apply bg-amber-500; }
 .sched-status-bar.st-enviado { @apply bg-green-500; }
 .sched-status-bar.st-erro { @apply bg-red-500; }
+.sched-status-bar.st-expirado { @apply bg-gray-500; }
 
 .sched-date-col { @apply shrink-0 w-16 flex flex-col items-center justify-center py-3 border-r border-border-light/30 text-center; }
 .sched-date-col .sched-hour { @apply text-sm font-bold text-gray-200 leading-tight; }
@@ -128,6 +129,8 @@ tailwind.config = {
 .wg-card.projected { @apply opacity-45 border-dashed; }
 .wg-card.wg-erro { @apply border-red-500/40 bg-red-500/[0.04]; }
 .wg-card.wg-erro:hover { @apply border-red-500/60; }
+.wg-card.wg-expirado { @apply border-gray-500/40 bg-gray-500/[0.04] opacity-60; }
+.wg-card.wg-expirado:hover { @apply border-gray-500/60; }
 .wg-card.rec-diario { border-left: 3px solid #22c55e; }
 .wg-card.rec-diasuteis { border-left: 3px solid #3b82f6; }
 .wg-card.rec-semanal { border-left: 3px solid #f59e0b; }
@@ -1365,7 +1368,7 @@ function schedDateLabel(dateStr) {
 function renderSchedules() {
   let list = schedules;
   const botFilter = document.getElementById('schedBotFilter').value;
-  if (['pendente','enviado','erro'].includes(schedFilter)) list = list.filter(s => s.status === schedFilter);
+  if (['pendente','enviado','erro','expirado'].includes(schedFilter)) list = list.filter(s => s.status === schedFilter);
   if (botFilter) list = list.filter(s => (s.sendpulse_bot_id || s.sendpulse_bot_nome) === botFilter);
   const el = document.getElementById('schedList');
   if (list.length === 0) { el.innerHTML = '<div class="empty-state"><div class="text-4xl mb-3 opacity-40">&#128197;</div><p>Nenhum registro encontrado.</p></div>'; return; }
@@ -1419,6 +1422,9 @@ function renderSchedules() {
         actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
       }
       if (s.status === 'enviado') {
+        actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
+      }
+      if (s.status === 'expirado') {
         actions.push(`<button onclick="duplicateSchedule(${s.id})">Duplicar</button>`);
       }
 
@@ -1887,10 +1893,11 @@ function renderHistCalendar(allSchedules) {
           const time = toLocalTimeStr(s.scheduled_at_display || s.scheduled_at);
           const text = s.content_text || `[${s.content_type}]`;
           const recClass = s.recurrence ? `rec-${s.recurrence}` : '';
-          const erroClass = s.status === 'erro' ? 'wg-erro' : '';
+          const erroClass = s.status === 'erro' ? 'wg-erro' : (s.status === 'expirado' ? 'wg-expirado' : '');
           const projClass = s.projected ? 'projected' : '';
           const recBadge = s.recurrence ? `<span class="badge-rec" style="font-size:10px;padding:1px 6px">${s.recurrence}</span>` : '';
           const errMsg = s.status === 'erro' && s.error_msg ? `<div class="wg-card-error">${esc(s.error_msg.slice(0, 50))}</div>` : '';
+          const expMsg = s.status === 'expirado' && s.error_msg ? `<div class="wg-card-error" style="color:#9ca3af">${esc(s.error_msg.slice(0, 50))}</div>` : '';
 
           // Alcance: bot + inscritos
           const subs = getBotSubscribers(s.sendpulse_bot_id);
@@ -1926,9 +1933,10 @@ function renderHistCalendar(allSchedules) {
             ${nextLabel}
             <div class="wg-card-text">${esc(text.slice(0, 30))}</div>
             ${botLine}
-            <div class="wg-card-meta">${s.status === 'erro' ? '<span class="badge-erro" style="font-size:10px;padding:1px 6px">erro</span>' : ''} ${recBadge}</div>
+            <div class="wg-card-meta">${s.status === 'erro' ? '<span class="badge-erro" style="font-size:10px;padding:1px 6px">erro</span>' : ''}${s.status === 'expirado' ? '<span style="font-size:10px;padding:1px 6px;color:#9ca3af;background:rgba(156,163,175,0.1);border-radius:9999px">expirado</span>' : ''} ${recBadge}</div>
             ${lastSendHtml}
             ${errMsg}
+            ${expMsg}
             <div class="wg-card-actions">${actions}</div>
           </div>`;
         }).join('');

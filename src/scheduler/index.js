@@ -14,18 +14,20 @@
  *  Fluxo de disparo:
  *  ┌──────────────────────────────────────────────────────────┐
  *  │  1. getSchedulesDue() → busca pendentes com data <= NOW  │
- *  │  2. Valida: user_id, credenciais SendPulse, bot_id       │
- *  │  3. sendpulse.dispatch() → envia campanha                │
- *  │  4. Se recorrente: cria próxima ocorrência ANTES de      │
+ *  │  2. Proteção B: se atraso > 2h, marca 'expirado' e pula │
+ *  │  3. Valida: user_id, credenciais SendPulse, bot_id       │
+ *  │  4. sendpulse.dispatch() → envia campanha                │
+ *  │  5. Se recorrente: cria próxima ocorrência ANTES de      │
  *  │     marcar como 'enviado' (protege contra perda)          │
- *  │  5. Marca como 'enviado' + insere log                     │
- *  │  6. Emite eventos via Socket.io para atualizar frontend   │
+ *  │  6. Marca como 'enviado' + insere log                     │
+ *  │  7. Emite eventos via Socket.io para atualizar frontend   │
  *  └──────────────────────────────────────────────────────────┘
  *
- *  PROTEÇÃO DE RECORRÊNCIA:
- *  Se scheduleNextOccurrence falhar, o schedule NÃO é marcado
- *  como 'enviado' — permanece 'pendente' para retry no próximo
- *  ciclo. Isso evita que recorrências "desapareçam" silenciosamente.
+ *  PROTEÇÕES:
+ *  A) Recorrência sobrevive ao erro — mesmo que o disparo falhe,
+ *     a próxima ocorrência é criada. A cadeia nunca quebra.
+ *  B) Schedule vencido não dispara — se scheduled_at tem mais de
+ *     2h de atraso, marca como 'expirado' (evita rajada após erro).
  * ============================================================
  */
 
@@ -92,6 +94,9 @@ async function scheduleNextOccurrence(schedule) {
   });
 }
 
+// Limite máximo de atraso antes de um schedule expirar (2 horas)
+const MAX_ATRASO_MS = 2 * 60 * 60 * 1000;
+
 /**
  * Inicia os cron jobs do scheduler.
  * @param {Object} socketIo — instância do Socket.io para emitir eventos
@@ -110,6 +115,32 @@ function start(socketIo) {
     }
 
     for (const s of pendentes) {
+
+      // ── Proteção B: schedule vencido não dispara ──
+      // Se scheduled_at tem mais de 2h de atraso, marca como 'expirado'.
+      // Impede rajada de mensagens acumuladas após erro temporário.
+      const atraso = Date.now() - new Date(s.scheduled_at).getTime();
+      if (atraso > MAX_ATRASO_MS) {
+        console.log(`[scheduler] Schedule ${s.id} expirado (atraso: ${Math.round(atraso / 60000)}min) — pulando`);
+        await db.updateScheduleStatus(s.id, 'expirado', `Expirado: atraso de ${Math.round(atraso / 60000)} minutos`);
+        await db.insertLog({ schedule_id: s.id, par_id: s.par_id, status: 'expirado', sendpulse_response: 'Schedule vencido — não disparado' });
+        // Mesmo expirado, recorrência deve continuar
+        if (s.recurrence) {
+          try {
+            await scheduleNextOccurrence(s);
+            console.log(`[scheduler] Próxima recorrência criada para schedule expirado ${s.id}`);
+          } catch (recErr) {
+            console.error('[scheduler] erro ao criar recorrência de schedule expirado', s.id, ':', recErr.message);
+          }
+        }
+        if (io && s.par_id) {
+          io.to(`par_${s.par_id}`).emit('dispatch_fired', {
+            par_id: s.par_id, schedule_id: s.id, status: 'expirado',
+          });
+        }
+        continue;
+      }
+
       // Validação: usuário deve existir
       const userId = s.user_id;
       if (!userId) {
@@ -152,10 +183,7 @@ function start(socketIo) {
         // ── Disparo via SendPulse ──
         await sendpulse.dispatch(s, par, credentials);
 
-        // ── Proteção de recorrência ──
-        // Para recorrentes: criar próxima ocorrência ANTES de marcar como enviado.
-        // Se falhar, NÃO marca como enviado — mantém pendente para retry.
-        // Isso evita que a recorrência "desapareça" do sistema.
+        // ── Recorrência: cria próxima ocorrência ANTES de marcar como enviado ──
         if (s.recurrence) {
           let recOk = false;
           try {
@@ -192,19 +220,32 @@ function start(socketIo) {
         // Notifica frontend via Socket.io
         if (io && s.par_id) {
           const updated = await db.getScheduleById(s.id);
-          io.to(`par_${s.par_id}`).emit('schedule_update', updated);
+          io.to(`par_${updated.par_id}`).emit('schedule_update', updated);
           io.to(`par_${s.par_id}`).emit('dispatch_fired', {
             par_id: s.par_id, schedule_id: s.id, status: 'enviado',
           });
         }
       } catch (err) {
-        // ── Erro no disparo: marca como erro + log ──
+        // ── Proteção A: recorrência sobrevive ao erro ──
+        // Erro no disparo marca como 'erro', MAS ainda cria a próxima
+        // ocorrência se for recorrente. A cadeia nunca quebra.
         const errMsg = err.response?.data?.message || err.message;
         await db.updateScheduleStatus(s.id, 'erro', errMsg);
         await db.insertLog({
           schedule_id: s.id, par_id: s.par_id, status: 'erro',
           sendpulse_response: JSON.stringify(err.response?.data || err.message),
         });
+
+        // Cria próxima ocorrência mesmo com erro (proteção A)
+        if (s.recurrence) {
+          try {
+            await scheduleNextOccurrence(s);
+            console.log(`[scheduler] Próxima recorrência criada apesar do erro no schedule ${s.id}`);
+          } catch (recErr) {
+            console.error('[scheduler] erro ao criar recorrência após falha do schedule', s.id, ':', recErr.message);
+          }
+        }
+
         // Notifica frontend do erro
         if (io && s.par_id) {
           const updated = await db.getScheduleById(s.id);

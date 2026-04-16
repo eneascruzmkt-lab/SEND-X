@@ -129,6 +129,18 @@ async function init() {
     ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS google_sheet_id TEXT;
   `);
   await pool.query(`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS api_key TEXT;`);
+  // Anthropic API key (per-user) for Insights IA
+  await pool.query(`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS anthropic_api_key TEXT;`);
+  // Usage tracking for Insights IA
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS insights_usage (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
   // Tabela de mapeamento mês → planilha
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sheet_months (
@@ -504,6 +516,45 @@ module.exports = {
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     return this.getSheetIdForMonth(userId, monthKey);
+  },
+
+  // ── Insights IA ─────────────────────────────────────────
+
+  /** Get Anthropic API key for a user */
+  async getAnthropicKey(userId) {
+    const res = await pool.query('SELECT anthropic_api_key FROM user_settings WHERE user_id=$1', [userId]);
+    return res.rows[0]?.anthropic_api_key || null;
+  },
+
+  /** Save/update Anthropic API key */
+  async upsertAnthropicKey(userId, key) {
+    const existing = await pool.query('SELECT user_id FROM user_settings WHERE user_id=$1', [userId]);
+    if (existing.rows.length > 0) {
+      await pool.query('UPDATE user_settings SET anthropic_api_key=$2, updated_at=NOW() WHERE user_id=$1', [userId, key]);
+    } else {
+      await pool.query('INSERT INTO user_settings (user_id, anthropic_api_key) VALUES ($1, $2)', [userId, key]);
+    }
+  },
+
+  /** Record an insights usage entry */
+  async insertInsightsUsage(userId, inputTokens, outputTokens) {
+    await pool.query(
+      'INSERT INTO insights_usage (user_id, input_tokens, output_tokens) VALUES ($1, $2, $3)',
+      [userId, inputTokens, outputTokens]
+    );
+  },
+
+  /** Get aggregated insights usage for a user */
+  async getInsightsUsage(userId) {
+    const res = await pool.query(`
+      SELECT
+        COUNT(*)::int as total_requests,
+        COALESCE(SUM(input_tokens), 0)::int as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int as total_output_tokens,
+        MAX(created_at) as last_used
+      FROM insights_usage WHERE user_id=$1
+    `, [userId]);
+    return res.rows[0];
   },
 
   /** Query genérica — usar com cuidado, preferir métodos específicos */

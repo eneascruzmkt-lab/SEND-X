@@ -145,6 +145,11 @@ tailwind.config = {
 .wg-card-actions button { @apply bg-surface border border-border/60 text-gray-400 px-2 py-1 rounded text-[10px] font-medium transition-all hover:border-green-500/40 hover:text-green-400 cursor-pointer; font-family: inherit; }
 .wg-card-actions button.wg-btn-danger { @apply hover:border-red-500/40 hover:text-red-400; }
 .wg-card-actions button.wg-btn-retry { @apply hover:border-green-500/40 hover:text-green-400; }
+
+/* Insights IA chat response typography */
+.insights-response p { margin: 2px 0; }
+.insights-response ul { list-style: none; }
+.insights-response pre { font-family: 'Courier New', monospace; }
 </style>
 </head>
 <body class="bg-[#0c0f0c] text-gray-200 font-sans text-sm leading-normal min-h-screen">
@@ -308,28 +313,35 @@ tailwind.config = {
         </div>
 
         <!-- Chat area -->
-        <div id="insightsChat" class="flex-1 overflow-y-auto space-y-3 mb-4 pr-1" style="min-height:0">
-          <div class="flex gap-2">
-            <div class="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">IA</div>
-            <div class="bg-surface border border-border-light/60 rounded-lg px-3 py-2 text-sm text-zinc-300 max-w-[85%]">
-              Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
+        <div id="insightsChat" class="flex-1 overflow-y-auto" style="min-height:0">
+          <div class="max-w-3xl mx-auto py-4 px-4">
+            <div class="flex gap-3 py-4">
+              <div class="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z"/></svg>
+              </div>
+              <div class="text-sm text-gray-300 leading-relaxed">
+                Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Input area -->
-        <div class="flex gap-2 items-end">
-          <textarea id="insightsInput" rows="1" placeholder="Digite sua pergunta..."
-            class="flex-1 bg-[#0c0f0c] border border-border/60 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10"
-            onkeydown="handleInsightsKey(event)"></textarea>
-          <button id="insightsSendBtn" onclick="sendInsightsMessage()"
-            class="px-4 py-2 bg-green-500 hover:bg-green-400 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-            Enviar
-          </button>
+        <div class="pb-3 pt-2 px-4">
+          <div class="max-w-3xl mx-auto">
+            <div class="relative flex items-end bg-[#1a1d1a] border border-border-light/60 rounded-2xl px-4 py-2 focus-within:border-green-500/50 focus-within:ring-2 focus-within:ring-green-500/10 transition-all">
+              <textarea id="insightsInput" rows="1" placeholder="Pergunte sobre seus dados..."
+                class="flex-1 bg-transparent text-sm text-white resize-none focus:outline-none max-h-36 leading-relaxed py-1"
+                onkeydown="handleInsightsKey(event)" oninput="autoGrowTextarea(this)"></textarea>
+              <button id="insightsSendBtn" onclick="sendInsightsMessage()"
+                class="ml-2 w-8 h-8 flex items-center justify-center rounded-lg bg-green-500 hover:bg-green-400 text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0 mb-0.5"
+                title="Enviar">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+              </button>
+            </div>
+            <div id="insightsUsage" class="text-[10px] text-gray-600 mt-1.5 text-center"></div>
+          </div>
         </div>
-
-        <!-- Usage footer -->
-        <div id="insightsUsage" class="text-xs text-gray-500 mt-2 text-center"></div>
       </div>
 
       <!-- Feed -->
@@ -2507,10 +2519,14 @@ function clearInsightsChat() {
   insightsHistory = [];
   const chat = document.getElementById('insightsChat');
   chat.innerHTML = `
-    <div class="flex gap-2">
-      <div class="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">IA</div>
-      <div class="bg-surface border border-border-light/60 rounded-lg px-3 py-2 text-sm text-zinc-300 max-w-[85%]">
-        Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
+    <div class="max-w-3xl mx-auto py-4 px-4">
+      <div class="flex gap-3 py-4">
+        <div class="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <svg class="w-4 h-4 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z"/></svg>
+        </div>
+        <div class="text-sm text-gray-300 leading-relaxed">
+          Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
+        </div>
       </div>
     </div>`;
 }
@@ -2518,52 +2534,112 @@ function clearInsightsChat() {
 function addChatMessage(role, content) {
   const chat = document.getElementById('insightsChat');
   const isUser = role === 'user';
-  const div = document.createElement('div');
-  div.className = 'flex gap-2' + (isUser ? ' flex-row-reverse' : '');
 
-  const avatar = isUser
-    ? '<div class="w-7 h-7 rounded-full bg-zinc-600 flex items-center justify-center flex-shrink-0 text-xs font-bold text-white">Eu</div>'
-    : '<div class="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">IA</div>';
+  // Find or create the messages container
+  let container = chat.querySelector('.max-w-3xl');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'max-w-3xl mx-auto py-4 px-4';
+    chat.appendChild(container);
+  }
 
-  const bubble = document.createElement('div');
-  bubble.className = `rounded-lg px-3 py-2 text-sm max-w-[85%] ${isUser ? 'bg-green-500/10 border border-green-500/30 text-white' : 'bg-surface border border-border-light/60 text-zinc-300'}`;
-  bubble.innerHTML = content;
-  div.innerHTML = avatar;
-  div.appendChild(bubble);
-  chat.appendChild(div);
+  const row = document.createElement('div');
+  if (isUser) {
+    row.className = 'py-4 border-t border-border-light/20';
+    row.innerHTML = `
+      <div class="flex gap-3">
+        <div class="w-7 h-7 rounded-lg bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <svg class="w-4 h-4 text-zinc-300" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a3 3 0 100-6 3 3 0 000 6zm-7 8a7 7 0 1114 0H3z"/></svg>
+        </div>
+        <div class="text-sm text-gray-200 leading-relaxed font-medium">${content}</div>
+      </div>`;
+  } else {
+    row.className = 'py-4 border-t border-border-light/20';
+    const bubble = document.createElement('div');
+    bubble.className = 'flex gap-3';
+    bubble.innerHTML = `
+      <div class="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <svg class="w-4 h-4 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z"/></svg>
+      </div>`;
+    const textDiv = document.createElement('div');
+    textDiv.className = 'text-sm text-gray-300 leading-relaxed insights-response';
+    textDiv.innerHTML = content;
+    bubble.appendChild(textDiv);
+    row.appendChild(bubble);
+  }
+
+  container.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
-  return bubble;
+
+  if (!isUser) {
+    return row.querySelector('.insights-response');
+  }
+  return null;
 }
 
 function formatMarkdown(text) {
   const lines = text.split('\n');
   let html = '';
   let inList = false;
+  let inCode = false;
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
-    line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Code blocks
+    if (line.startsWith('```')) {
+      if (inCode) {
+        html += '</code></pre>';
+        inCode = false;
+      } else {
+        html += '<pre class="bg-[#0c0f0c] rounded-lg p-3 my-2 overflow-x-auto text-xs"><code>';
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      html += line.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '\n';
+      continue;
+    }
+
+    // Inline code
+    line = line.replace(/`([^`]+)`/g, '<code class="bg-[#0c0f0c] px-1.5 py-0.5 rounded text-xs text-green-300">$1</code>');
+
+    // Bold and italic
+    line = line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-100 font-semibold">$1</strong>');
     line = line.replace(/\*(.*?)\*/g, '<em>$1</em>');
 
+    // Bullet list items
     if (/^[-•]\s/.test(line)) {
-      if (!inList) { html += '<ul class="list-disc pl-4 my-1">'; inList = true; }
-      html += '<li>' + line.replace(/^[-•]\s/, '') + '</li>';
+      if (!inList) { html += '<ul class="space-y-1 my-2 ml-1">'; inList = true; }
+      html += '<li class="flex gap-2"><span class="text-green-500/50 mt-1.5 text-[8px]">\u25CF</span><span>' + line.replace(/^[-•]\s/, '') + '</span></li>';
       continue;
     } else if (inList) {
       html += '</ul>'; inList = false;
     }
 
-    if (/^\d+\.\s/.test(line)) {
-      html += '<div class="ml-2">' + line + '</div>';
+    // Numbered list items
+    if (/^(\d+)\.\s/.test(line)) {
+      const num = line.match(/^(\d+)\./)[1];
+      html += '<div class="flex gap-2 my-0.5"><span class="text-green-400/70 font-semibold text-xs min-w-[1.2rem]">' + num + '.</span><span>' + line.replace(/^\d+\.\s/, '') + '</span></div>';
       continue;
     }
 
-    if (/^###\s/.test(line)) { html += '<strong class="text-white">' + line.replace(/^###\s/, '') + '</strong><br>'; continue; }
-    if (/^##\s/.test(line)) { html += '<strong class="text-white text-base">' + line.replace(/^##\s/, '') + '</strong><br>'; continue; }
+    // Headers
+    if (/^###\s/.test(line)) { html += '<h4 class="text-gray-100 font-semibold mt-3 mb-1">' + line.replace(/^###\s/, '') + '</h4>'; continue; }
+    if (/^##\s/.test(line)) { html += '<h3 class="text-gray-100 font-semibold text-base mt-3 mb-1">' + line.replace(/^##\s/, '') + '</h3>'; continue; }
+    if (/^#\s/.test(line)) { html += '<h2 class="text-gray-100 font-bold text-lg mt-3 mb-1">' + line.replace(/^#\s/, '') + '</h2>'; continue; }
 
-    html += line + '<br>';
+    // Empty lines = paragraph break
+    if (line.trim() === '') {
+      html += '<div class="h-2"></div>';
+      continue;
+    }
+
+    html += '<p class="my-0.5">' + line + '</p>';
   }
   if (inList) html += '</ul>';
+  if (inCode) html += '</code></pre>';
   return html;
 }
 
@@ -2572,6 +2648,11 @@ function handleInsightsKey(e) {
     e.preventDefault();
     sendInsightsMessage();
   }
+}
+
+function autoGrowTextarea(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 144) + 'px';
 }
 
 async function sendInsightsMessage() {
@@ -2585,13 +2666,14 @@ async function sendInsightsMessage() {
   }
 
   input.value = '';
+  input.style.height = 'auto';
   addChatMessage('user', formatMarkdown(message));
 
   insightsStreaming = true;
   const sendBtn = document.getElementById('insightsSendBtn');
   sendBtn.disabled = true;
 
-  const bubble = addChatMessage('assistant', '<span class="text-gray-500">Analisando...</span>');
+  const bubble = addChatMessage('assistant', '<div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:300ms"></span></div>');
 
   try {
     const resp = await fetch('/api/insights', {

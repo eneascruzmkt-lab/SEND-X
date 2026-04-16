@@ -83,6 +83,7 @@ tailwind.config = {
 
 .panel { @apply hidden; }
 .panel.active { @apply block; }
+#panel-insights.active { @apply flex flex-col; }
 
 .empty-state { @apply text-center text-gray-500 py-16 px-5; }
 
@@ -295,13 +296,13 @@ tailwind.config = {
       </div>
 
       <!-- ══════ Panel: Insights IA ══════ -->
-      <div class="panel flex flex-col" id="panel-insights" style="height: calc(100vh - 120px)">
-        <!-- Header: tabs + period filters -->
-        <div class="bg-surface border border-border-light/60 rounded-xl p-4 mb-4">
-          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+      <div class="panel h-full -m-3 sm:-m-6 sm:-mx-7" id="panel-insights">
+        <!-- Header: tabs + period filters (compact) -->
+        <div class="flex-shrink-0 border-b border-border/40 px-4 sm:px-6 py-3 bg-surface/40 backdrop-blur">
+          <div class="max-w-4xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3">
             <div id="insightsTabButtons" class="flex bg-[#0c0f0c] rounded-lg p-0.5"></div>
-            <div class="w-px h-7 bg-border/40"></div>
-            <div class="flex gap-1.5 flex-wrap" id="insightsPeriodButtons">
+            <div class="w-px h-6 bg-border/40"></div>
+            <div class="flex gap-1 flex-wrap" id="insightsPeriodButtons">
               <button onclick="switchInsightsPeriodo('hoje')" class="insights-periodo-btn filter-btn" data-iperiodo="hoje">Hoje</button>
               <button onclick="switchInsightsPeriodo('ontem')" class="insights-periodo-btn filter-btn" data-iperiodo="ontem">Ontem</button>
               <button onclick="switchInsightsPeriodo('7d')" class="insights-periodo-btn filter-btn active" data-iperiodo="7d">7 dias</button>
@@ -312,34 +313,34 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Chat area -->
+        <!-- Chat area (grows, scrolls internally) -->
         <div id="insightsChat" class="flex-1 overflow-y-auto" style="min-height:0">
-          <div class="max-w-3xl mx-auto py-4 px-4">
+          <div class="max-w-3xl mx-auto py-8 px-4 sm:px-6">
             <div class="flex gap-3 py-4">
-              <div class="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <svg class="w-4 h-4 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z"/></svg>
               </div>
-              <div class="text-sm text-gray-300 leading-relaxed">
+              <div class="text-[15px] text-gray-300 leading-relaxed pt-1">
                 Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Input area -->
-        <div class="pb-3 pt-2 px-4">
+        <!-- Input area (pinned bottom) -->
+        <div class="flex-shrink-0 border-t border-border/40 bg-surface/40 backdrop-blur px-4 sm:px-6 py-3 sm:py-4">
           <div class="max-w-3xl mx-auto">
-            <div class="relative flex items-end bg-[#1a1d1a] border border-border-light/60 rounded-2xl px-4 py-2 focus-within:border-green-500/50 focus-within:ring-2 focus-within:ring-green-500/10 transition-all">
+            <div class="relative flex items-end bg-[#1a1d1a] border border-border-light/60 rounded-2xl px-4 py-2.5 focus-within:border-green-500/50 focus-within:ring-2 focus-within:ring-green-500/10 transition-all shadow-lg shadow-black/20">
               <textarea id="insightsInput" rows="1" placeholder="Pergunte sobre seus dados..."
-                class="flex-1 bg-transparent text-sm text-white resize-none focus:outline-none max-h-36 leading-relaxed py-1"
+                class="flex-1 bg-transparent text-[15px] text-white resize-none focus:outline-none max-h-48 leading-relaxed py-1"
                 onkeydown="handleInsightsKey(event)" oninput="autoGrowTextarea(this)"></textarea>
               <button id="insightsSendBtn" onclick="sendInsightsMessage()"
-                class="ml-2 w-8 h-8 flex items-center justify-center rounded-lg bg-green-500 hover:bg-green-400 text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0 mb-0.5"
+                class="ml-2 w-9 h-9 flex items-center justify-center rounded-xl bg-green-500 hover:bg-green-400 text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
                 title="Enviar">
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
               </button>
             </div>
-            <div id="insightsUsage" class="text-[10px] text-gray-600 mt-1.5 text-center"></div>
+            <div id="insightsUsage" class="text-[10px] text-gray-600 mt-2 text-center"></div>
           </div>
         </div>
       </div>

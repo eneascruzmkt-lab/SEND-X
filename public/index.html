@@ -215,6 +215,9 @@ tailwind.config = {
       <button class="nav-item" data-tab="relatorio" onclick="showPanel('relatorio')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><rect x="3" y="10" width="3" height="7" rx="1" fill="currentColor" opacity=".4"/><rect x="8.5" y="6" width="3" height="11" rx="1" fill="currentColor" opacity=".7"/><rect x="14" y="3" width="3" height="14" rx="1" fill="currentColor"/></svg> Relatorio
       </button>
+      <button class="nav-item" data-tab="insights" onclick="showPanel('insights')">
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z" fill="currentColor" opacity=".7"/></svg> Insights IA
+      </button>
       <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><path d="M10 3a7 7 0 017 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".5"/><path d="M10 6a4 4 0 014 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".7"/></svg> Feed ao vivo
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">LIVE</span>
@@ -258,10 +261,7 @@ tailwind.config = {
         <div class="bg-surface border border-border-light/60 rounded-xl p-4 mb-6">
           <div class="flex flex-wrap items-center gap-2 sm:gap-4">
             <!-- Tabs DANI / DEIVID -->
-            <div class="flex bg-[#0c0f0c] rounded-lg p-0.5">
-              <button class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400" id="tabDani" onclick="switchRelatorioTab('DANI')">DANI</button>
-              <button class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300" id="tabDeivid" onclick="switchRelatorioTab('DEIVID')">DEIVID</button>
-            </div>
+            <div id="relatorioTabButtons" class="flex bg-[#0c0f0c] rounded-lg p-0.5"></div>
             <div class="w-px h-7 bg-border/40"></div>
             <!-- Period filters -->
             <div class="flex gap-1.5 flex-wrap">
@@ -287,6 +287,49 @@ tailwind.config = {
         <div id="relatorioContent">
           <div class="empty-state">Carregando...</div>
         </div>
+      </div>
+
+      <!-- ══════ Panel: Insights IA ══════ -->
+      <div class="panel flex flex-col" id="panel-insights" style="height: calc(100vh - 120px)">
+        <!-- Header: tabs + period filters -->
+        <div class="bg-surface border border-border-light/60 rounded-xl p-4 mb-4">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div id="insightsTabButtons" class="flex bg-[#0c0f0c] rounded-lg p-0.5"></div>
+            <div class="w-px h-7 bg-border/40"></div>
+            <div class="flex gap-1.5 flex-wrap" id="insightsPeriodButtons">
+              <button onclick="switchInsightsPeriodo('hoje')" class="insights-periodo-btn filter-btn" data-iperiodo="hoje">Hoje</button>
+              <button onclick="switchInsightsPeriodo('ontem')" class="insights-periodo-btn filter-btn" data-iperiodo="ontem">Ontem</button>
+              <button onclick="switchInsightsPeriodo('7d')" class="insights-periodo-btn filter-btn active" data-iperiodo="7d">7 dias</button>
+              <button onclick="switchInsightsPeriodo('1m')" class="insights-periodo-btn filter-btn" data-iperiodo="1m">Mês atual</button>
+              <button onclick="switchInsightsPeriodo('lastm')" class="insights-periodo-btn filter-btn" data-iperiodo="lastm">Mês passado</button>
+              <button onclick="switchInsightsPeriodo('3m')" class="insights-periodo-btn filter-btn" data-iperiodo="3m">3 meses</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat area -->
+        <div id="insightsChat" class="flex-1 overflow-y-auto space-y-3 mb-4 pr-1" style="min-height:0">
+          <div class="flex gap-2">
+            <div class="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">IA</div>
+            <div class="bg-surface border border-border-light/60 rounded-lg px-3 py-2 text-sm text-zinc-300 max-w-[85%]">
+              Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
+            </div>
+          </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="flex gap-2 items-end">
+          <textarea id="insightsInput" rows="1" placeholder="Digite sua pergunta..."
+            class="flex-1 bg-[#0c0f0c] border border-border/60 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10"
+            onkeydown="handleInsightsKey(event)"></textarea>
+          <button id="insightsSendBtn" onclick="sendInsightsMessage()"
+            class="px-4 py-2 bg-green-500 hover:bg-green-400 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+            Enviar
+          </button>
+        </div>
+
+        <!-- Usage footer -->
+        <div id="insightsUsage" class="text-xs text-gray-500 mt-2 text-center"></div>
       </div>
 
       <!-- Feed -->
@@ -535,6 +578,16 @@ tailwind.config = {
             <input type="password" id="cfgGoogleKey" placeholder="Cole a chave base64 da service account" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
             <div class="text-[11px] text-gray-500 mt-1">Chave JSON da conta de servico, codificada em base64. Gere em console.cloud.google.com.</div>
           </div>
+          <hr class="border-border/40 my-4">
+          <h4 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wide">Anthropic (Insights IA)</h4>
+          <div class="mb-3.5">
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Anthropic API Key</label>
+            <div class="flex gap-2">
+              <input type="password" id="cfgAnthropicKey" placeholder="sk-ant-..." class="flex-1 bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+              <button onclick="saveAnthropicKey()" class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-150 text-sm">Salvar</button>
+            </div>
+            <p id="cfgAnthropicStatus" class="text-[11px] text-gray-500 mt-1">Necessária para usar o painel Insights IA.</p>
+          </div>
           <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-5 rounded-lg transition-all duration-150 text-sm" onclick="saveSettings()">Salvar credenciais</button>
         </div>
 
@@ -747,7 +800,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -892,6 +945,7 @@ async function loadSettings() {
     document.getElementById('cfgWebhook').value = s.webhook_domain || '';
     document.getElementById('cfgGoogleKey').value = s.google_service_account_key || '';
     document.getElementById('cfgApiKey').value = s.api_key || '';
+    if (document.getElementById('cfgAnthropicKey')) document.getElementById('cfgAnthropicKey').value = s.anthropic_api_key || '';
     updateCredsStatus(s);
   } catch {}
 }
@@ -2298,20 +2352,16 @@ async function deletePar(id) {
 }
 
 // ── Relatório ──────────────────────────────────
-let relatorioTab = 'DANI';
+let relatorioTab = '';
 let relatorioPeriodo = 'hoje';
 
 function switchRelatorioTab(tab) {
   relatorioTab = tab;
-  const dani = document.getElementById('tabDani');
-  const deivid = document.getElementById('tabDeivid');
-  if (tab === 'DANI') {
-    dani.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400';
-    deivid.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
-  } else {
-    deivid.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400';
-    dani.className = 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
-  }
+  document.querySelectorAll('.relatorio-tab-btn').forEach(btn => {
+    btn.className = btn.textContent === tab
+      ? 'relatorio-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400'
+      : 'relatorio-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
+  });
   loadRelatorio();
 }
 
@@ -2323,6 +2373,22 @@ function switchRelatorioPeriodo(periodo) {
 }
 
 async function loadRelatorio() {
+  // Load tabs dynamically
+  const tabContainer = document.getElementById('relatorioTabButtons');
+  if (tabContainer && tabContainer.children.length === 0) {
+    try {
+      const tabs = await api('/relatorio/tabs');
+      tabs.forEach((t, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'relatorio-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all ' +
+          (i === 0 ? 'bg-green-500/15 text-green-400' : 'text-gray-500 hover:text-gray-300');
+        btn.textContent = t;
+        btn.onclick = () => switchRelatorioTab(t);
+        tabContainer.appendChild(btn);
+      });
+      if (tabs.length > 0 && !relatorioTab) relatorioTab = tabs[0];
+    } catch (e) { console.error('Failed to load relatorio tabs:', e); }
+  }
   const container = document.getElementById('relatorioContent');
   container.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
@@ -2390,6 +2456,250 @@ function renderRelatorio(data) {
     </div>`;
 }
 
+// ── Insights IA ──────────────────────────────────
+let insightsTab = '';
+let insightsPeriodo = '7d';
+let insightsHistory = [];
+let insightsStreaming = false;
+
+async function initInsightsPanel() {
+  // Load tabs dynamically
+  try {
+    const tabs = await api('/relatorio/tabs');
+    const container = document.getElementById('insightsTabButtons');
+    container.innerHTML = '';
+    tabs.forEach((t, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'insights-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all ' +
+        (i === 0 ? 'bg-green-500/15 text-green-400' : 'text-gray-500 hover:text-gray-300');
+      btn.textContent = t;
+      btn.onclick = () => switchInsightsTab(t);
+      container.appendChild(btn);
+    });
+    if (tabs.length > 0 && !insightsTab) {
+      insightsTab = tabs[0];
+    }
+  } catch (e) {
+    console.error('Failed to load tabs:', e);
+  }
+  loadInsightsUsage();
+}
+
+function switchInsightsTab(tab) {
+  insightsTab = tab;
+  document.querySelectorAll('.insights-tab-btn').forEach(btn => {
+    btn.className = btn.textContent === tab
+      ? 'insights-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400'
+      : 'insights-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
+  });
+  clearInsightsChat();
+}
+
+function switchInsightsPeriodo(periodo) {
+  insightsPeriodo = periodo;
+  document.querySelectorAll('.insights-periodo-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.iperiodo === periodo);
+  });
+  clearInsightsChat();
+}
+
+function clearInsightsChat() {
+  insightsHistory = [];
+  const chat = document.getElementById('insightsChat');
+  chat.innerHTML = `
+    <div class="flex gap-2">
+      <div class="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">IA</div>
+      <div class="bg-surface border border-border-light/60 rounded-lg px-3 py-2 text-sm text-zinc-300 max-w-[85%]">
+        Olá! Selecione uma aba e período, depois me pergunte sobre os dados.
+      </div>
+    </div>`;
+}
+
+function addChatMessage(role, content) {
+  const chat = document.getElementById('insightsChat');
+  const isUser = role === 'user';
+  const div = document.createElement('div');
+  div.className = 'flex gap-2' + (isUser ? ' flex-row-reverse' : '');
+
+  const avatar = isUser
+    ? '<div class="w-7 h-7 rounded-full bg-zinc-600 flex items-center justify-center flex-shrink-0 text-xs font-bold text-white">Eu</div>'
+    : '<div class="w-7 h-7 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 text-xs font-bold text-green-400">IA</div>';
+
+  const bubble = document.createElement('div');
+  bubble.className = `rounded-lg px-3 py-2 text-sm max-w-[85%] ${isUser ? 'bg-green-500/10 border border-green-500/30 text-white' : 'bg-surface border border-border-light/60 text-zinc-300'}`;
+  bubble.innerHTML = content;
+  div.innerHTML = avatar;
+  div.appendChild(bubble);
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return bubble;
+}
+
+function formatMarkdown(text) {
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    line = line.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    if (/^[-•]\s/.test(line)) {
+      if (!inList) { html += '<ul class="list-disc pl-4 my-1">'; inList = true; }
+      html += '<li>' + line.replace(/^[-•]\s/, '') + '</li>';
+      continue;
+    } else if (inList) {
+      html += '</ul>'; inList = false;
+    }
+
+    if (/^\d+\.\s/.test(line)) {
+      html += '<div class="ml-2">' + line + '</div>';
+      continue;
+    }
+
+    if (/^###\s/.test(line)) { html += '<strong class="text-white">' + line.replace(/^###\s/, '') + '</strong><br>'; continue; }
+    if (/^##\s/.test(line)) { html += '<strong class="text-white text-base">' + line.replace(/^##\s/, '') + '</strong><br>'; continue; }
+
+    html += line + '<br>';
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function handleInsightsKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendInsightsMessage();
+  }
+}
+
+async function sendInsightsMessage() {
+  if (insightsStreaming) return;
+  const input = document.getElementById('insightsInput');
+  const message = input.value.trim();
+  if (!message) return;
+  if (!insightsTab) {
+    alert('Selecione uma aba primeiro.');
+    return;
+  }
+
+  input.value = '';
+  addChatMessage('user', formatMarkdown(message));
+
+  insightsStreaming = true;
+  const sendBtn = document.getElementById('insightsSendBtn');
+  sendBtn.disabled = true;
+
+  const bubble = addChatMessage('assistant', '<span class="text-gray-500">Analisando...</span>');
+
+  try {
+    const resp = await fetch('/api/insights', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + authToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        tab: insightsTab,
+        periodo: insightsPeriodo,
+        history: insightsHistory,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      bubble.innerHTML = '<span class="text-red-400">' + (err.error || 'Erro ao processar') + '</span>';
+      insightsStreaming = false;
+      sendBtn.disabled = false;
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    bubble.innerHTML = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === 'text') {
+            fullText += data.text;
+            bubble.innerHTML = formatMarkdown(fullText);
+            document.getElementById('insightsChat').scrollTop = document.getElementById('insightsChat').scrollHeight;
+          } else if (data.type === 'error') {
+            bubble.innerHTML += '<br><span class="text-red-400">' + data.error + '</span>';
+          } else if (data.type === 'done') {
+            loadInsightsUsage();
+          }
+        } catch (e) { /* skip malformed lines */ }
+      }
+    }
+
+    insightsHistory.push({ role: 'user', content: message });
+    insightsHistory.push({ role: 'assistant', content: fullText });
+    if (insightsHistory.length > 20) insightsHistory = insightsHistory.slice(-20);
+
+  } catch (err) {
+    bubble.innerHTML = '<span class="text-red-400">Erro de conexão. Tente novamente.</span>';
+  }
+
+  insightsStreaming = false;
+  sendBtn.disabled = false;
+}
+
+async function loadInsightsUsage() {
+  try {
+    const u = await api('/insights/usage');
+    const el = document.getElementById('insightsUsage');
+    if (u.total_requests > 0) {
+      const tokens = ((u.total_input_tokens + u.total_output_tokens) / 1000).toFixed(0);
+      el.textContent = u.total_requests + ' requisições · ' + tokens + 'k tokens';
+    } else {
+      el.textContent = '';
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveAnthropicKey() {
+  const input = document.getElementById('cfgAnthropicKey');
+  const status = document.getElementById('cfgAnthropicStatus');
+  const key = input.value.trim();
+  if (!key || key === '••••••••') return;
+
+  status.textContent = 'Validando...';
+  status.className = 'text-[11px] text-gray-400 mt-1';
+
+  try {
+    const resp = await fetch('/api/settings/anthropic-key', {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anthropic_api_key: key }),
+    });
+    if (resp.ok) {
+      status.textContent = 'Chave salva com sucesso!';
+      status.className = 'text-[11px] text-green-400 mt-1';
+      input.value = '••••••••';
+    } else {
+      const err = await resp.json();
+      status.textContent = err.error || 'Erro ao salvar';
+      status.className = 'text-[11px] text-red-400 mt-1';
+    }
+  } catch (e) {
+    status.textContent = 'Erro de conexão';
+    status.className = 'text-[11px] text-red-400 mt-1';
+  }
+}
+
 // ── Panels ──────────────────────────────────────
 function showPanel(name) {
   // Close sidebar on mobile when navigating
@@ -2407,6 +2717,7 @@ function showPanel(name) {
   if (name === 'schedules') loadSchedules();
   if (name === 'composer') updatePreview();
   if (name === 'relatorio') loadRelatorio();
+  if (name === 'insights') initInsightsPanel();
 }
 
 // ── Socket ──────────────────────────────────────

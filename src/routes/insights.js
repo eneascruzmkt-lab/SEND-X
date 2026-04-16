@@ -126,7 +126,7 @@ router.post('/insights', async (req, res) => {
     let outputTokens = 0;
 
     const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-6-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 2048,
       system: systemPrompt,
       messages,

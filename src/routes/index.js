@@ -204,12 +204,16 @@ router.put('/settings/anthropic-key', async (req, res) => {
       const Anthropic = require('@anthropic-ai/sdk').default;
       const client = new Anthropic({ apiKey: anthropic_api_key });
       await client.messages.create({
-        model: 'claude-sonnet-4-6-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 10,
         messages: [{ role: 'user', content: 'test' }],
       });
     } catch (err) {
-      return res.status(400).json({ error: 'Chave inválida. Verifique e tente novamente.' });
+      console.error('[Anthropic key validation] Error:', err.message, err.status);
+      const msg = err.status === 401
+        ? 'Chave inválida. Verifique e tente novamente.'
+        : `Erro ao validar chave: ${err.message}`;
+      return res.status(400).json({ error: msg });
     }
 
     await db.upsertAnthropicKey(req.userId, anthropic_api_key);

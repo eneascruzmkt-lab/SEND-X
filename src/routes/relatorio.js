@@ -239,13 +239,19 @@ router.get('/relatorio/tabs', async (req, res) => {
   try {
     const settings = await db.getUserSettings(req.userId);
     const serviceAccountKey = settings.google_service_account_key;
-    if (!serviceAccountKey || !settings.google_sheet_id) {
+    if (!serviceAccountKey) {
       return res.status(400).json({ error: 'Google Sheets nao configurado' });
+    }
+
+    // Resolve sheet id: current month mapping first, then fallback to settings
+    const sheetId = (await db.getCurrentSheetId(req.userId)) || settings.google_sheet_id;
+    if (!sheetId) {
+      return res.status(400).json({ error: 'Nenhuma planilha configurada para o mes atual' });
     }
 
     const auth = getAuth(serviceAccountKey);
     const sheets = google.sheets({ version: 'v4', auth });
-    const meta = await sheets.spreadsheets.get({ spreadsheetId: settings.google_sheet_id });
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
     const tabs = meta.data.sheets.map(s => s.properties.title);
     res.json(tabs);
   } catch (err) {

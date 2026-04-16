@@ -176,6 +176,8 @@ router.get('/settings', async (req, res) => {
     has_sendpulse: !!(settings.sendpulse_id && settings.sendpulse_secret),
     has_telegram: !!settings.telegram_token,
     has_google: !!(settings.google_service_account_key),
+    anthropic_api_key: settings.anthropic_api_key ? '••••••••' : '',
+    has_anthropic: !!settings.anthropic_api_key,
   });
 });
 
@@ -185,6 +187,32 @@ router.put('/settings/api-key', async (req, res) => {
     const { api_key } = req.body;
     if (!api_key) return res.status(400).json({ error: 'api_key obrigatória' });
     await db.query('UPDATE user_settings SET api_key=$1 WHERE user_id=$2', [api_key, req.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /settings/anthropic-key — save Anthropic API key */
+router.put('/settings/anthropic-key', async (req, res) => {
+  try {
+    const { anthropic_api_key } = req.body;
+    if (!anthropic_api_key) return res.status(400).json({ error: 'anthropic_api_key obrigatória' });
+
+    // Validate by making a minimal API call
+    try {
+      const Anthropic = require('@anthropic-ai/sdk').default;
+      const client = new Anthropic({ apiKey: anthropic_api_key });
+      await client.messages.create({
+        model: 'claude-sonnet-4-6-20250514',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'test' }],
+      });
+    } catch (err) {
+      return res.status(400).json({ error: 'Chave inválida. Verifique e tente novamente.' });
+    }
+
+    await db.upsertAnthropicKey(req.userId, anthropic_api_key);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -497,5 +525,8 @@ router.delete('/sheet-months/:monthKey', auth, async (req, res) => {
 
 const relatorioRoutes = require('./relatorio');
 router.use(relatorioRoutes);
+
+const insightsRoutes = require('./insights');
+router.use(insightsRoutes);
 
 module.exports = router;

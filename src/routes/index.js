@@ -145,6 +145,10 @@ router.get('/config/sheet-id', async (req, res) => {
   }
 });
 
+// ── Postback (público, auth via api_key) ───────────────
+const postbackRouter = require('./postback');
+router.use(postbackRouter);
+
 // ══════════════════════════════════════════════════════════
 //  TODAS AS ROTAS ABAIXO REQUEREM AUTENTICAÇÃO (Bearer JWT)
 // ══════════════════════════════════════════════════════════

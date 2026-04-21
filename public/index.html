@@ -2426,9 +2426,84 @@ async function loadRelatorio() {
     }
     const data = await api(url);
     container.innerHTML = renderRelatorio(data);
+    // Carrega UTMs em paralelo
+    loadRelatorioUtms();
   } catch (err) {
     container.innerHTML = '<div class="empty-state">Erro ao carregar relatório</div>';
   }
+}
+
+async function loadRelatorioUtms() {
+  const container = document.getElementById('relatorioUtms');
+  if (!container) return;
+  container.innerHTML = '<div class="text-xs text-gray-500">Carregando UTMs...</div>';
+  try {
+    let url = `/relatorio/utms?tab=${relatorioTab}&periodo=${relatorioPeriodo}`;
+    if (relatorioPeriodo === 'custom') {
+      const de = document.getElementById('relDe').value;
+      const ate = document.getElementById('relAte').value;
+      if (!de || !ate) { container.innerHTML = ''; return; }
+      const fmtDate = d => d.split('-').reverse().join('/');
+      url += `&de=${fmtDate(de)}&ate=${fmtDate(ate)}`;
+    }
+    const data = await api(url);
+    container.innerHTML = renderUtmTable(data.utms);
+  } catch (err) {
+    container.innerHTML = '';
+  }
+}
+
+function renderUtmTable(utms) {
+  if (!utms || utms.length === 0) {
+    return `<div class="text-xs text-gray-600 mt-2">Nenhum postback recebido neste periodo.</div>`;
+  }
+  const totalLeads = utms.reduce((s, r) => s + r.leads, 0);
+  const totalFtds = utms.reduce((s, r) => s + r.ftds, 0);
+  const totalQftds = utms.reduce((s, r) => s + r.qftds, 0);
+  const totalPayout = utms.reduce((s, r) => s + parseFloat(r.ftd_payout), 0);
+  const rows = utms.map(r => `
+    <tr class="border-b border-white/5 hover:bg-white/[.02]">
+      <td class="py-2 px-3 text-xs text-gray-300">${r.utm_source}</td>
+      <td class="py-2 px-3 text-xs text-gray-400">${r.utm_medium}</td>
+      <td class="py-2 px-3 text-xs text-center text-gray-300">${r.leads}</td>
+      <td class="py-2 px-3 text-xs text-center font-semibold text-green-400">${r.ftds}</td>
+      <td class="py-2 px-3 text-xs text-center text-gray-400">${r.qftds}</td>
+      <td class="py-2 px-3 text-xs text-right text-gray-300">${parseFloat(r.ftd_payout).toLocaleString('pt-BR', {style:'currency',currency:'BRL'})}</td>
+      <td class="py-2 px-3 text-xs text-center text-gray-400">${r.leads > 0 ? ((r.ftds / r.leads) * 100).toFixed(1) + '%' : '-'}</td>
+    </tr>`).join('');
+  return `
+    <div class="mt-6">
+      <h3 class="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">
+        <span class="w-4 h-4 text-green-500/50"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4z" opacity=".15"/><path d="M5 6h6M5 8.5h4M5 11h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".9"/></svg></span>
+        Conversoes por UTM
+      </h3>
+      <div class="overflow-x-auto rounded-lg border border-border-light/40">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="border-b border-white/10 bg-surface-2/50">
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Source</th>
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Medium</th>
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">Leads</th>
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">FTDs</th>
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">QFTDs</th>
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-right">Payout</th>
+              <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">Conv%</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr class="border-t border-white/10 bg-surface-2/30">
+              <td class="py-2 px-3 text-xs font-bold text-gray-200" colspan="2">Total</td>
+              <td class="py-2 px-3 text-xs text-center font-bold text-gray-200">${totalLeads}</td>
+              <td class="py-2 px-3 text-xs text-center font-bold text-green-400">${totalFtds}</td>
+              <td class="py-2 px-3 text-xs text-center font-bold text-gray-300">${totalQftds}</td>
+              <td class="py-2 px-3 text-xs text-right font-bold text-gray-200">${totalPayout.toLocaleString('pt-BR', {style:'currency',currency:'BRL'})}</td>
+              <td class="py-2 px-3 text-xs text-center font-bold text-gray-300">${totalLeads > 0 ? ((totalFtds / totalLeads) * 100).toFixed(1) + '%' : '-'}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
 }
 
 function fmtMoney(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
@@ -2466,7 +2541,8 @@ function renderRelatorio(data) {
       ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V3z" opacity=".2"/><path d="M5 8h6M5 5h6M5 11h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".9"/></svg>', 'Deposits Amount', t.depositsAmount, true, false)}
       ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l5 3-5 3V2z" opacity=".9"/><path d="M8 5l5 3-5 3V5z" opacity=".5"/></svg>', 'Inscritos Telegram', t.telegramJoins, false, false)}
       ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l3-4 3 2 4-6" opacity=".9"/><path d="M10 4h4v4" opacity=".6"/></svg>', 'Net P&L', t.netPL, true, true)}
-    </div>`;
+    </div>
+    <div id="relatorioUtms"></div>`;
 }
 
 // ── Insights IA ──────────────────────────────────

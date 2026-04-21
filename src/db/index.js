@@ -152,6 +152,29 @@ async function init() {
       UNIQUE(user_id, month_key)
     );
   `);
+  // Tabela de postbacks (eventos da Apostatudo: lead, ftd, qftd)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS postbacks (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      tab             TEXT NOT NULL,
+      event           TEXT NOT NULL,
+      deal_id         TEXT,
+      customer_id     TEXT,
+      registration_id TEXT,
+      utm_source      TEXT,
+      utm_medium      TEXT,
+      payout          NUMERIC(12,2) DEFAULT 0,
+      payout_currency TEXT,
+      campaign_id     TEXT,
+      campaign_name   TEXT,
+      link_id         TEXT,
+      link_name       TEXT,
+      afp             TEXT,
+      raw_query       TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
   console.log('[db] PostgreSQL schema OK');
 }
 
@@ -555,6 +578,63 @@ module.exports = {
       FROM insights_usage WHERE user_id=$1
     `, [userId]);
     return res.rows[0];
+  },
+
+  // ── Postbacks ─────────────────────────────────────────
+
+  /** Insere postback recebido da Apostatudo */
+  async insertPostback(data) {
+    const res = await pool.query(`
+      INSERT INTO postbacks (user_id, tab, event, deal_id, customer_id, registration_id,
+        utm_source, utm_medium, payout, payout_currency, campaign_id, campaign_name,
+        link_id, link_name, afp, raw_query)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *
+    `, [
+      data.user_id, data.tab, data.event, data.deal_id || null, data.customer_id || null,
+      data.registration_id || null, data.utm_source || null, data.utm_medium || null,
+      parseFloat(data.payout) || 0, data.payout_currency || null,
+      data.campaign_id || null, data.campaign_name || null,
+      data.link_id || null, data.link_name || null, data.afp || null,
+      data.raw_query || null,
+    ]);
+    return res.rows[0];
+  },
+
+  /** Busca postbacks por user, tab, evento e período */
+  async getPostbacks(userId, tab, event, startDate, endDate) {
+    let sql = 'SELECT * FROM postbacks WHERE user_id=$1 AND tab=$2';
+    const params = [userId, tab];
+    let idx = 3;
+    if (event) { sql += ` AND event=$${idx}`; params.push(event); idx++; }
+    if (startDate) { sql += ` AND created_at >= $${idx}`; params.push(startDate); idx++; }
+    if (endDate) { sql += ` AND created_at <= $${idx}`; params.push(endDate); idx++; }
+    sql += ' ORDER BY created_at DESC';
+    const res = await pool.query(sql, params);
+    return res.rows;
+  },
+
+  /** Retorna FTDs e cadastros agrupados por utm_source + utm_medium */
+  async getPostbacksByUtm(userId, tab, startDate, endDate) {
+    const res = await pool.query(`
+      SELECT
+        COALESCE(utm_source, '(direto)') as utm_source,
+        COALESCE(utm_medium, '(nenhum)') as utm_medium,
+        COUNT(*) FILTER (WHERE event = 'lead')::int as leads,
+        COUNT(*) FILTER (WHERE event = 'ftd')::int as ftds,
+        COUNT(*) FILTER (WHERE event = 'qftd')::int as qftds,
+        COALESCE(SUM(payout) FILTER (WHERE event = 'ftd'), 0)::numeric(12,2) as ftd_payout
+      FROM postbacks
+      WHERE user_id=$1 AND tab=$2 AND created_at >= $3 AND created_at <= $4
+      GROUP BY utm_source, utm_medium
+      ORDER BY ftds DESC, leads DESC
+    `, [userId, tab, startDate, endDate]);
+    return res.rows;
+  },
+
+  /** Busca user_id a partir da api_key */
+  async getUserByApiKey(apiKey) {
+    const res = await pool.query('SELECT user_id FROM user_settings WHERE api_key=$1', [apiKey]);
+    return res.rows[0]?.user_id || null;
   },
 
   /** Query genérica — usar com cuidado, preferir métodos específicos */

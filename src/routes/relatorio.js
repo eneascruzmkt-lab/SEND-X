@@ -260,6 +260,61 @@ router.get('/relatorio/tabs', async (req, res) => {
   }
 });
 
+/**
+ * GET /relatorio/utms — FTDs e cadastros agrupados por UTM source/medium.
+ * Usa mesma lógica de período do relatório principal.
+ */
+router.get('/relatorio/utms', async (req, res) => {
+  try {
+    const tab = req.query.tab || 'DANI';
+    const periodo = req.query.periodo || 'ontem';
+
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const today = now.getDate();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+
+    let startDate, endDate;
+
+    if (periodo === 'hoje') {
+      startDate = new Date(year, month, today);
+      endDate = new Date(year, month, today, 23, 59, 59);
+    } else if (periodo === 'ontem') {
+      startDate = new Date(year, month, today - 1);
+      endDate = new Date(year, month, today - 1, 23, 59, 59);
+    } else if (periodo === '7d') {
+      endDate = new Date(year, month, today - 1, 23, 59, 59);
+      startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (periodo === '1m') {
+      startDate = new Date(year, month, 1);
+      endDate = new Date(year, month, today - 1, 23, 59, 59);
+    } else if (periodo === 'lastm') {
+      startDate = new Date(year, month - 1, 1);
+      endDate = new Date(year, month, 0, 23, 59, 59);
+    } else if (periodo === '3m') {
+      startDate = new Date(year, month - 2, 1);
+      endDate = new Date(year, month, today - 1, 23, 59, 59);
+    } else if (periodo === 'custom') {
+      startDate = parseDate(req.query.de);
+      endDate = parseDate(req.query.ate);
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'Parametros de e ate obrigatorios (DD/MM/YYYY)' });
+      }
+      endDate.setHours(23, 59, 59);
+    } else {
+      return res.status(400).json({ error: 'Periodo invalido' });
+    }
+
+    const utms = await db.getPostbacksByUtm(req.userId, tab, startDate, endDate);
+    res.json({ utms, tab });
+  } catch (err) {
+    console.error('[Relatorio] UTMs error:', err.message);
+    res.status(500).json({ error: 'Erro ao carregar UTMs' });
+  }
+});
+
 module.exports = router;
 module.exports.extractRow = extractRow;
 module.exports.parseNum = parseNum;

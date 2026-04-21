@@ -3,27 +3,23 @@ const db = require('../db');
 const router = Router();
 
 /**
- * GET /api/postback — Recebe postback S2S da Apostatudo.
+ * GET /api/postback/:key/:tab/:event — Recebe postback S2S da Apostatudo.
  *
- * Autenticação via api_key na query string (não usa JWT — é chamado server-to-server).
+ * key, tab e event vão no path (Apostatudo substitui query params com os atributos concatenados).
  *
- * Query params obrigatórios:
- *   key   — api_key do usuário SEND-X
- *   tab   — aba da planilha (ex: DANI, DEIVID)
- *   event — tipo do evento: lead | ftd | qftd
+ * Path params:
+ *   :key   — api_key do usuário SEND-X
+ *   :tab   — aba da planilha (ex: DANI, DEIVID)
+ *   :event — tipo do evento: lead | ftd | qftd
  *
- * Query params opcionais (variáveis do postback Apostatudo):
+ * Query params (variáveis do postback Apostatudo, concatenadas automaticamente):
  *   deal_id, customer_id, registration_id, utm_source, utm_medium,
  *   payout, payout_currency, campaign_id, campaign_name,
  *   link_id, link_name, afp
  */
-router.get('/postback', async (req, res) => {
+router.get('/postback/:key/:tab/:event', async (req, res) => {
   try {
-    const { key, tab, event } = req.query;
-
-    if (!key || !tab || !event) {
-      return res.status(400).json({ error: 'key, tab e event sao obrigatorios' });
-    }
+    const { key, tab, event } = req.params;
 
     const validEvents = ['lead', 'ftd', 'qftd'];
     if (!validEvents.includes(event)) {

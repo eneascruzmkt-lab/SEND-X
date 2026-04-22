@@ -276,6 +276,7 @@ router.get('/relatorio/utms', async (req, res) => {
 
     let startDate, endDate;
 
+    // Postbacks chegam em tempo real, então períodos incluem hoje
     if (periodo === 'hoje') {
       startDate = new Date(year, month, today);
       endDate = new Date(year, month, today, 23, 59, 59);
@@ -283,19 +284,18 @@ router.get('/relatorio/utms', async (req, res) => {
       startDate = new Date(year, month, today - 1);
       endDate = new Date(year, month, today - 1, 23, 59, 59);
     } else if (periodo === '7d') {
-      endDate = new Date(year, month, today - 1, 23, 59, 59);
-      startDate = new Date(endDate);
-      startDate.setDate(startDate.getDate() - 6);
+      endDate = new Date(year, month, today, 23, 59, 59);
+      startDate = new Date(year, month, today - 6);
       startDate.setHours(0, 0, 0, 0);
     } else if (periodo === '1m') {
       startDate = new Date(year, month, 1);
-      endDate = new Date(year, month, today - 1, 23, 59, 59);
+      endDate = new Date(year, month, today, 23, 59, 59);
     } else if (periodo === 'lastm') {
       startDate = new Date(year, month - 1, 1);
       endDate = new Date(year, month, 0, 23, 59, 59);
     } else if (periodo === '3m') {
       startDate = new Date(year, month - 2, 1);
-      endDate = new Date(year, month, today - 1, 23, 59, 59);
+      endDate = new Date(year, month, today, 23, 59, 59);
     } else if (periodo === 'custom') {
       startDate = parseDate(req.query.de);
       endDate = parseDate(req.query.ate);

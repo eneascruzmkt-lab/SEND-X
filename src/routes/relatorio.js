@@ -232,6 +232,36 @@ router.get('/relatorio', async (req, res) => {
   }
 });
 
+router.get('/relatorio/diario', async (req, res) => {
+  try {
+    const tab = req.query.tab || 'DANI';
+    const periodo = req.query.periodo || '7d';
+    const { rawRows, periodoLabel } = await fetchRelatorioData(req.userId, tab, periodo, req.query.de, req.query.ate);
+
+    const dias = rawRows
+      .map(row => {
+        const d = parseDate(row[0]);
+        if (!d) return null;
+        const r = extractRow(row);
+        r.custoFTD = r.ftds > 0 ? Math.round((r.gasto / r.ftds) * 100) / 100 : 0;
+        r.data = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+        r._sort = d.getTime();
+        return r;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a._sort - b._sort)
+      .map(({ _sort, ...rest }) => rest);
+
+    res.json({ dias, tab, periodoLabel });
+  } catch (err) {
+    console.error('[Relatorio] Diario error:', err.message);
+    if (err.message.includes('obrigat') || err.message.includes('inválido') || err.message.includes('configurado')) {
+      return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Erro ao carregar dados diários' });
+  }
+});
+
 /**
  * GET /relatorio/tabs — returns available sheet tab names for the user's spreadsheet.
  */

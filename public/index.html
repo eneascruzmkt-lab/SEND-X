@@ -2469,7 +2469,6 @@ function renderUtmTable(utms) {
   }
   const totalLeads = utms.reduce((s, r) => s + r.leads, 0);
   const totalFtds = utms.reduce((s, r) => s + r.ftds, 0);
-  const totalQftds = utms.reduce((s, r) => s + r.qftds, 0);
   const totalPayout = utms.reduce((s, r) => s + parseFloat(r.ftd_payout), 0);
   const rows = utms.map(r => `
     <tr class="border-b border-white/5 hover:bg-white/[.02]">
@@ -2477,7 +2476,6 @@ function renderUtmTable(utms) {
       <td class="py-2 px-3 text-xs text-gray-400">${r.utm_medium}</td>
       <td class="py-2 px-3 text-xs text-center text-gray-300">${r.leads}</td>
       <td class="py-2 px-3 text-xs text-center font-semibold text-green-400">${r.ftds}</td>
-      <td class="py-2 px-3 text-xs text-center text-gray-400">${r.qftds}</td>
       <td class="py-2 px-3 text-xs text-right text-gray-300">${parseFloat(r.ftd_payout).toLocaleString('pt-BR', {style:'currency',currency:'BRL'})}</td>
       <td class="py-2 px-3 text-xs text-center text-gray-400">${r.leads > 0 ? ((r.ftds / r.leads) * 100).toFixed(1) + '%' : '-'}</td>
     </tr>`).join('');
@@ -2490,7 +2488,6 @@ function renderUtmTable(utms) {
             <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Medium</th>
             <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">Leads</th>
             <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">FTDs</th>
-            <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">QFTDs</th>
             <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-right">Payout</th>
             <th class="py-2 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-center">Conv%</th>
           </tr>
@@ -2501,7 +2498,6 @@ function renderUtmTable(utms) {
             <td class="py-2 px-3 text-xs font-bold text-gray-200" colspan="2">Total</td>
             <td class="py-2 px-3 text-xs text-center font-bold text-gray-200">${totalLeads}</td>
             <td class="py-2 px-3 text-xs text-center font-bold text-green-400">${totalFtds}</td>
-            <td class="py-2 px-3 text-xs text-center font-bold text-gray-300">${totalQftds}</td>
             <td class="py-2 px-3 text-xs text-right font-bold text-gray-200">${totalPayout.toLocaleString('pt-BR', {style:'currency',currency:'BRL'})}</td>
             <td class="py-2 px-3 text-xs text-center font-bold text-gray-300">${totalLeads > 0 ? ((totalFtds / totalLeads) * 100).toFixed(1) + '%' : '-'}</td>
           </tr>

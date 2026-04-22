@@ -152,7 +152,7 @@ async function init() {
       UNIQUE(user_id, month_key)
     );
   `);
-  // Tabela de postbacks (eventos da Apostatudo: lead, ftd, qftd)
+  // Tabela de postbacks (eventos da Apostatudo: lead, ftd)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS postbacks (
       id              SERIAL PRIMARY KEY,
@@ -621,7 +621,6 @@ module.exports = {
         COALESCE(utm_medium, '(nenhum)') as utm_medium,
         COUNT(*) FILTER (WHERE event = 'lead')::int as leads,
         COUNT(*) FILTER (WHERE event = 'ftd')::int as ftds,
-        COUNT(*) FILTER (WHERE event = 'qftd')::int as qftds,
         COALESCE(SUM(payout) FILTER (WHERE event = 'ftd'), 0)::numeric(12,2) as ftd_payout
       FROM postbacks
       WHERE user_id=$1 AND tab=$2 AND created_at >= $3 AND created_at <= $4

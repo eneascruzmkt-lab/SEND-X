@@ -10,7 +10,7 @@ const router = Router();
  * Path params:
  *   :key   — api_key do usuário SEND-X
  *   :tab   — aba da planilha (ex: DANI, DEIVID)
- *   :event — tipo do evento: lead | ftd | qftd
+ *   :event — tipo do evento: lead | ftd
  *
  * Query params (variáveis do postback Apostatudo, concatenadas automaticamente):
  *   deal_id, customer_id, registration_id, utm_source, utm_medium,
@@ -21,7 +21,7 @@ router.get('/postback/:key/:tab/:event', async (req, res) => {
   try {
     const { key, tab, event } = req.params;
 
-    const validEvents = ['lead', 'ftd', 'qftd'];
+    const validEvents = ['lead', 'ftd'];
     if (!validEvents.includes(event)) {
       return res.status(400).json({ error: `event invalido. Use: ${validEvents.join(', ')}` });
     }

@@ -274,35 +274,41 @@ router.get('/relatorio/utms', async (req, res) => {
     const month = now.getMonth();
     const year = now.getFullYear();
 
+    // Cria Date com fuso de Brasília (UTC-3) para comparar corretamente com TIMESTAMPTZ
+    const pad = n => String(n).padStart(2, '0');
+    const brDate = (y, m, d, h = 0, min = 0, s = 0) =>
+      new Date(`${y}-${pad(m+1)}-${pad(d)}T${pad(h)}:${pad(min)}:${pad(s)}-03:00`);
+
     let startDate, endDate;
 
     // Postbacks chegam em tempo real, então períodos incluem hoje
     if (periodo === 'hoje') {
-      startDate = new Date(year, month, today);
-      endDate = new Date(year, month, today, 23, 59, 59);
+      startDate = brDate(year, month, today);
+      endDate = brDate(year, month, today, 23, 59, 59);
     } else if (periodo === 'ontem') {
-      startDate = new Date(year, month, today - 1);
-      endDate = new Date(year, month, today - 1, 23, 59, 59);
+      startDate = brDate(year, month, today - 1);
+      endDate = brDate(year, month, today - 1, 23, 59, 59);
     } else if (periodo === '7d') {
-      endDate = new Date(year, month, today, 23, 59, 59);
-      startDate = new Date(year, month, today - 6);
-      startDate.setHours(0, 0, 0, 0);
+      endDate = brDate(year, month, today, 23, 59, 59);
+      startDate = brDate(year, month, today - 6);
     } else if (periodo === '1m') {
-      startDate = new Date(year, month, 1);
-      endDate = new Date(year, month, today, 23, 59, 59);
+      startDate = brDate(year, month, 1);
+      endDate = brDate(year, month, today, 23, 59, 59);
     } else if (periodo === 'lastm') {
-      startDate = new Date(year, month - 1, 1);
-      endDate = new Date(year, month, 0, 23, 59, 59);
+      startDate = brDate(year, month - 1, 1);
+      endDate = new Date(new Date(`${year}-${pad(month+1)}-01T00:00:00-03:00`) - 1);
     } else if (periodo === '3m') {
-      startDate = new Date(year, month - 2, 1);
-      endDate = new Date(year, month, today, 23, 59, 59);
+      startDate = brDate(year, month - 2, 1);
+      endDate = brDate(year, month, today, 23, 59, 59);
     } else if (periodo === 'custom') {
       startDate = parseDate(req.query.de);
       endDate = parseDate(req.query.ate);
       if (!startDate || !endDate) {
         return res.status(400).json({ error: 'Parametros de e ate obrigatorios (DD/MM/YYYY)' });
       }
-      endDate.setHours(23, 59, 59);
+      // Ajusta custom dates para BRT
+      startDate = brDate(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      endDate = brDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59);
     } else {
       return res.status(400).json({ error: 'Periodo invalido' });
     }

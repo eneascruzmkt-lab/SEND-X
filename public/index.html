@@ -2382,6 +2382,7 @@ const CHART_METRICS = [
   { key: 'telegramJoins',  label: 'Telegram',           color: '#14b8a6', money: false, defaultOn: false },
 ];
 let chartActiveMetrics = CHART_METRICS.filter(m => m.defaultOn).map(m => m.key);
+let chartPercentMode = false;
 
 function switchRelatorioTab(tab) {
   relatorioTab = tab;
@@ -2565,7 +2566,12 @@ function renderRelatorio(data) {
         <span class="w-4 h-4 text-green-500/50"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l3-4 3 2 4-6" opacity=".9"/><path d="M10 4h4v4" opacity=".6"/></svg></span>
         Evolução Diária
       </h3>
-      <div id="relatorioChartChips" class="flex flex-wrap gap-2 mb-4"></div>
+      <div class="flex items-center gap-3 mb-4">
+        <div id="relatorioChartChips" class="flex flex-wrap gap-2 flex-1"></div>
+        <button id="chartPercentToggle" onclick="toggleChartPercent()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border border-border/60 text-gray-400 hover:border-green-500/50 hover:text-green-400 shrink-0">
+          <span id="chartPercentLabel">Ver %</span>
+        </button>
+      </div>
       <div id="relatorioChartWrap" style="position:relative;height:320px;">
         <canvas id="relatorioChartCanvas"></canvas>
       </div>
@@ -2581,14 +2587,6 @@ async function loadRelatorioChart() {
   const empty = document.getElementById('relatorioChartEmpty');
   const chipsEl = document.getElementById('relatorioChartChips');
 
-  if (relatorioPeriodo === 'hoje' || relatorioPeriodo === 'ontem') {
-    wrap.classList.add('hidden');
-    chipsEl.classList.add('hidden');
-    empty.classList.remove('hidden');
-    if (relatorioChart) { relatorioChart.destroy(); relatorioChart = null; }
-    return;
-  }
-
   wrap.classList.remove('hidden');
   chipsEl.classList.remove('hidden');
   empty.classList.add('hidden');
@@ -2598,14 +2596,8 @@ async function loadRelatorioChart() {
   wrap.innerHTML = '<canvas id="relatorioChartCanvas"></canvas>';
   wrap.insertAdjacentHTML('afterbegin', '<div id="chartLoading" class="absolute inset-0 flex items-center justify-center"><span class="text-xs text-gray-500">Carregando gráfico...</span></div>');
 
-  let url = `/relatorio/diario?tab=${relatorioTab}&periodo=${relatorioPeriodo}`;
-  if (relatorioPeriodo === 'custom') {
-    const de = document.getElementById('relDe').value;
-    const ate = document.getElementById('relAte').value;
-    if (!de || !ate) return;
-    const fmtDate = d => d.split('-').reverse().join('/');
-    url += `&de=${fmtDate(de)}&ate=${fmtDate(ate)}`;
-  }
+  // Gráfico sempre busca 7 dias, independente do filtro dos cards
+  let url = `/relatorio/diario?tab=${relatorioTab}&periodo=7d`;
 
   try {
     const data = await api(url);
@@ -2645,17 +2637,28 @@ function renderRelatorioChart(dias) {
   const labels = dias.map(d => d.data);
   const datasets = CHART_METRICS
     .filter(m => chartActiveMetrics.includes(m.key))
-    .map(m => ({
-      label: m.label,
-      data: dias.map(d => d[m.key] || 0),
-      borderColor: m.color,
-      backgroundColor: m.color + '20',
-      fill: true,
-      tension: 0.3,
-      pointRadius: 3,
-      pointHoverRadius: 6,
-      borderWidth: 2,
-    }));
+    .map(m => {
+      const rawData = dias.map(d => d[m.key] || 0);
+      let data;
+      if (chartPercentMode) {
+        const base = rawData[0] || 1;
+        data = rawData.map(v => Math.round(((v - base) / Math.abs(base)) * 10000) / 100);
+      } else {
+        data = rawData;
+      }
+      return {
+        label: m.label,
+        data,
+        _rawData: rawData,
+        borderColor: m.color,
+        backgroundColor: m.color + '20',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      };
+    });
 
   relatorioChart = new Chart(canvas, {
     type: 'line',
@@ -2676,6 +2679,15 @@ function renderRelatorioChart(dias) {
           callbacks: {
             label: function(ctx) {
               const metric = CHART_METRICS.find(m => m.label === ctx.dataset.label);
+              if (chartPercentMode) {
+                const pct = ctx.parsed.y;
+                const raw = ctx.dataset._rawData ? ctx.dataset._rawData[ctx.dataIndex] : 0;
+                const rawFmt = metric && metric.money
+                  ? raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                  : Math.round(raw).toLocaleString('pt-BR');
+                const sign = pct >= 0 ? '+' : '';
+                return ` ${ctx.dataset.label}: ${sign}${pct.toFixed(1)}% (${rawFmt})`;
+              }
               const val = ctx.parsed.y;
               if (metric && metric.money) {
                 return ` ${ctx.dataset.label}: ${val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
@@ -2696,6 +2708,7 @@ function renderRelatorioChart(dias) {
             color: '#6b7280',
             font: { size: 11 },
             callback: function(val) {
+              if (chartPercentMode) return val.toFixed(0) + '%';
               if (val >= 1000) return (val / 1000).toFixed(1) + 'k';
               return val;
             }
@@ -2704,6 +2717,22 @@ function renderRelatorioChart(dias) {
       }
     }
   });
+}
+
+function toggleChartPercent() {
+  chartPercentMode = !chartPercentMode;
+  const btn = document.getElementById('chartPercentToggle');
+  const label = document.getElementById('chartPercentLabel');
+  if (chartPercentMode) {
+    btn.classList.add('border-green-500/50', 'text-green-400', 'bg-green-500/5');
+    btn.classList.remove('border-border/60', 'text-gray-400');
+    label.textContent = 'Ver R$';
+  } else {
+    btn.classList.remove('border-green-500/50', 'text-green-400', 'bg-green-500/5');
+    btn.classList.add('border-border/60', 'text-gray-400');
+    label.textContent = 'Ver %';
+  }
+  if (relatorioChartData) renderRelatorioChart(relatorioChartData);
 }
 
 function toggleChartMetric(key) {

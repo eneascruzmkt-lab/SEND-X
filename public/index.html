@@ -801,6 +801,7 @@ tailwind.config = {
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 const socket = io();
 let currentPar = null;
@@ -2367,6 +2368,20 @@ async function deletePar(id) {
 // ── Relatório ──────────────────────────────────
 let relatorioTab = '';
 let relatorioPeriodo = 'hoje';
+let relatorioChart = null;
+let relatorioChartData = null;
+const CHART_METRICS = [
+  { key: 'gasto',          label: 'Gasto',              color: '#22c55e', money: true,  defaultOn: true },
+  { key: 'ftds',           label: 'FTDs',               color: '#3b82f6', money: false, defaultOn: true },
+  { key: 'cadastros',      label: 'Cadastros',          color: '#f59e0b', money: false, defaultOn: true },
+  { key: 'netPL',          label: 'Net P&L',            color: '#ef4444', money: true,  defaultOn: true },
+  { key: 'cliques',        label: 'Cliques',            color: '#8b5cf6', money: false, defaultOn: false },
+  { key: 'ftdAmount',      label: 'FTD Amount',         color: '#06b6d4', money: true,  defaultOn: false },
+  { key: 'custoFTD',       label: 'Custo/FTD',          color: '#f97316', money: true,  defaultOn: false },
+  { key: 'depositsAmount', label: 'Deposits',           color: '#ec4899', money: true,  defaultOn: false },
+  { key: 'telegramJoins',  label: 'Telegram',           color: '#14b8a6', money: false, defaultOn: false },
+];
+let chartActiveMetrics = CHART_METRICS.filter(m => m.defaultOn).map(m => m.key);
 
 function switchRelatorioTab(tab) {
   relatorioTab = tab;
@@ -2428,6 +2443,7 @@ async function loadRelatorio() {
     container.innerHTML = renderRelatorio(data);
     // Carrega UTMs em paralelo
     loadRelatorioUtms();
+    loadRelatorioChart();
   } catch (err) {
     container.innerHTML = '<div class="empty-state">Erro ao carregar relatório</div>';
   }
@@ -2543,7 +2559,163 @@ function renderRelatorio(data) {
       ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2l5 3-5 3V2z" opacity=".9"/><path d="M8 5l5 3-5 3V5z" opacity=".5"/></svg>', 'Inscritos Telegram', t.telegramJoins, false, false)}
       ${renderRelatorioCard('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l3-4 3 2 4-6" opacity=".9"/><path d="M10 4h4v4" opacity=".6"/></svg>', 'Net P&L', t.netPL, true, true)}
     </div>
-    <div id="relatorioUtms"></div>`;
+    <div id="relatorioUtms"></div>
+    <div id="relatorioChartSection" class="mt-6 bg-surface border border-border-light/60 rounded-xl p-5">
+      <h3 class="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">
+        <span class="w-4 h-4 text-green-500/50"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l3-4 3 2 4-6" opacity=".9"/><path d="M10 4h4v4" opacity=".6"/></svg></span>
+        Evolução Diária
+      </h3>
+      <div id="relatorioChartChips" class="flex flex-wrap gap-2 mb-4"></div>
+      <div id="relatorioChartWrap" style="position:relative;height:320px;">
+        <canvas id="relatorioChartCanvas"></canvas>
+      </div>
+      <div id="relatorioChartEmpty" class="empty-state hidden">Selecione um período com mais de 1 dia</div>
+    </div>`;
+}
+
+async function loadRelatorioChart() {
+  const section = document.getElementById('relatorioChartSection');
+  if (!section) return;
+
+  const wrap = document.getElementById('relatorioChartWrap');
+  const empty = document.getElementById('relatorioChartEmpty');
+  const chipsEl = document.getElementById('relatorioChartChips');
+
+  if (relatorioPeriodo === 'hoje' || relatorioPeriodo === 'ontem') {
+    wrap.classList.add('hidden');
+    chipsEl.classList.add('hidden');
+    empty.classList.remove('hidden');
+    if (relatorioChart) { relatorioChart.destroy(); relatorioChart = null; }
+    return;
+  }
+
+  wrap.classList.remove('hidden');
+  chipsEl.classList.remove('hidden');
+  empty.classList.add('hidden');
+
+  buildChartChips();
+
+  wrap.innerHTML = '<canvas id="relatorioChartCanvas"></canvas>';
+  wrap.insertAdjacentHTML('afterbegin', '<div id="chartLoading" class="absolute inset-0 flex items-center justify-center"><span class="text-xs text-gray-500">Carregando gráfico...</span></div>');
+
+  let url = `/relatorio/diario?tab=${relatorioTab}&periodo=${relatorioPeriodo}`;
+  if (relatorioPeriodo === 'custom') {
+    const de = document.getElementById('relDe').value;
+    const ate = document.getElementById('relAte').value;
+    if (!de || !ate) return;
+    const fmtDate = d => d.split('-').reverse().join('/');
+    url += `&de=${fmtDate(de)}&ate=${fmtDate(ate)}`;
+  }
+
+  try {
+    const data = await api(url);
+    relatorioChartData = data.dias;
+    const loading = document.getElementById('chartLoading');
+    if (loading) loading.remove();
+    renderRelatorioChart(relatorioChartData);
+  } catch (err) {
+    console.error('[Chart] Error:', err);
+    const loading = document.getElementById('chartLoading');
+    if (loading) loading.innerHTML = '<span class="text-xs text-red-400">Erro ao carregar gráfico</span>';
+  }
+}
+
+function buildChartChips() {
+  const chipsEl = document.getElementById('relatorioChartChips');
+  if (!chipsEl) return;
+  chipsEl.innerHTML = CHART_METRICS.map(m => {
+    const active = chartActiveMetrics.includes(m.key);
+    return `<button onclick="toggleChartMetric('${m.key}')" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+      active
+        ? 'border-current opacity-100'
+        : 'border-border/40 opacity-40 hover:opacity-70'
+    }" style="color:${m.color};${active ? `background:${m.color}15;` : ''}">
+      <span class="w-2 h-2 rounded-full" style="background:${m.color}"></span>
+      ${m.label}
+    </button>`;
+  }).join('');
+}
+
+function renderRelatorioChart(dias) {
+  if (relatorioChart) { relatorioChart.destroy(); relatorioChart = null; }
+
+  const canvas = document.getElementById('relatorioChartCanvas');
+  if (!canvas || !dias || dias.length === 0) return;
+
+  const labels = dias.map(d => d.data);
+  const datasets = CHART_METRICS
+    .filter(m => chartActiveMetrics.includes(m.key))
+    .map(m => ({
+      label: m.label,
+      data: dias.map(d => d[m.key] || 0),
+      borderColor: m.color,
+      backgroundColor: m.color + '20',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      borderWidth: 2,
+    }));
+
+  relatorioChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d1a',
+          borderColor: '#333',
+          borderWidth: 1,
+          titleColor: '#e5e7eb',
+          bodyColor: '#9ca3af',
+          padding: 12,
+          callbacks: {
+            label: function(ctx) {
+              const metric = CHART_METRICS.find(m => m.label === ctx.dataset.label);
+              const val = ctx.parsed.y;
+              if (metric && metric.money) {
+                return ` ${ctx.dataset.label}: ${val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+              }
+              return ` ${ctx.dataset.label}: ${Math.round(val).toLocaleString('pt-BR')}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#ffffff08' },
+          ticks: { color: '#6b7280', font: { size: 11 } },
+        },
+        y: {
+          grid: { color: '#ffffff08' },
+          ticks: {
+            color: '#6b7280',
+            font: { size: 11 },
+            callback: function(val) {
+              if (val >= 1000) return (val / 1000).toFixed(1) + 'k';
+              return val;
+            }
+          },
+        }
+      }
+    }
+  });
+}
+
+function toggleChartMetric(key) {
+  const idx = chartActiveMetrics.indexOf(key);
+  if (idx >= 0) {
+    if (chartActiveMetrics.length === 1) return;
+    chartActiveMetrics.splice(idx, 1);
+  } else {
+    chartActiveMetrics.push(key);
+  }
+  buildChartChips();
+  if (relatorioChartData) renderRelatorioChart(relatorioChartData);
 }
 
 // ── Insights IA ──────────────────────────────────

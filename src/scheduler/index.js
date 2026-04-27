@@ -268,6 +268,28 @@ function start(socketIo) {
     } catch (err) {
       console.error('[cron] erro ao limpar messages:', err.message);
     }
+
+    // Limpeza de arquivos de upload não referenciados por schedules
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const uploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads');
+      if (fs.existsSync(uploadsDir)) {
+        const usedUrls = await db.getScheduleMediaFiles();
+        const usedFiles = new Set(usedUrls.map(u => u.split('/').pop()));
+        const files = fs.readdirSync(uploadsDir);
+        let removed = 0;
+        for (const f of files) {
+          if (!usedFiles.has(f)) {
+            fs.unlinkSync(path.join(uploadsDir, f));
+            removed++;
+          }
+        }
+        if (removed > 0) console.log(`[cron] ${removed} arquivos de upload removidos`);
+      }
+    } catch (err) {
+      console.error('[cron] erro ao limpar uploads:', err.message);
+    }
   });
 
   console.log('[scheduler] cron jobs iniciados');

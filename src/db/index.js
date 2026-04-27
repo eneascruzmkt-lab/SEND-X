@@ -479,6 +479,12 @@ module.exports = {
     await pool.query('DELETE FROM schedules WHERE id=$1', [id]);
   },
 
+  /** Retorna todos os content_media_url usados em schedules (para limpeza de uploads) */
+  async getScheduleMediaFiles() {
+    const res = await pool.query("SELECT content_media_url FROM schedules WHERE content_media_url IS NOT NULL");
+    return res.rows.map(r => r.content_media_url);
+  },
+
   // ── Logs ──────────────────────────────────────────────
   // Registro de todos os disparos (sucesso e erro) para auditoria
 

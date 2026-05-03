@@ -617,11 +617,15 @@ tailwind.config = {
         <h3 class="text-base font-bold mb-4 mt-8">Planilhas por mes</h3>
         <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5 mb-8">
           <div class="text-[11px] text-gray-500 mb-3">Cada mes tem sua propria planilha. O scraper e o relatorio usam automaticamente a planilha do mes correto.</div>
+          <div class="text-[11px] text-gray-400 bg-[#0c0f0c] border border-border/40 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+            <span class="text-gray-500">Compartilhe a planilha com:</span>
+            <code class="text-green-400 select-all">mkt-scraper@gen-lang-client-0771529954.iam.gserviceaccount.com</code>
+          </div>
           <div id="sheetMonthsList" class="space-y-2 mb-4"></div>
           <div class="flex gap-2 items-end">
             <div class="flex-1">
               <label class="block text-xs font-semibold text-gray-400 mb-1.5">Mes (YYYY-MM)</label>
-              <input type="month" id="cfgNewMonth" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+              <input type="month" id="cfgNewMonth" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10 [color-scheme:dark]">
             </div>
             <div class="flex-1">
               <label class="block text-xs font-semibold text-gray-400 mb-1.5">Sheet ID</label>
@@ -1014,6 +1018,12 @@ async function saveSettings() {
 
 // ── Sheet Months ────────────────────────────────
 async function loadSheetMonths() {
+  // Pre-fill month input with current month
+  const mi = document.getElementById('cfgNewMonth');
+  if (mi && !mi.value) {
+    const n = new Date();
+    mi.value = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  }
   try {
     const rows = await api('/sheet-months');
     const list = document.getElementById('sheetMonthsList');

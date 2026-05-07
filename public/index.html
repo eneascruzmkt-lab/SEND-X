@@ -642,7 +642,7 @@ tailwind.config = {
           <div class="flex gap-2 items-end">
             <div class="flex-1">
               <label class="block text-xs font-semibold text-gray-400 mb-1.5">Aba (expert)</label>
-              <input type="text" id="cfgAdTab" placeholder="Ex: DANI, DEIVID, JUH" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+              <select id="cfgAdTab" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10"><option value="">Carregando...</option></select>
             </div>
             <div class="flex-1">
               <label class="block text-xs font-semibold text-gray-400 mb-1.5">Account ID</label>
@@ -1094,24 +1094,38 @@ async function loadAdAccounts() {
     const list = document.getElementById('adAccountsList');
     if (rows.length === 0) {
       list.innerHTML = '<div class="text-xs text-gray-500">Nenhuma conta configurada.</div>';
-      return;
-    }
-    list.innerHTML = rows.map(r => `
-      <div class="flex items-center justify-between bg-[#0c0f0c] border border-border/40 rounded-lg px-3 py-2">
-        <div>
-          <span class="text-sm font-semibold text-gray-200">${esc(r.tab)}</span>
-          <span class="text-xs text-gray-500 ml-2">${esc(r.ad_account_id)}</span>
+    } else {
+      list.innerHTML = rows.map(r => `
+        <div class="flex items-center justify-between bg-[#0c0f0c] border border-border/40 rounded-lg px-3 py-2">
+          <div>
+            <span class="text-sm font-semibold text-gray-200">${esc(r.tab)}</span>
+            <span class="text-xs text-gray-500 ml-2">${esc(r.ad_account_id)}</span>
+          </div>
+          <button class="text-red-400 hover:text-red-300 text-xs font-semibold" onclick="deleteAdAccount('${esc(r.tab)}')">Remover</button>
         </div>
-        <button class="text-red-400 hover:text-red-300 text-xs font-semibold" onclick="deleteAdAccount('${esc(r.tab)}')">Remover</button>
-      </div>
-    `).join('');
+      `).join('');
+    }
+    // Populate tab select with sheet tabs not yet configured
+    const sel = document.getElementById('cfgAdTab');
+    const usedTabs = rows.map(r => r.tab);
+    try {
+      const tabs = await api('/relatorio/tabs');
+      const available = tabs.filter(t => !usedTabs.includes(t));
+      if (available.length === 0) {
+        sel.innerHTML = '<option value="">Todas as abas ja configuradas</option>';
+      } else {
+        sel.innerHTML = available.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+      }
+    } catch {
+      sel.innerHTML = '<option value="">Erro ao carregar abas</option>';
+    }
   } catch (err) {
     console.error('Erro ao carregar contas de anuncio:', err);
   }
 }
 
 async function addAdAccount() {
-  const tab = document.getElementById('cfgAdTab').value.trim().toUpperCase();
+  const tab = document.getElementById('cfgAdTab').value;
   const adAccountId = document.getElementById('cfgAdAccountId').value.trim();
   if (!tab || !adAccountId) return alert('Preencha a aba e o Account ID');
   const id = adAccountId.startsWith('act_') ? adAccountId : 'act_' + adAccountId;

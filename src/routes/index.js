@@ -537,4 +537,56 @@ router.use(relatorioRoutes);
 const insightsRoutes = require('./insights');
 router.use(insightsRoutes);
 
+// ── Ad Accounts (Meta Ads por expert) ──────────────────
+
+/** GET /ad-accounts — lista contas de anúncio do usuário */
+router.get('/ad-accounts', auth, async (req, res) => {
+  try {
+    const rows = await db.getAdAccounts(req.userId);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /ad-accounts — adiciona/atualiza conta */
+router.post('/ad-accounts', auth, async (req, res) => {
+  try {
+    const { tab, ad_account_id } = req.body;
+    if (!tab || !ad_account_id) return res.status(400).json({ error: 'tab e ad_account_id obrigatórios' });
+    await db.upsertAdAccount(req.userId, tab, ad_account_id);
+    const rows = await db.getAdAccounts(req.userId);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /ad-accounts/:tab — remove conta */
+router.delete('/ad-accounts/:tab', auth, async (req, res) => {
+  try {
+    await db.deleteAdAccount(req.userId, req.params.tab);
+    const rows = await db.getAdAccounts(req.userId);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /config/ad-accounts — endpoint pro scraper (autenticado via api_key) */
+router.get('/config/ad-accounts', async (req, res) => {
+  try {
+    const apiKey = req.query.key;
+    if (!apiKey) return res.status(401).json({ error: 'API key obrigatória (?key=...)' });
+    const userId = await db.getUserByApiKey(apiKey);
+    if (!userId) return res.status(401).json({ error: 'API key inválida' });
+    const rows = await db.getAdAccounts(userId);
+    const accounts = {};
+    for (const r of rows) accounts[r.tab] = r.ad_account_id;
+    res.json(accounts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

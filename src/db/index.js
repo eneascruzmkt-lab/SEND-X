@@ -175,6 +175,17 @@ async function init() {
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Tabela de contas de anúncio Meta Ads (por expert/tab)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ad_accounts (
+      id             SERIAL PRIMARY KEY,
+      user_id        INTEGER NOT NULL REFERENCES users(id),
+      tab            TEXT NOT NULL,
+      ad_account_id  TEXT NOT NULL,
+      created_at     TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, tab)
+    );
+  `);
   console.log('[db] PostgreSQL schema OK');
 }
 
@@ -640,6 +651,24 @@ module.exports = {
   async getUserByApiKey(apiKey) {
     const res = await pool.query('SELECT user_id FROM user_settings WHERE api_key=$1', [apiKey]);
     return res.rows[0]?.user_id || null;
+  },
+
+  // ── Ad Accounts (Meta Ads) ─────────────────────────────
+
+  async getAdAccounts(userId) {
+    const res = await pool.query('SELECT * FROM ad_accounts WHERE user_id=$1 ORDER BY tab ASC', [userId]);
+    return res.rows;
+  },
+
+  async upsertAdAccount(userId, tab, adAccountId) {
+    await pool.query(`
+      INSERT INTO ad_accounts (user_id, tab, ad_account_id) VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, tab) DO UPDATE SET ad_account_id = $3
+    `, [userId, tab, adAccountId]);
+  },
+
+  async deleteAdAccount(userId, tab) {
+    await pool.query('DELETE FROM ad_accounts WHERE user_id=$1 AND tab=$2', [userId, tab]);
   },
 
   /** Query genérica — usar com cuidado, preferir métodos específicos */

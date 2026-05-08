@@ -3029,11 +3029,6 @@ async function sendInsightsMessage() {
   const input = document.getElementById('insightsInput');
   const message = input.value.trim();
   if (!message) return;
-  if (!insightsTab) {
-    alert('Selecione uma aba primeiro.');
-    return;
-  }
-
   input.value = '';
   input.style.height = 'auto';
   addChatMessage('user', formatMarkdown(message));
@@ -3053,8 +3048,8 @@ async function sendInsightsMessage() {
       },
       body: JSON.stringify({
         message,
-        tab: insightsTab,
-        periodo: insightsPeriodo,
+        tab: insightsTab || null,
+        periodo: insightsPeriodo || null,
         history: insightsHistory,
       }),
     });
@@ -3070,14 +3065,34 @@ async function sendInsightsMessage() {
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let fullText = '';
+    let toolStatus = '';
     bubble.innerHTML = '';
+    let buf = '';
+
+    const TOOL_LABELS = {
+      get_metricas_expert: 'consultando métricas',
+      get_metricas_diario: 'lendo série diária',
+      get_dashboard_overview: 'buscando snapshot consolidado',
+      get_disparos_status: 'verificando disparos',
+      get_telegram_growth: 'analisando Telegram',
+      get_postbacks_por_utm: 'cruzando UTMs',
+    };
+
+    const render = () => {
+      const toolHtml = toolStatus
+        ? '<div class="text-[11px] text-gray-500 mb-1.5 italic">' + toolStatus + '</div>'
+        : '';
+      bubble.innerHTML = toolHtml + (fullText ? formatMarkdown(fullText) : '');
+      document.getElementById('insightsChat').scrollTop = document.getElementById('insightsChat').scrollHeight;
+    };
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
@@ -3085,11 +3100,20 @@ async function sendInsightsMessage() {
           const data = JSON.parse(line.slice(6));
           if (data.type === 'text') {
             fullText += data.text;
-            bubble.innerHTML = formatMarkdown(fullText);
-            document.getElementById('insightsChat').scrollTop = document.getElementById('insightsChat').scrollHeight;
+            render();
+          } else if (data.type === 'tool_use') {
+            const label = TOOL_LABELS[data.name] || data.name;
+            const args = data.input?.expert ? ' (' + data.input.expert + ')' : '';
+            toolStatus = '🔍 ' + label + args + '...';
+            render();
+          } else if (data.type === 'tool_result') {
+            toolStatus = data.ok ? '' : '⚠️ erro em ' + data.name;
+            render();
           } else if (data.type === 'error') {
             bubble.innerHTML += '<br><span class="text-red-400">' + data.error + '</span>';
           } else if (data.type === 'done') {
+            toolStatus = '';
+            render();
             loadInsightsUsage();
           }
         } catch (e) { /* skip malformed lines */ }

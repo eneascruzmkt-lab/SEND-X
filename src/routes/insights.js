@@ -64,6 +64,71 @@ function buildFactsContext(facts) {
   return '\n\n## Memória persistente\n' + sections.join('\n\n');
 }
 
+// ─── Pre-fetch heurístico de contexto para o bridge ───────────────────────
+// Como o Claude Code em modo headless (-p) não chama MCPs por conta própria,
+// o SEND-X executa as tools relevantes ANTES e injeta os resultados como contexto.
+// Heurística simples por keywords. Se nenhuma matching, ainda manda dashboard_overview.
+
+const EXPERT_NAMES = ['DANI', 'DEIVID', 'JUH', 'NUCLEAR'];
+
+async function prefetchContextForBridge(message, userId) {
+  const ctx = [];
+  const upper = (message || '').toUpperCase();
+
+  // 1) Sempre: dashboard overview (custo trivial, dá panorama)
+  try {
+    const ov = await executeTool('get_dashboard_overview', {}, userId);
+    ctx.push('### Dashboard overview (snapshot consolidado)\n```json\n' + JSON.stringify(ov, null, 2) + '\n```');
+  } catch (e) {
+    ctx.push('### Dashboard overview\nFalha: ' + e.message);
+  }
+
+  // 2) Detecta expert mencionado → métricas + diário 7d
+  const mentioned = EXPERT_NAMES.filter(n => upper.includes(n));
+  for (const expert of mentioned) {
+    try {
+      const m = await executeTool('get_metricas_expert', { expert, periodo: 'ontem' }, userId);
+      ctx.push(`### Métricas ${expert} ontem\n\`\`\`json\n${JSON.stringify(m, null, 2)}\n\`\`\``);
+    } catch (e) { /* ignora */ }
+    try {
+      const d = await executeTool('get_metricas_diario', { expert, periodo: '7d' }, userId);
+      ctx.push(`### Série diária ${expert} 7d\n\`\`\`json\n${JSON.stringify(d, null, 2)}\n\`\`\``);
+    } catch (e) { /* ignora */ }
+  }
+
+  // 3) Detecta intenção de disparos
+  if (/disparo|schedule|agend|envio|sendpulse/i.test(message)) {
+    try {
+      const ds = await executeTool('get_disparos_status', { status: 'todos', periodo: '7d' }, userId);
+      ctx.push('### Status disparos 7d\n```json\n' + JSON.stringify(ds, null, 2) + '\n```');
+    } catch (e) { /* ignora */ }
+  }
+
+  // 4) Detecta intenção de UTM/postbacks
+  if (/utm|postback|campanha|criativo|adset/i.test(message) && mentioned.length > 0) {
+    for (const expert of mentioned) {
+      try {
+        const u = await executeTool('get_postbacks_por_utm', { expert, periodo: '7d' }, userId);
+        ctx.push(`### Postbacks UTM ${expert} 7d\n\`\`\`json\n${JSON.stringify(u, null, 2)}\n\`\`\``);
+      } catch (e) { /* ignora */ }
+    }
+  }
+
+  // 5) Detecta intenção de Telegram
+  if (/telegram|inscrito|canal/i.test(message) && mentioned.length > 0) {
+    for (const expert of mentioned) {
+      try {
+        const t = await executeTool('get_telegram_growth', { expert, periodo: '7d' }, userId);
+        ctx.push(`### Telegram growth ${expert} 7d\n\`\`\`json\n${JSON.stringify(t, null, 2)}\n\`\`\``);
+      } catch (e) { /* ignora */ }
+    }
+  }
+
+  return ctx.length > 0
+    ? '\n\n## Dados pré-carregados pelo SEND-X (use estes números, não invente)\n\n' + ctx.join('\n\n')
+    : '';
+}
+
 // ─── Backend: bridge (Mac via ngrok) ───────────────────────────────────────
 
 async function callBridge({ message, sessionBridgeId, additionalSystem, signal }) {
@@ -225,11 +290,16 @@ router.post('/insights', async (req, res) => {
 
     try {
       if (useBridge) {
-        // Bridge: histórico fica no Claude Code via --resume
+        // Bridge: pre-fetcha tools (Claude headless não chama MCP) e injeta como contexto.
+        // Histórico fica no Claude Code via --resume.
+        send({ type: 'tool_use', name: 'prefetch_contexto', input: {} });
+        const prefetched = await prefetchContextForBridge(message, req.userId);
+        send({ type: 'tool_result', name: 'prefetch_contexto', ok: true });
+
         const result = await callBridge({
           message,
           sessionBridgeId: session.bridge_session_id,
-          additionalSystem: factsContext + contextoTela,
+          additionalSystem: factsContext + contextoTela + prefetched,
           signal: ac.signal,
         });
         assistantText = result.text || '';

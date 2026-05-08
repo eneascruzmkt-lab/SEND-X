@@ -95,3 +95,50 @@
 - A função `telegramToHtml` existe no bot/index.js mas NÃO é chamada — foi desativada por causar problemas
 - Os links do Telegram no caption são perdidos (texto puro) — tentativa de preservar via HTML foi revertida
 - Todas as rotas originais do SEND-X estão intactas
+
+---
+
+## Arquitetura atual (operações)
+
+**Repos / Services:**
+- **SEND-X** painel + API → repo `eneascruzmkt-lab/SEND-X` → Railway service `SEND-X` no projeto Railway `SEND-X` → URL `https://send-x-production.up.railway.app`
+- **sendx-mcp** servidor MCP HTTP → repo `aytalo/sendx-mcp` → Railway service `sendx-mcp` no mesmo projeto → URL `https://sendx-mcp-production.up.railway.app/mcp` (auth Bearer = `user_settings.api_key`)
+- **sendx-mcp local stdio** → `/Users/aytalooliveira/sendx-mcp/` rodando via `claude mcp add` para Claude Code local
+
+**Postgres:** 1 instância no projeto SEND-X. Internal: `postgres.railway.internal:5432`. Public proxy: `crossover.proxy.rlwy.net:47305`.
+
+**Donos dos dados:** `user_id=1` (eneascruz.mkt@gmail.com) é o owner principal. Todas operações default usam `user_id=1`.
+
+## Operações comuns (slash commands)
+
+- **`/sendx-status`** — overview operacional (deploys, healthchecks, alertas, git status). Use no começo de uma sessão para ver se está tudo verde.
+- **`/redeploy-tudo`** — redeploy controlado dos 2 serviços com validação de saúde. Aceita `--service=<nome>` para redeploy individual.
+
+## Fluxo de mudança no SEND-X
+
+1. Editar código local em `/Users/aytalooliveira/SEND X/`
+2. `node --check <arquivo>` para syntax check rápido (não tem teste suite)
+3. `git add -p` + commit com mensagem descritiva
+4. `git push origin main` — Railway auto-deploya em ~2min
+5. Aguardar `railway deployment list` mostrar SUCCESS no head, depois `curl /` pra validar 200
+
+## Fluxo de mudança no sendx-mcp
+
+1. Editar `/Users/aytalooliveira/sendx-mcp/src/`
+2. `cd /Users/aytalooliveira/sendx-mcp && node --env-file=.env -e '<smoke test>'` para testar local
+3. `git add -A && git commit -m "..." && git push`
+4. **Deploy não é automático** (Railway não tem acesso ao repo privado `aytalo/sendx-mcp`). Rodar manual:
+   `cd /Users/aytalooliveira/sendx-mcp && railway service sendx-mcp && railway up --ci`
+5. Validar: `curl -fsS https://sendx-mcp-production.up.railway.app/health`
+
+## Acesso a dados
+
+- **Métricas / disparos / postbacks** → use as MCP tools `mcp__sendx__*` (já registradas no Claude Code). Evita mexer direto na planilha ou DB.
+- **Meta Ads (gasto/CPM/CTR/CPA por campanha/adset)** → use o MCP `mcp__claude_ai_Meta_MCP__*`. O ad_account_id de cada expert vem de `mcp__sendx__get_meta_ads_performance`.
+- **Postgres direto** (queries que o MCP não cobre) → DATABASE_URL pública em `~/.railway/config.json` ou via `railway variables --kv`. Usar `node + pg` no diretório `/Users/aytalooliveira/sendx-mcp/` que já tem o pacote instalado.
+
+## Princípios de segurança
+
+- Antes de qualquer ação destrutiva (drop, delete, force push, railway delete) — confirmar com o user
+- Nunca commitar `.env`, `.gsa.b64` ou qualquer chave em texto puro
+- Antes de mudar produção (push em `main`) avisar o user da mudança e aguardar ok

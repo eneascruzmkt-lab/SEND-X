@@ -5,3 +5,5 @@ data.db-shm
 .env
 public/uploads/*
 !public/uploads/.gitkeep
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

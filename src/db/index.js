@@ -186,6 +186,39 @@ async function init() {
       UNIQUE(user_id, tab)
     );
   `);
+  // Memória persistente do chat (sessões, mensagens, fatos aprendidos)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id                SERIAL PRIMARY KEY,
+      user_id           INTEGER NOT NULL REFERENCES users(id),
+      title             TEXT,
+      bridge_session_id TEXT,
+      backend           TEXT DEFAULT 'api',
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id          SERIAL PRIMARY KEY,
+      session_id  INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      role        TEXT NOT NULL,
+      content     TEXT NOT NULL,
+      metadata    JSONB,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created
+      ON chat_messages(session_id, created_at);
+    CREATE TABLE IF NOT EXISTS chat_facts (
+      id                SERIAL PRIMARY KEY,
+      user_id           INTEGER NOT NULL REFERENCES users(id),
+      type              TEXT NOT NULL,
+      fact_key          TEXT NOT NULL,
+      fact_value        TEXT NOT NULL,
+      source_message_id INTEGER REFERENCES chat_messages(id) ON DELETE SET NULL,
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, type, fact_key)
+    );
+  `);
   console.log('[db] PostgreSQL schema OK');
 }
 
@@ -675,5 +708,102 @@ module.exports = {
   async query(text, params) {
     const res = await pool.query(text, params);
     return res.rows;
+  },
+
+  // ── Chat memory (persistent) ─────────────────────────
+
+  /** Pega a sessão de chat mais recente do user ou cria uma nova */
+  async getOrCreateChatSession(userId, { backend = 'api' } = {}) {
+    const existing = await pool.query(
+      `SELECT * FROM chat_sessions WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    );
+    if (existing.rows.length > 0) return existing.rows[0];
+    const created = await pool.query(
+      `INSERT INTO chat_sessions (user_id, backend) VALUES ($1, $2) RETURNING *`,
+      [userId, backend]
+    );
+    return created.rows[0];
+  },
+
+  async createChatSession(userId, { title, backend = 'api' } = {}) {
+    const res = await pool.query(
+      `INSERT INTO chat_sessions (user_id, title, backend) VALUES ($1, $2, $3) RETURNING *`,
+      [userId, title || null, backend]
+    );
+    return res.rows[0];
+  },
+
+  async updateChatSessionBridgeId(sessionId, bridgeSessionId) {
+    await pool.query(
+      `UPDATE chat_sessions SET bridge_session_id=$2, updated_at=NOW() WHERE id=$1`,
+      [sessionId, bridgeSessionId]
+    );
+  },
+
+  async touchChatSession(sessionId) {
+    await pool.query(`UPDATE chat_sessions SET updated_at=NOW() WHERE id=$1`, [sessionId]);
+  },
+
+  async listChatSessions(userId, limit = 20) {
+    const res = await pool.query(
+      `SELECT s.*, (SELECT COUNT(*) FROM chat_messages WHERE session_id=s.id) AS message_count
+       FROM chat_sessions s WHERE user_id=$1 ORDER BY updated_at DESC LIMIT $2`,
+      [userId, limit]
+    );
+    return res.rows;
+  },
+
+  async addChatMessage(sessionId, role, content, metadata = null) {
+    const res = await pool.query(
+      `INSERT INTO chat_messages (session_id, role, content, metadata) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [sessionId, role, content, metadata]
+    );
+    await this.touchChatSession(sessionId);
+    return res.rows[0];
+  },
+
+  async getChatMessages(sessionId, limit = 20) {
+    const res = await pool.query(
+      `SELECT * FROM (
+         SELECT * FROM chat_messages WHERE session_id=$1 ORDER BY created_at DESC LIMIT $2
+       ) t ORDER BY created_at ASC`,
+      [sessionId, limit]
+    );
+    return res.rows;
+  },
+
+  async upsertChatFact(userId, type, key, value, sourceMessageId = null) {
+    const res = await pool.query(
+      `INSERT INTO chat_facts (user_id, type, fact_key, fact_value, source_message_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, type, fact_key) DO UPDATE
+         SET fact_value=$4, source_message_id=COALESCE($5, chat_facts.source_message_id), updated_at=NOW()
+       RETURNING *`,
+      [userId, type, key, value, sourceMessageId]
+    );
+    return res.rows[0];
+  },
+
+  async getChatFacts(userId, types = null) {
+    if (types && types.length > 0) {
+      const res = await pool.query(
+        `SELECT * FROM chat_facts WHERE user_id=$1 AND type = ANY($2) ORDER BY type, fact_key`,
+        [userId, types]
+      );
+      return res.rows;
+    }
+    const res = await pool.query(
+      `SELECT * FROM chat_facts WHERE user_id=$1 ORDER BY type, fact_key`,
+      [userId]
+    );
+    return res.rows;
+  },
+
+  async deleteChatFact(userId, type, key) {
+    await pool.query(
+      `DELETE FROM chat_facts WHERE user_id=$1 AND type=$2 AND fact_key=$3`,
+      [userId, type, key]
+    );
   },
 };

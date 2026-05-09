@@ -310,6 +310,7 @@ tailwind.config = {
               <button onclick="switchInsightsPeriodo('lastm')" class="insights-periodo-btn filter-btn" data-iperiodo="lastm">Mês passado</button>
               <button onclick="switchInsightsPeriodo('3m')" class="insights-periodo-btn filter-btn" data-iperiodo="3m">3 meses</button>
             </div>
+            <button onclick="startNewChatSession()" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all" title="Iniciar nova conversa (zera o histórico)">+ Nova conversa</button>
           </div>
         </div>
 
@@ -2843,6 +2844,52 @@ let insightsTab = '';
 let insightsPeriodo = '7d';
 let insightsHistory = [];
 let insightsStreaming = false;
+let currentSessionId = null;
+
+async function loadChatHistory() {
+  try {
+    const sessions = await api('/insights/sessions');
+    if (!sessions || sessions.length === 0) return;
+    const mostRecent = sessions[0];
+    currentSessionId = mostRecent.id;
+    const messages = await api('/insights/messages/' + mostRecent.id);
+    if (!messages || messages.length === 0) return;
+
+    const chat = document.getElementById('insightsChat');
+    chat.innerHTML = '';
+    insightsHistory = [];
+    for (const m of messages) {
+      addChatMessage(m.role, formatMarkdown(m.content));
+      insightsHistory.push({ role: m.role, content: m.content });
+    }
+    if (insightsHistory.length > 20) insightsHistory = insightsHistory.slice(-20);
+    chat.scrollTop = chat.scrollHeight;
+  } catch (e) {
+    console.warn('loadChatHistory falhou:', e.message);
+  }
+}
+
+async function startNewChatSession() {
+  try {
+    const session = await api('/insights/sessions', { method: 'POST', body: {} });
+    currentSessionId = session.id;
+    insightsHistory = [];
+    const chat = document.getElementById('insightsChat');
+    chat.innerHTML = `
+      <div class="max-w-3xl mx-auto py-4 px-4">
+        <div class="flex gap-3 py-4">
+          <div class="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg class="w-4 h-4 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z"/></svg>
+          </div>
+          <div class="text-sm text-gray-300 leading-relaxed">
+            Nova conversa iniciada. Pergunte direto.
+          </div>
+        </div>
+      </div>`;
+  } catch (e) {
+    alert('Falha ao iniciar nova conversa: ' + e.message);
+  }
+}
 
 async function initInsightsPanel() {
   // Load tabs dynamically
@@ -2865,6 +2912,7 @@ async function initInsightsPanel() {
     console.error('Failed to load tabs:', e);
   }
   loadInsightsUsage();
+  await loadChatHistory();
 }
 
 function switchInsightsTab(tab) {
@@ -2874,7 +2922,7 @@ function switchInsightsTab(tab) {
       ? 'insights-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400'
       : 'insights-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
   });
-  clearInsightsChat();
+  // Não limpa o chat — só muda o contexto da próxima pergunta
 }
 
 function switchInsightsPeriodo(periodo) {
@@ -2882,7 +2930,7 @@ function switchInsightsPeriodo(periodo) {
   document.querySelectorAll('.insights-periodo-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.iperiodo === periodo);
   });
-  clearInsightsChat();
+  // Não limpa o chat — só muda o contexto da próxima pergunta
 }
 
 function clearInsightsChat() {
@@ -3052,6 +3100,7 @@ async function sendInsightsMessage() {
         tab: insightsTab || null,
         periodo: insightsPeriodo || null,
         history: insightsHistory,
+        session_id: currentSessionId,
       }),
     });
 
@@ -3099,7 +3148,10 @@ async function sendInsightsMessage() {
         if (!line.startsWith('data: ')) continue;
         try {
           const data = JSON.parse(line.slice(6));
-          if (data.type === 'text') {
+          if (data.type === 'session') {
+            // Backend retorna o id da sessão persistente — armazena pra próximas mensagens
+            currentSessionId = data.id;
+          } else if (data.type === 'text') {
             fullText += data.text;
             render();
           } else if (data.type === 'tool_use') {

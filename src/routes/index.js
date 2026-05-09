@@ -145,6 +145,44 @@ router.get('/config/sheet-id', async (req, res) => {
   }
 });
 
+// ── Tool-calling endpoints (auth via BRIDGE_SECRET, usados pelo claude-bridge) ───
+const { TOOLS } = require('../insights-tools');
+const { RESEARCH_TOOLS, executeResearchTool } = require('../research-tools');
+const { executeTool } = require('../insights-tools');
+
+function bridgeAuth(req, res, next) {
+  const expected = process.env.BRIDGE_SECRET;
+  if (!expected) return res.status(500).json({ error: 'BRIDGE_SECRET não configurado' });
+  const header = req.header('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (token !== expected) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+router.get('/tools/list', bridgeAuth, (_req, res) => {
+  res.json({
+    tools: [...TOOLS, ...RESEARCH_TOOLS],
+  });
+});
+
+router.post('/tools/execute', bridgeAuth, async (req, res) => {
+  try {
+    const { name, input, user_id } = req.body;
+    if (!name) return res.status(400).json({ error: 'name obrigatório' });
+    const userId = user_id || 1;
+    let result;
+    if (RESEARCH_TOOLS.some(t => t.name === name)) {
+      result = await executeResearchTool(name, input || {});
+    } else {
+      result = await executeTool(name, input || {}, userId);
+    }
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error(`[tools/execute] ${req.body?.name} falhou:`, err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── Postback (público, auth via api_key) ───────────────
 const postbackRouter = require('./postback');
 router.use(postbackRouter);

@@ -168,7 +168,7 @@ async function prefetchContextForBridge(message, userId) {
 
 // ─── Bridge (Mac via ngrok com sua assinatura Max) ────────────────────────
 
-async function callBridge({ message, additionalSystem, signal }) {
+async function callBridge({ message, additionalSystem, history, signal }) {
   const url = process.env.BRIDGE_URL;
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) throw new Error('BRIDGE_URL/SECRET não configurados no servidor');
@@ -179,7 +179,7 @@ async function callBridge({ message, additionalSystem, signal }) {
       'Content-Type': 'application/json',
       'ngrok-skip-browser-warning': '1',
     },
-    body: JSON.stringify({ message, additional_system: additionalSystem }),
+    body: JSON.stringify({ message, additional_system: additionalSystem, history }),
     signal,
   });
   if (!resp.ok) {
@@ -255,15 +255,12 @@ router.post('/insights', async (req, res) => {
     let assistantText = '';
 
     try {
-      const historyContext = recentMessages.length > 0
-        ? '\n\n## Histórico recente da conversa\n' +
-          recentMessages.slice(-6).map(m => `**${m.role === 'user' ? 'Operador' : 'Você'}**: ${m.content.slice(0, 1500)}`).join('\n\n')
-        : '';
-
       // Sem pre-fetch heurístico: Claude no Mac chama as tools mcp__bridge__* sob demanda
+      // History vai SEPARADO pro bridge (ele embeda no prompt ao invés de no system)
       const result = await callBridge({
         message,
-        additionalSystem: factsContext + contextoTela + historyContext,
+        additionalSystem: factsContext + contextoTela,
+        history: recentMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         signal: ac.signal,
       });
       assistantText = result.text || '';

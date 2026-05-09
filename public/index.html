@@ -310,7 +310,13 @@ tailwind.config = {
               <button onclick="switchInsightsPeriodo('lastm')" class="insights-periodo-btn filter-btn" data-iperiodo="lastm">Mês passado</button>
               <button onclick="switchInsightsPeriodo('3m')" class="insights-periodo-btn filter-btn" data-iperiodo="3m">3 meses</button>
             </div>
-            <button onclick="startNewChatSession()" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all" title="Iniciar nova conversa (zera o histórico)">+ Nova conversa</button>
+            <div class="ml-auto flex items-center gap-2">
+              <span id="bridgeStatus" class="text-[11px] flex items-center gap-1.5" title="Status do bridge (Mac com assinatura Max)">
+                <span id="bridgeStatusDot" class="w-2 h-2 rounded-full bg-gray-500 animate-pulse"></span>
+                <span id="bridgeStatusText" class="text-gray-500">Verificando…</span>
+              </span>
+              <button onclick="startNewChatSession()" class="text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all" title="Iniciar nova conversa">+ Nova conversa</button>
+            </div>
           </div>
         </div>
 
@@ -2912,7 +2918,28 @@ async function initInsightsPanel() {
     console.error('Failed to load tabs:', e);
   }
   loadInsightsUsage();
+  refreshBridgeStatus();
+  if (window._bridgeStatusInterval) clearInterval(window._bridgeStatusInterval);
+  window._bridgeStatusInterval = setInterval(refreshBridgeStatus, 30000);
   await loadChatHistory();
+}
+
+async function refreshBridgeStatus() {
+  try {
+    const s = await api('/insights/bridge-status');
+    const dot = document.getElementById('bridgeStatusDot');
+    const txt = document.getElementById('bridgeStatusText');
+    if (!dot || !txt) return;
+    if (s.online) {
+      dot.className = 'w-2 h-2 rounded-full bg-green-500';
+      txt.className = 'text-green-400';
+      txt.textContent = 'Bridge online · Max';
+    } else {
+      dot.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+      txt.className = 'text-red-400';
+      txt.textContent = 'Bridge offline · Mac desligado?';
+    }
+  } catch (e) { /* ignora */ }
 }
 
 function switchInsightsTab(tab) {

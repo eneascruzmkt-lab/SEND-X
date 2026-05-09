@@ -87,26 +87,44 @@ async function prefetchContextForBridge(message, userId) {
     ctx.push('### Dashboard overview\nFalha: ' + e.message);
   }
 
-  // 2) Postbacks HOJE de cada expert (sempre — postbacks são em tempo real e a planilha
-  //    não tem dado de hoje). Custo trivial, fica útil pra perguntas de "agora".
+  // 2) Para cada expert: postbacks HOJE (real-time) + planilha HOJE/MTD/lastm
+  //    Custo trivial (queries locais), dá ao Claude todas as métricas que ele
+  //    veria na página de Relatório do painel.
   try {
     const accounts = await db.getAdAccounts(userId);
     const postbacksHoje = [];
     const planilhaHoje = [];
+    const planilhaMTD = [];
+    const planilhaLastM = [];
+    const wantsMonthScope = /m[êe]s|mtd|month|30\s*dias|últim/i.test(message);
     for (const acc of accounts) {
       try {
         const u = await executeTool('get_postbacks_por_utm', { expert: acc.tab, periodo: 'hoje' }, userId);
         postbacksHoje.push({ expert: acc.tab, ...u });
       } catch (e) { /* ignora */ }
       try {
-        // Planilha de hoje: scraper Utmify roda às 9h BRT, antes disso fica zerado.
-        // Inclui gasto Meta + cruzamento com FTDs reais já registrados na planilha.
-        const m = await executeTool('get_metricas_expert', { expert: acc.tab, periodo: 'hoje' }, userId);
+        // Planilha HOJE: scraper Utmify roda às 9h BRT, antes disso fica zerado.
+        const m = await executeTool('get_metricas_expert', { expert: acc.tab, periodo: 'hoje', comparar: false }, userId);
         planilhaHoje.push(m);
       } catch (e) { /* ignora */ }
+      try {
+        // Mês atual até ontem (planilha não tem hoje completo) — todas as métricas
+        const m = await executeTool('get_metricas_expert', { expert: acc.tab, periodo: '1m', comparar: false }, userId);
+        planilhaMTD.push(m);
+      } catch (e) { /* ignora */ }
+      if (wantsMonthScope) {
+        try {
+          const m = await executeTool('get_metricas_expert', { expert: acc.tab, periodo: 'lastm', comparar: false }, userId);
+          planilhaLastM.push(m);
+        } catch (e) { /* ignora */ }
+      }
     }
     ctx.push('### Postbacks HOJE em tempo real (Apostatudo)\n```json\n' + JSON.stringify(postbacksHoje, null, 2) + '\n```');
-    ctx.push('### Planilha HOJE (gasto Meta via Utmify, atualiza ~09h BRT)\n```json\n' + JSON.stringify(planilhaHoje, null, 2) + '\n```');
+    ctx.push('### Planilha HOJE (gasto/cliques/cadastros/FTDs/Net P&L; atualiza ~09h BRT)\n```json\n' + JSON.stringify(planilhaHoje, null, 2) + '\n```');
+    ctx.push('### Planilha MÊS ATUAL (acumulado mtd, todas as métricas — gasto, FTDs, Net P&L, custo/FTD, ROI)\n```json\n' + JSON.stringify(planilhaMTD, null, 2) + '\n```');
+    if (planilhaLastM.length > 0) {
+      ctx.push('### Planilha MÊS PASSADO (mês completo)\n```json\n' + JSON.stringify(planilhaLastM, null, 2) + '\n```');
+    }
   } catch (e) { /* ignora */ }
 
   // 3) Detecta expert mencionado → métricas + diário 7d

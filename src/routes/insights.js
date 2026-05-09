@@ -74,16 +74,34 @@ const EXPERT_NAMES = ['DANI', 'DEIVID', 'JUH', 'NUCLEAR'];
 async function prefetchContextForBridge(message, userId) {
   const ctx = [];
   const upper = (message || '').toUpperCase();
+  const lower = (message || '').toLowerCase();
 
-  // 1) Sempre: dashboard overview (custo trivial, dá panorama)
+  // Pergunta menciona "hoje", "atual", "agora", "neste momento"?
+  const wantsToday = /\bhoje\b|atual|agora|neste momento|tempo real|real[-\s]?time/i.test(message);
+
+  // 1) Sempre: dashboard overview (custo trivial, dá panorama com ontem/7d)
   try {
     const ov = await executeTool('get_dashboard_overview', {}, userId);
-    ctx.push('### Dashboard overview (snapshot consolidado)\n```json\n' + JSON.stringify(ov, null, 2) + '\n```');
+    ctx.push('### Dashboard overview (snapshot ontem + 7d)\n```json\n' + JSON.stringify(ov, null, 2) + '\n```');
   } catch (e) {
     ctx.push('### Dashboard overview\nFalha: ' + e.message);
   }
 
-  // 2) Detecta expert mencionado → métricas + diário 7d
+  // 2) Postbacks HOJE de cada expert (sempre — postbacks são em tempo real e a planilha
+  //    não tem dado de hoje). Custo trivial, fica útil pra perguntas de "agora".
+  try {
+    const accounts = await db.getAdAccounts(userId);
+    const postbacksHoje = [];
+    for (const acc of accounts) {
+      try {
+        const u = await executeTool('get_postbacks_por_utm', { expert: acc.tab, periodo: 'hoje' }, userId);
+        postbacksHoje.push({ expert: acc.tab, ...u });
+      } catch (e) { /* ignora */ }
+    }
+    ctx.push('### Postbacks HOJE em tempo real (Apostatudo, todos experts)\n```json\n' + JSON.stringify(postbacksHoje, null, 2) + '\n```');
+  } catch (e) { /* ignora */ }
+
+  // 3) Detecta expert mencionado → métricas + diário 7d
   const mentioned = EXPERT_NAMES.filter(n => upper.includes(n));
   for (const expert of mentioned) {
     try {
@@ -96,16 +114,8 @@ async function prefetchContextForBridge(message, userId) {
     } catch (e) { /* ignora */ }
   }
 
-  // 3) Detecta intenção de disparos
-  if (/disparo|schedule|agend|envio|sendpulse/i.test(message)) {
-    try {
-      const ds = await executeTool('get_disparos_status', { status: 'todos', periodo: '7d' }, userId);
-      ctx.push('### Status disparos 7d\n```json\n' + JSON.stringify(ds, null, 2) + '\n```');
-    } catch (e) { /* ignora */ }
-  }
-
-  // 4) Detecta intenção de UTM/postbacks
-  if (/utm|postback|campanha|criativo|adset/i.test(message) && mentioned.length > 0) {
+  // 4) Pergunta sobre "hoje" ou UTM e mencionou expert → postbacks 7d daquele expert
+  if ((wantsToday || /utm|postback|campanha|criativo|adset/i.test(message)) && mentioned.length > 0) {
     for (const expert of mentioned) {
       try {
         const u = await executeTool('get_postbacks_por_utm', { expert, periodo: '7d' }, userId);
@@ -114,7 +124,15 @@ async function prefetchContextForBridge(message, userId) {
     }
   }
 
-  // 5) Detecta intenção de Telegram
+  // 5) Detecta intenção de disparos
+  if (/disparo|schedule|agend|envio|sendpulse/i.test(message)) {
+    try {
+      const ds = await executeTool('get_disparos_status', { status: 'todos', periodo: '7d' }, userId);
+      ctx.push('### Status disparos 7d\n```json\n' + JSON.stringify(ds, null, 2) + '\n```');
+    } catch (e) { /* ignora */ }
+  }
+
+  // 6) Detecta intenção de Telegram
   if (/telegram|inscrito|canal/i.test(message) && mentioned.length > 0) {
     for (const expert of mentioned) {
       try {
@@ -125,7 +143,7 @@ async function prefetchContextForBridge(message, userId) {
   }
 
   return ctx.length > 0
-    ? '\n\n## Dados pré-carregados pelo SEND-X (use estes números, não invente)\n\n' + ctx.join('\n\n')
+    ? '\n\n## Dados pré-carregados pelo SEND-X (use estes números, não invente)\n\nIMPORTANTE: dados de "hoje" vêm via postbacks Apostatudo (em tempo real). Dados da planilha começam em ontem. Você TEM ambos abaixo — não diga que precisa de MCP, os dados estão aqui:\n\n' + ctx.join('\n\n')
     : '';
 }
 
@@ -291,15 +309,22 @@ router.post('/insights', async (req, res) => {
     try {
       if (useBridge) {
         // Bridge: pre-fetcha tools (Claude headless não chama MCP) e injeta como contexto.
-        // Histórico fica no Claude Code via --resume.
+        // Histórico vem do DB embedado no prompt (não usa --resume porque sessão velha
+        // pode ter system prompt desatualizado).
         send({ type: 'tool_use', name: 'prefetch_contexto', input: {} });
         const prefetched = await prefetchContextForBridge(message, req.userId);
         send({ type: 'tool_result', name: 'prefetch_contexto', ok: true });
 
+        // Embed last ~6 messages como contexto de conversa
+        const historyContext = recentMessages.length > 0
+          ? '\n\n## Histórico recente da conversa\n' +
+            recentMessages.slice(-6).map(m => `**${m.role === 'user' ? 'Operador' : 'Você'}**: ${m.content.slice(0, 1500)}`).join('\n\n')
+          : '';
+
         const result = await callBridge({
           message,
-          sessionBridgeId: session.bridge_session_id,
-          additionalSystem: factsContext + contextoTela + prefetched,
+          sessionBridgeId: null, // não reusa session — system prompt velho contamina
+          additionalSystem: factsContext + contextoTela + historyContext + prefetched,
           signal: ac.signal,
         });
         assistantText = result.text || '';

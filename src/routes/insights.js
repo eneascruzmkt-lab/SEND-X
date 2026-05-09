@@ -92,13 +92,21 @@ async function prefetchContextForBridge(message, userId) {
   try {
     const accounts = await db.getAdAccounts(userId);
     const postbacksHoje = [];
+    const planilhaHoje = [];
     for (const acc of accounts) {
       try {
         const u = await executeTool('get_postbacks_por_utm', { expert: acc.tab, periodo: 'hoje' }, userId);
         postbacksHoje.push({ expert: acc.tab, ...u });
       } catch (e) { /* ignora */ }
+      try {
+        // Planilha de hoje: scraper Utmify roda às 9h BRT, antes disso fica zerado.
+        // Inclui gasto Meta + cruzamento com FTDs reais já registrados na planilha.
+        const m = await executeTool('get_metricas_expert', { expert: acc.tab, periodo: 'hoje' }, userId);
+        planilhaHoje.push(m);
+      } catch (e) { /* ignora */ }
     }
-    ctx.push('### Postbacks HOJE em tempo real (Apostatudo, todos experts)\n```json\n' + JSON.stringify(postbacksHoje, null, 2) + '\n```');
+    ctx.push('### Postbacks HOJE em tempo real (Apostatudo)\n```json\n' + JSON.stringify(postbacksHoje, null, 2) + '\n```');
+    ctx.push('### Planilha HOJE (gasto Meta via Utmify, atualiza ~09h BRT)\n```json\n' + JSON.stringify(planilhaHoje, null, 2) + '\n```');
   } catch (e) { /* ignora */ }
 
   // 3) Detecta expert mencionado → métricas + diário 7d

@@ -255,18 +255,15 @@ router.post('/insights', async (req, res) => {
     let assistantText = '';
 
     try {
-      send({ type: 'tool_use', name: 'prefetch_contexto', input: {} });
-      const prefetched = await prefetchContextForBridge(message, req.userId);
-      send({ type: 'tool_result', name: 'prefetch_contexto', ok: true });
-
       const historyContext = recentMessages.length > 0
         ? '\n\n## Histórico recente da conversa\n' +
           recentMessages.slice(-6).map(m => `**${m.role === 'user' ? 'Operador' : 'Você'}**: ${m.content.slice(0, 1500)}`).join('\n\n')
         : '';
 
+      // Sem pre-fetch heurístico: Claude no Mac chama as tools mcp__bridge__* sob demanda
       const result = await callBridge({
         message,
-        additionalSystem: factsContext + contextoTela + historyContext + prefetched,
+        additionalSystem: factsContext + contextoTela + historyContext,
         signal: ac.signal,
       });
       assistantText = result.text || '';

@@ -2,6 +2,16 @@ const { Router } = require('express');
 const Anthropic = require('@anthropic-ai/sdk').default;
 const db = require('../db');
 const { TOOLS, executeTool } = require('../insights-tools');
+const { RESEARCH_TOOLS, executeResearchTool } = require('../research-tools');
+
+const ALL_TOOLS = [...TOOLS, ...RESEARCH_TOOLS];
+
+async function executeAnyTool(name, input, userId) {
+  if (RESEARCH_TOOLS.some(t => t.name === name)) {
+    return await executeResearchTool(name, input);
+  }
+  return await executeTool(name, input, userId);
+}
 
 const router = Router();
 
@@ -168,6 +178,41 @@ async function prefetchContextForBridge(message, userId) {
     }
   }
 
+  // 7) Detecta URLs/menções de concorrentes Instagram → analisa via Graph API
+  const igUsernames = new Set();
+  // URL completa do IG: instagram.com/username
+  const urlMatches = [...message.matchAll(/instagram\.com\/([A-Za-z0-9._]+)/gi)];
+  urlMatches.forEach(m => igUsernames.add(m[1].toLowerCase()));
+  // Menção tipo @username
+  const atMatches = [...message.matchAll(/@([A-Za-z0-9._]{3,30})/g)];
+  atMatches.forEach(m => igUsernames.add(m[1].toLowerCase()));
+  // Concorrentes conhecidos (alias → username)
+  const KNOWN_COMPETITORS = { 'denerzim': 'denerzimofc', 'denerzimofc': 'denerzimofc' };
+  const lowerMsg = (message || '').toLowerCase();
+  Object.entries(KNOWN_COMPETITORS).forEach(([alias, uname]) => {
+    if (new RegExp('\\b' + alias + '\\b').test(lowerMsg)) igUsernames.add(uname);
+  });
+
+  for (const uname of igUsernames) {
+    try {
+      const profile = await executeResearchTool('analisar_concorrente_instagram', { ig_username: uname });
+      ctx.push(`### Perfil Instagram @${uname} (concorrente)\n\`\`\`json\n${JSON.stringify(profile, null, 2)}\n\`\`\``);
+    } catch (e) { /* ignora */ }
+  }
+
+  // 8) Detecta menção a "biblioteca de anúncios", "ads library", "anúncios do" → busca Meta Ad Library
+  if (/biblioteca de an[úu]ncios|ads library|an[úu]ncios? (do|da|de)/i.test(message)) {
+    // Tenta extrair o nome após "anúncios do/da/de"
+    const m = message.match(/an[úu]ncios? (?:do|da|de) ([A-Za-zÀ-ú0-9_@. ]{3,40})/i);
+    const term = m ? m[1].trim() : Array.from(igUsernames)[0];
+    if (term) {
+      try {
+        const ads = await executeResearchTool('meta_ads_library_search', { search_terms: term, limit: 10 });
+        ctx.push(`### Meta Ad Library — busca "${term}"\n\`\`\`json\n${JSON.stringify(ads, null, 2)}\n\`\`\``);
+      } catch (e) { /* ignora */ }
+    }
+  }
+
   return ctx.length > 0
     ? '\n\n## Dados pré-carregados pelo SEND-X (use estes números, não invente)\n\nIMPORTANTE: dados de "hoje" vêm via postbacks Apostatudo (em tempo real). Dados da planilha começam em ontem. Você TEM ambos abaixo — não diga que precisa de MCP, os dados estão aqui:\n\n' + ctx.join('\n\n')
     : '';
@@ -231,7 +276,7 @@ async function callApiBackend({ apiKey, systemPrompt, history, message, send, us
       model: MODEL,
       max_tokens: 2048,
       system: systemPrompt,
-      tools: TOOLS,
+      tools: ALL_TOOLS,
       messages,
     });
 
@@ -252,7 +297,7 @@ async function callApiBackend({ apiKey, systemPrompt, history, message, send, us
     for (const tu of toolUses) {
       send({ type: 'tool_use', name: tu.name, input: tu.input });
       try {
-        const result = await executeTool(tu.name, tu.input, userId);
+        const result = await executeAnyTool(tu.name, tu.input, userId);
         toolResults.push({
           type: 'tool_result',
           tool_use_id: tu.id,

@@ -168,8 +168,17 @@ async function prefetchContextForBridge(message, userId) {
 
 // ─── Bridge (Mac via ngrok com sua assinatura Max) ────────────────────────
 
+async function getBridgeUrl() {
+  // Prioridade: DB (atualizado em tempo real pelo start.sh do Mac) → env var (fallback)
+  try {
+    const reg = await db.getBridgeRegistry();
+    if (reg?.url) return reg.url;
+  } catch { /* DB sem tabela ainda — fallback */ }
+  return process.env.BRIDGE_URL || null;
+}
+
 async function callBridge({ message, additionalSystem, history, signal }) {
-  const url = process.env.BRIDGE_URL;
+  const url = await getBridgeUrl();
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) throw new Error('BRIDGE_URL/SECRET não configurados no servidor');
   const resp = await fetch(`${url}/chat`, {
@@ -190,7 +199,7 @@ async function callBridge({ message, additionalSystem, history, signal }) {
 }
 
 async function bridgeIsHealthy() {
-  const url = process.env.BRIDGE_URL;
+  const url = await getBridgeUrl();
   if (!url) return false;
   try {
     const resp = await fetch(`${url}/health`, {
@@ -204,8 +213,9 @@ async function bridgeIsHealthy() {
 // ─── Rotas ─────────────────────────────────────────────────────────────────
 
 router.get('/insights/bridge-status', async (_req, res) => {
+  const url = await getBridgeUrl();
   const online = await bridgeIsHealthy();
-  res.json({ online, url: process.env.BRIDGE_URL || null });
+  res.json({ online, url });
 });
 
 router.post('/insights', async (req, res) => {

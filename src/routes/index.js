@@ -165,6 +165,18 @@ router.get('/tools/list', bridgeAuth, (_req, res) => {
   });
 });
 
+/** POST /api/bridge/register — claude-bridge no Mac registra sua URL ngrok atual */
+router.post('/bridge/register', bridgeAuth, async (req, res) => {
+  try {
+    const { url, version } = req.body;
+    if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url obrigatória' });
+    await db.upsertBridgeRegistry(url, version);
+    res.json({ ok: true, url, version });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/tools/execute', bridgeAuth, async (req, res) => {
   try {
     const { name, input, user_id } = req.body;

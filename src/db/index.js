@@ -175,6 +175,16 @@ async function init() {
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Registry do bridge (URL ngrok dinâmica, atualizada pelo start.sh do Mac)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bridge_registry (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      url         TEXT NOT NULL,
+      version     TEXT,
+      updated_at  TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT only_one_row CHECK (id = 1)
+    );
+  `);
   // Tabela de contas de anúncio Meta Ads (por expert/tab)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ad_accounts (
@@ -708,6 +718,20 @@ module.exports = {
   async query(text, params) {
     const res = await pool.query(text, params);
     return res.rows;
+  },
+
+  // ── Bridge registry (URL dinâmica do ngrok do Mac) ─────
+  async upsertBridgeRegistry(url, version) {
+    await pool.query(
+      `INSERT INTO bridge_registry (id, url, version, updated_at) VALUES (1, $1, $2, NOW())
+       ON CONFLICT (id) DO UPDATE SET url=$1, version=$2, updated_at=NOW()`,
+      [url, version || null]
+    );
+  },
+
+  async getBridgeRegistry() {
+    const res = await pool.query('SELECT url, version, updated_at FROM bridge_registry WHERE id=1');
+    return res.rows[0] || null;
   },
 
   // ── Chat memory (persistent) ─────────────────────────

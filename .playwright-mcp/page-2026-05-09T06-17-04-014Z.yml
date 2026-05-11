@@ -1,0 +1,116 @@
+- generic [ref=e8]:
+  - generic [ref=e12]:
+    - generic [ref=e15]:
+      - link "Meta Ad Library" [ref=e18] [cursor=pointer]:
+        - /url: /ads/library/?source=fb-logo
+        - generic [ref=e20]: Meta Ad Library
+      - generic [ref=e22]: Ad Library
+      - menuitem "Ad Library Report" [ref=e24] [cursor=pointer]:
+        - generic [ref=e25]: Ad Library Report
+      - menuitem "Ad Library API" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: Ad Library API
+      - menuitem "Branded Content" [ref=e30] [cursor=pointer]:
+        - generic [ref=e31]: Branded Content
+      - menuitem "Open navigation panel" [ref=e33] [cursor=pointer]
+    - generic [ref=e40]:
+      - combobox "Brazil" [ref=e44] [cursor=pointer]:
+        - generic [ref=e51]: Brazil
+      - combobox "All ads" [ref=e57] [cursor=pointer]:
+        - generic [ref=e67]: All ads
+      - generic [ref=e77]:
+        - generic [ref=e83]: Search by keyword or advertiser
+        - generic [ref=e89]:
+          - searchbox "Search by keyword or advertiser" [active] [ref=e95]: dennzerinho
+          - button "Clear" [ref=e253] [cursor=pointer]
+    - dialog [ref=e99]:
+      - generic [ref=e100]:
+        - link [ref=e101] [cursor=pointer]:
+          - /url: /
+          - heading [level=4] [ref=e102]: Log in
+        - menuitem [ref=e103] [cursor=pointer]
+      - generic [ref=e105]:
+        - generic [ref=e106]:
+          - heading [level=4] [ref=e108]: Ad Library
+          - menuitem [ref=e110] [cursor=pointer]:
+            - heading [level=4] [ref=e112]: Ad Library Report
+          - menuitem [ref=e114] [cursor=pointer]:
+            - heading [level=4] [ref=e116]: Ad Library API
+          - menuitem [ref=e118] [cursor=pointer]:
+            - heading [level=4] [ref=e120]: Branded Content
+        - separator [ref=e121]
+        - generic [ref=e122]:
+          - menuitem [ref=e124] [cursor=pointer]:
+            - heading [level=4] [ref=e126]: System status
+          - menuitem [ref=e128] [cursor=pointer]:
+            - heading [level=4] [ref=e130]: Subscribe to email updates
+          - menuitem [ref=e132] [cursor=pointer]:
+            - heading [level=4] [ref=e134]: FAQ
+          - menuitem [ref=e136] [cursor=pointer]:
+            - heading [level=4] [ref=e138]: About ads and data use
+          - menuitem [ref=e140] [cursor=pointer]:
+            - heading [level=4] [ref=e142]: Privacy
+          - menuitem [ref=e144] [cursor=pointer]:
+            - heading [level=4] [ref=e146]: Terms
+          - menuitem [ref=e148] [cursor=pointer]:
+            - heading [level=4] [ref=e150]: Cookies
+    - generic [ref=e151]:
+      - generic [ref=e169]:
+        - generic [ref=e178]:
+          - button "Filters" [ref=e179] [cursor=pointer]:
+            - generic [ref=e184]: Filters
+          - generic [ref=e186]:
+            - generic [ref=e192]: Sort
+            - combobox "Sort" [ref=e197] [cursor=pointer]:
+              - generic [ref=e204]: Sort by
+        - generic [ref=e208]:
+          - generic [ref=e209]:
+            - heading "No ads match your search criteria" [level=2] [ref=e210]
+            - generic [ref=e211]: Try searching for a different keyword or phrase.
+          - link "View search tips." [ref=e213] [cursor=pointer]:
+            - /url: "#"
+          - heading "Make sure that your location and ad category are accurately set." [level=4] [ref=e214]
+          - generic:
+            - list
+      - generic [ref=e216]:
+        - generic [ref=e224]: System status
+        - generic [ref=e228]:
+          - list [ref=e229]:
+            - listitem [ref=e230]:
+              - heading "Ad Library API" [level=3] [ref=e231]:
+                - link "Ad Library API" [ref=e232] [cursor=pointer]:
+                  - /url: /ads/library/api/?source=archive-landing-page
+            - listitem [ref=e233]:
+              - heading "About ads and data use" [level=3] [ref=e234]:
+                - link "About ads and data use" [ref=e235] [cursor=pointer]:
+                  - /url: /ads/about/?entry_product=ad_library
+            - listitem [ref=e236]:
+              - heading "Privacy" [level=3] [ref=e237]:
+                - link "Privacy" [ref=e238] [cursor=pointer]:
+                  - /url: /privacy/center/?entry_point=privacy_basics_redirect
+            - listitem [ref=e239]:
+              - heading "Terms" [level=3] [ref=e240]:
+                - link "Terms" [ref=e241] [cursor=pointer]:
+                  - /url: /policies/
+            - listitem [ref=e242]:
+              - heading "Cookies" [level=3] [ref=e243]:
+                - link "Cookies" [ref=e244] [cursor=pointer]:
+                  - /url: /policies/cookies/
+          - heading "Meta © 2026 | English (US)" [level=3] [ref=e246]:
+            - text: Meta © 2026 |
+            - link "English (US)" [ref=e247] [cursor=pointer]:
+              - /url: /language/
+  - listbox "4 suggested searches" [ref=e258]:
+    - listitem [ref=e260]:
+      - list [ref=e261]:
+        - option "Search for exact phrase dennzerinho \"dennzerinho\" Search this exact phrase" [ref=e263]:
+          - generic [ref=e268] [cursor=pointer]:
+            - button "Search for exact phrase dennzerinho" [ref=e270]
+            - generic [ref=e272]:
+              - generic [ref=e273]: "\"dennzerinho\""
+              - generic [ref=e274]: Search this exact phrase
+    - generic:
+      - listitem
+    - generic:
+      - listitem
+    - generic:
+      - listitem

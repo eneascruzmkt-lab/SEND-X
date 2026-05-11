@@ -1,0 +1,26 @@
+- generic [ref=e11]:
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e15]:
+        - link "Instagram" [ref=e16] [cursor=pointer]:
+          - /url: /accounts/emailsignup/
+          - img "Instagram" [ref=e17]
+        - link "Log in" [ref=e19] [cursor=pointer]:
+          - /url: /accounts/login/?next=%2F&source=mobile_nav
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - img "error" [ref=e23]
+          - generic [ref=e26]: Profile isn't available
+          - generic [ref=e28]: The link may be broken, or the profile may have been removed.
+        - button "Sign up for Instagram" [ref=e30] [cursor=pointer]
+  - generic [ref=e31]:
+    - button "Close" [ref=e33] [cursor=pointer]:
+      - img "Close" [ref=e35]
+    - generic [ref=e39]:
+      - text: By continuing, you agree to Instagram's
+      - link "Terms of Use" [ref=e40] [cursor=pointer]:
+        - /url: https://help.instagram.com/581066165581870/?locale=en_US
+      - text: and
+      - link "Privacy Policy" [ref=e41] [cursor=pointer]:
+        - /url: https://privacycenter.instagram.com/policy/
+      - text: .

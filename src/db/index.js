@@ -175,6 +175,21 @@ async function init() {
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Anexos do chat: imagens, PDFs, texto, CSVs (BLOB no Postgres)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_attachments (
+      id          SERIAL PRIMARY KEY,
+      session_id  INTEGER REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      message_id  INTEGER REFERENCES chat_messages(id) ON DELETE SET NULL,
+      filename    TEXT NOT NULL,
+      mime_type   TEXT NOT NULL,
+      size_bytes  INTEGER NOT NULL,
+      data        BYTEA NOT NULL,
+      source      TEXT NOT NULL DEFAULT 'user',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_attachments_session ON chat_attachments(session_id);
+  `);
   // Registry do bridge (URL ngrok dinâmica, atualizada pelo start.sh do Mac)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bridge_registry (
@@ -718,6 +733,38 @@ module.exports = {
   async query(text, params) {
     const res = await pool.query(text, params);
     return res.rows;
+  },
+
+  // ── Anexos do chat (imagens, PDFs, txt, csv) ──────────
+  async insertAttachment({ session_id, message_id, filename, mime_type, size_bytes, data, source = 'user' }) {
+    const res = await pool.query(
+      `INSERT INTO chat_attachments (session_id, message_id, filename, mime_type, size_bytes, data, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, filename, mime_type, size_bytes, source, created_at`,
+      [session_id || null, message_id || null, filename, mime_type, size_bytes, data, source]
+    );
+    return res.rows[0];
+  },
+
+  async getAttachment(id) {
+    const res = await pool.query(
+      `SELECT id, session_id, filename, mime_type, size_bytes, data, source, created_at
+       FROM chat_attachments WHERE id=$1`,
+      [id]
+    );
+    return res.rows[0] || null;
+  },
+
+  async listAttachmentsBySession(sessionId) {
+    const res = await pool.query(
+      `SELECT id, filename, mime_type, size_bytes, source, created_at, message_id
+       FROM chat_attachments WHERE session_id=$1 ORDER BY created_at ASC`,
+      [sessionId]
+    );
+    return res.rows;
+  },
+
+  async updateAttachmentMessageId(id, messageId) {
+    await pool.query('UPDATE chat_attachments SET message_id=$2 WHERE id=$1', [id, messageId]);
   },
 
   // ── Bridge registry (URL dinâmica do ngrok do Mac) ─────

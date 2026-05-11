@@ -587,6 +587,9 @@ router.use(relatorioRoutes);
 const insightsRoutes = require('./insights');
 router.use(insightsRoutes);
 
+const attachmentsRoutes = require('./attachments');
+router.use(attachmentsRoutes);
+
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 
 /** GET /ad-accounts — lista contas de anúncio do usuário */

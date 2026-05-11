@@ -1,9 +1,64 @@
 const { Router } = require('express');
+const pdfParse = require('pdf-parse');
 const db = require('../db');
 const { executeTool } = require('../insights-tools');
 const { executeResearchTool, RESEARCH_TOOLS } = require('../research-tools');
 
 const router = Router();
+
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://send-x-production.up.railway.app';
+
+async function processAttachments(attachmentIds = [], sessionId, messageId) {
+  if (!Array.isArray(attachmentIds) || attachmentIds.length === 0) {
+    return { images: [], textBlocks: [], summary: '' };
+  }
+  const images = [];
+  const textBlocks = [];
+  for (const id of attachmentIds) {
+    try {
+      const att = await db.getAttachment(Number(id));
+      if (!att) continue;
+      if (sessionId && !att.session_id) await db.updateAttachmentMessageId(att.id, messageId);
+
+      if (att.mime_type.startsWith('image/')) {
+        // Passamos imagem como base64 pro bridge — URLs do SEND-X exigem auth JWT,
+        // não dá pra Claude baixar de fora. Sonnet aceita base64 nativo (vision).
+        images.push({
+          id: att.id,
+          filename: att.filename,
+          mime_type: att.mime_type,
+          data_base64: att.data.toString('base64'),
+          url: `${PUBLIC_BASE_URL}/api/attachments/${att.id}`,
+        });
+      } else if (att.mime_type === 'application/pdf') {
+        try {
+          const parsed = await pdfParse(att.data);
+          const text = (parsed.text || '').slice(0, 50000);
+          textBlocks.push({
+            filename: att.filename,
+            type: 'pdf',
+            pages: parsed.numpages,
+            content: text,
+          });
+        } catch (e) {
+          textBlocks.push({ filename: att.filename, type: 'pdf', error: e.message });
+        }
+      } else {
+        // texto/csv/json/md/html
+        const text = att.data.toString('utf8').slice(0, 50000);
+        textBlocks.push({
+          filename: att.filename,
+          type: att.mime_type,
+          content: text,
+        });
+      }
+    } catch (e) {
+      console.error('[insights] attachment err:', e.message);
+    }
+  }
+  const summary = `Anexos: ${images.length} imagem(ns), ${textBlocks.length} arquivo(s) texto`;
+  return { images, textBlocks, summary };
+}
 
 const MAX_HISTORY = 20;
 const FACTS_LIMIT = 30;
@@ -177,7 +232,7 @@ async function getBridgeUrl() {
   return process.env.BRIDGE_URL || null;
 }
 
-async function callBridge({ message, additionalSystem, history, signal }) {
+async function callBridge({ message, additionalSystem, history, images, signal }) {
   const url = await getBridgeUrl();
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) throw new Error('BRIDGE_URL/SECRET não configurados no servidor');
@@ -188,7 +243,7 @@ async function callBridge({ message, additionalSystem, history, signal }) {
       'Content-Type': 'application/json',
       'ngrok-skip-browser-warning': '1',
     },
-    body: JSON.stringify({ message, additional_system: additionalSystem, history }),
+    body: JSON.stringify({ message, additional_system: additionalSystem, history, images }),
     signal,
   });
   if (!resp.ok) {
@@ -220,8 +275,10 @@ router.get('/insights/bridge-status', async (_req, res) => {
 
 router.post('/insights', async (req, res) => {
   try {
-    const { message, tab, periodo, de, ate, session_id: clientSessionId } = req.body;
-    if (!message) return res.status(400).json({ error: 'message é obrigatório' });
+    const { message, tab, periodo, de, ate, session_id: clientSessionId, attachment_ids } = req.body;
+    if (!message && (!attachment_ids || attachment_ids.length === 0)) {
+      return res.status(400).json({ error: 'message ou attachment_ids obrigatórios' });
+    }
 
     const online = await bridgeIsHealthy();
     if (!online) {
@@ -249,7 +306,15 @@ router.post('/insights', async (req, res) => {
 
     const factsContext = buildFactsContext(facts);
 
-    await db.addChatMessage(session.id, 'user', message);
+    // Processa anexos antes de salvar mensagem (precisamos do messageId pra associar)
+    const userMsg = await db.addChatMessage(session.id, 'user', message || '(arquivo anexado)');
+    const { images, textBlocks } = await processAttachments(attachment_ids || [], session.id, userMsg.id);
+    // Liga os attachments ao session_id também
+    for (const att of [...images, ...textBlocks]) {
+      if (att.id) {
+        try { await db.query('UPDATE chat_attachments SET session_id=$1, message_id=$2 WHERE id=$3', [session.id, userMsg.id, att.id]); } catch {}
+      }
+    }
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -265,12 +330,27 @@ router.post('/insights', async (req, res) => {
     let assistantText = '';
 
     try {
-      // Sem pre-fetch heurístico: Claude no Mac chama as tools mcp__bridge__* sob demanda
-      // History vai SEPARADO pro bridge (ele embeda no prompt ao invés de no system)
+      // Texto dos arquivos vai como contexto adicional. Imagens vão como URL no prompt
+      // (Sonnet baixa e analisa nativamente via vision).
+      let attachmentContext = '';
+      if (textBlocks.length > 0) {
+        attachmentContext += '\n\n## Arquivos anexados pelo operador\n';
+        for (const tb of textBlocks) {
+          attachmentContext += `\n### ${tb.filename} (${tb.type}${tb.pages ? `, ${tb.pages} páginas` : ''})\n`;
+          attachmentContext += tb.error ? `Erro ao processar: ${tb.error}` : '```\n' + tb.content + '\n```';
+        }
+      }
+      let imagesPrompt = '';
+      if (images.length > 0) {
+        imagesPrompt = '\n\n[Imagens anexadas pelo operador nesta mensagem — use mcp__bridge__fetch_url ou Read para analisar se precisar:]\n' +
+          images.map(im => `- ${im.filename}: ${im.url}`).join('\n');
+      }
+
       const result = await callBridge({
-        message,
-        additionalSystem: factsContext + contextoTela,
+        message: (message || '') + imagesPrompt,
+        additionalSystem: factsContext + contextoTela + attachmentContext,
         history: recentMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
+        images,
         signal: ac.signal,
       });
       assistantText = result.text || '';

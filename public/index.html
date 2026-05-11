@@ -338,10 +338,17 @@ tailwind.config = {
         <!-- Input area (pinned bottom) -->
         <div class="flex-shrink-0 border-t border-border/40 bg-surface/40 backdrop-blur px-4 sm:px-6 py-3 sm:py-4">
           <div class="max-w-3xl mx-auto">
+            <div id="insightsAttachmentPreview" class="flex flex-wrap gap-2 mb-2" style="display:none"></div>
             <div class="relative flex items-end bg-[#1a1d1a] border border-border-light/60 rounded-2xl px-4 py-2.5 focus-within:border-green-500/50 focus-within:ring-2 focus-within:ring-green-500/10 transition-all shadow-lg shadow-black/20">
-              <textarea id="insightsInput" rows="1" placeholder="Pergunte sobre seus dados..."
+              <button onclick="document.getElementById('insightsFileInput').click()"
+                class="mr-2 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-green-400 hover:bg-green-500/10 transition-all flex-shrink-0"
+                title="Anexar arquivo (imagem, PDF, txt, csv)">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <input id="insightsFileInput" type="file" multiple accept="image/*,application/pdf,text/*,.csv,.json,.md" style="display:none" onchange="handleInsightsFileSelect(event)" />
+              <textarea id="insightsInput" rows="1" placeholder="Pergunte ou anexe arquivo..."
                 class="flex-1 bg-transparent text-[15px] text-white resize-none focus:outline-none max-h-48 leading-relaxed py-1"
-                onkeydown="handleInsightsKey(event)" oninput="autoGrowTextarea(this)"></textarea>
+                onkeydown="handleInsightsKey(event)" oninput="autoGrowTextarea(this)" onpaste="handleInsightsPaste(event)"></textarea>
               <button id="insightsSendBtn" onclick="sendInsightsMessage()"
                 class="ml-2 w-9 h-9 flex items-center justify-center rounded-xl bg-green-500 hover:bg-green-400 text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
                 title="Enviar">
@@ -3100,11 +3107,80 @@ function autoGrowTextarea(el) {
   el.style.height = Math.min(el.scrollHeight, 144) + 'px';
 }
 
+let insightsPendingAttachments = [];
+
+async function handleInsightsFileSelect(ev) {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = '';
+  for (const f of files) await uploadInsightsAttachment(f);
+  renderInsightsAttachmentPreview();
+}
+
+async function handleInsightsPaste(ev) {
+  const items = ev.clipboardData?.items || [];
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const file = it.getAsFile();
+      if (file) {
+        ev.preventDefault();
+        await uploadInsightsAttachment(file);
+        renderInsightsAttachmentPreview();
+      }
+    }
+  }
+}
+
+async function uploadInsightsAttachment(file) {
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (currentSessionId) fd.append('session_id', String(currentSessionId));
+    const resp = await fetch('/api/attachments', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken },
+      body: fd,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: 'falha upload' }));
+      alert('Falha ao anexar ' + file.name + ': ' + err.error);
+      return;
+    }
+    const att = await resp.json();
+    insightsPendingAttachments.push(att);
+  } catch (e) {
+    alert('Erro upload: ' + e.message);
+  }
+}
+
+function renderInsightsAttachmentPreview() {
+  const el = document.getElementById('insightsAttachmentPreview');
+  if (insightsPendingAttachments.length === 0) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = insightsPendingAttachments.map((a, i) => {
+    const isImg = a.mime_type.startsWith('image/');
+    return `<div class="flex items-center gap-1.5 bg-[#1a1d1a] border border-border-light/60 rounded-lg px-2 py-1 text-xs">
+      ${isImg ? `<img src="${a.url}?token=${encodeURIComponent(authToken)}" class="w-7 h-7 rounded object-cover" />` :
+      `<svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`}
+      <span class="text-gray-300 max-w-[140px] truncate">${a.filename}</span>
+      <button onclick="removeInsightsAttachment(${i})" class="text-gray-500 hover:text-red-400 ml-1" title="Remover">&times;</button>
+    </div>`;
+  }).join('');
+}
+
+function removeInsightsAttachment(idx) {
+  insightsPendingAttachments.splice(idx, 1);
+  renderInsightsAttachmentPreview();
+}
+
 async function sendInsightsMessage() {
   if (insightsStreaming) return;
   const input = document.getElementById('insightsInput');
   const message = input.value.trim();
-  if (!message) return;
+  if (!message && insightsPendingAttachments.length === 0) return;
   input.value = '';
   input.style.height = 'auto';
   addChatMessage('user', formatMarkdown(message));
@@ -3128,8 +3204,12 @@ async function sendInsightsMessage() {
         periodo: insightsPeriodo || null,
         history: insightsHistory,
         session_id: currentSessionId,
+        attachment_ids: insightsPendingAttachments.map(a => a.id),
       }),
     });
+    const attachedHere = insightsPendingAttachments.slice();
+    insightsPendingAttachments = [];
+    renderInsightsAttachmentPreview();
 
     if (!resp.ok) {
       const err = await resp.json();

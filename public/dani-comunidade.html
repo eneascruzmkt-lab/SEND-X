@@ -384,6 +384,142 @@
       color: rgba(244,239,228,.18);
       line-height: 1.7;
     }
+
+    /* ─── Age-gate overlay ───────────────────── */
+    #age-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(8, 8, 8, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    @keyframes popup-in {
+      from { opacity: 0; transform: translateY(28px) scale(.96); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);   }
+    }
+
+    .age-box {
+      width: 100%;
+      max-width: 360px;
+      background: #111111;
+      border: 1px solid rgba(200,168,75,.30);
+      border-radius: 20px;
+      padding: 36px 28px 32px;
+      text-align: center;
+      animation: popup-in .4s ease both;
+      position: relative;
+    }
+
+    .age-box::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 21px;
+      background: linear-gradient(135deg, rgba(200,168,75,.25) 0%, transparent 50%, rgba(200,168,75,.10) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .age-icon {
+      font-size: 36px;
+      margin-bottom: 14px;
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-sub {
+      font-size: 13.5px;
+      color: var(--white-70);
+      line-height: 1.65;
+      margin-bottom: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-btns {
+      display: flex;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-btn-sim {
+      flex: 1;
+      padding: 16px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      cursor: pointer;
+      transition: background .2s, transform .1s;
+      animation: btn-pulse 2.2s ease-in-out infinite;
+    }
+
+    .age-btn-sim:hover  { background: #B01E1E; transform: translateY(-1px); }
+    .age-btn-sim:active { transform: translateY(0); }
+
+    .age-btn-nao {
+      flex: 1;
+      padding: 16px;
+      background: transparent;
+      color: var(--white-40);
+      border: 1px solid rgba(244,239,228,.12);
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: .05em;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+
+    .age-btn-nao:hover { background: rgba(255,255,255,.04); color: var(--white-70); }
+
+    /* ─── "Não" message state ─────────────────── */
+    .age-denied {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-denied .denied-icon { font-size: 40px; margin-bottom: 14px; }
+
+    .age-denied h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 10px;
+    }
+
+    .age-denied p {
+      font-size: 13.5px;
+      color: var(--white-70);
+      line-height: 1.65;
+    }
   </style>
 </head>
 <body>
@@ -493,5 +629,72 @@
   </div>
 
 </div>
+
+<!-- ─── Age-gate popup ─────────────────────────── -->
+<div id="age-gate" role="dialog" aria-modal="true" aria-labelledby="age-gate-title">
+  <div class="age-box">
+
+    <!-- Pergunta -->
+    <div id="age-question">
+      <span class="age-icon">🎰</span>
+      <h2 class="age-title" id="age-gate-title">Você tem 18 anos<br>ou mais?</h2>
+      <p class="age-sub">Este conteúdo é destinado<br>exclusivamente a maiores de 18 anos.</p>
+      <div class="age-btns">
+        <button class="age-btn-sim" onclick="ageConfirm()">Sim, tenho 18+</button>
+        <button class="age-btn-nao" onclick="ageDeny()">Não</button>
+      </div>
+    </div>
+
+    <!-- Mensagem negativa (oculta até clicar "Não") -->
+    <div id="age-denied-msg" class="age-denied">
+      <span class="denied-icon">🚫</span>
+      <h3>Infelizmente esta<br>oportunidade não é para você.</h3>
+      <p>Nosso conteúdo é voltado exclusivamente<br>para maiores de 18 anos.<br>Volte quando puder!</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ─── UTM capture ─────────────────────────────── */
+  const BASE_URL = 'https://tg.pulse.is/danidaroletabot?start=6a0118b3a735bc129a0f247c&username=value1&telegram_id=value2';
+  const UTM_KEYS = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
+
+  function buildRedirectUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const extras = [];
+    UTM_KEYS.forEach(k => {
+      const v = params.get(k);
+      if (v) extras.push(k + '=' + encodeURIComponent(v));
+    });
+    return extras.length ? BASE_URL + '&' + extras.join('&') : BASE_URL;
+  }
+
+  /* ─── Age-gate handlers ───────────────────────── */
+  function ageConfirm() {
+    window.location.href = buildRedirectUrl();
+  }
+
+  function ageDeny() {
+    document.getElementById('age-question').style.display = 'none';
+    const denied = document.getElementById('age-denied-msg');
+    denied.style.display = 'flex';
+  }
+
+  /* ─── CTA buttons on the page ────────────────── */
+  document.querySelectorAll('.cta-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      // Se o popup já foi dispensado (não existe ou está oculto), redireciona direto
+      const gate = document.getElementById('age-gate');
+      if (!gate) {
+        window.location.href = buildRedirectUrl();
+      } else {
+        // Garante que o popup apareça
+        gate.style.display = 'flex';
+      }
+    });
+  });
+</script>
 </body>
 </html>

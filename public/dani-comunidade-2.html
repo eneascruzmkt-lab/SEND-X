@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comunidade Dani da Roleta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:        #080808;
+      --bg-card:   #111111;
+      --gold:      #C8A84B;
+      --gold-lt:   #E8C96C;
+      --gold-dk:   #8A6A1E;
+      --red:       #CC2828;
+      --red-glow:  rgba(204, 40, 40, 0.45);
+      --white:     #F4EFE4;
+      --white-70:  rgba(244, 239, 228, 0.70);
+      --white-40:  rgba(244, 239, 228, 0.40);
+      --white-10:  rgba(244, 239, 228, 0.07);
+      --gold-20:   rgba(200, 168, 75, 0.20);
+      --gold-10:   rgba(200, 168, 75, 0.08);
+      --gold-glow: rgba(200, 168, 75, 0.35);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { background: var(--bg); }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 70% 50% at 50% 0%,   rgba(200, 168, 75, 0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 50% 100%, rgba(200, 168, 75, 0.04) 0%, transparent 50%);
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Grain */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+      opacity: 0.035;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ─── Layout ─────────────────────────────── */
+    .page {
+      max-width: 460px;
+      margin: 0 auto;
+      padding: 44px 22px 70px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ─── Fade-up animations ─────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .a1 { animation: fadeUp .55s .00s ease both; }
+    .a2 { animation: fadeUp .55s .10s ease both; }
+    .a3 { animation: fadeUp .55s .18s ease both; }
+    .a4 { animation: fadeUp .55s .26s ease both; }
+    .a5 { animation: fadeUp .55s .34s ease both; }
+    .a6 { animation: fadeUp .55s .42s ease both; }
+    .a7 { animation: fadeUp .55s .50s ease both; }
+    .a8 { animation: fadeUp .55s .58s ease both; }
+    .a9 { animation: fadeUp .55s .66s ease both; }
+
+    /* ─── Community badge ────────────────────── */
+    .badge-row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 34px;
+    }
+
+    .badge {
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border: 1px solid rgba(200, 168, 75, 0.28);
+      padding: 6px 16px;
+      border-radius: 100px;
+      background: var(--gold-10);
+    }
+
+    /* ─── Photo ──────────────────────────────── */
+    .photo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .photo-outer {
+      position: relative;
+      display: inline-flex;
+    }
+
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 28px var(--gold-glow), 0 0 56px rgba(200,168,75,.12); }
+      50%       { box-shadow: 0 0 42px var(--gold-glow), 0 0 80px rgba(200,168,75,.22); }
+    }
+
+    .photo-ring {
+      width: 124px;
+      height: 124px;
+      border-radius: 50%;
+      padding: 3px;
+      background: conic-gradient(
+        var(--gold-lt) 0deg,
+        var(--gold-dk) 120deg,
+        var(--gold)    240deg,
+        var(--gold-lt) 360deg
+      );
+      animation: glow-pulse 3.2s ease-in-out infinite;
+    }
+
+    .photo-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      overflow: hidden;
+      background: #1c1c1c;
+    }
+
+    .photo-inner img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      display: block;
+    }
+
+    /* placeholder shown when image fails */
+    .photo-placeholder {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: linear-gradient(135deg, #1a1a1a 0%, #242424 100%);
+      color: var(--gold);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .photo-placeholder svg {
+      width: 30px; height: 30px;
+      fill: none; stroke: var(--gold);
+      stroke-width: 1.5; opacity: .7;
+      margin-bottom: 4px;
+    }
+
+    .check-badge {
+      position: absolute;
+      bottom: 4px; right: 4px;
+      width: 26px; height: 26px;
+      background: var(--gold);
+      border-radius: 50%;
+      border: 2px solid var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      color: #000;
+    }
+
+    /* ─── Expert name ────────────────────────── */
+    .expert-name {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: .24em;
+      text-transform: uppercase;
+      color: var(--white-40);
+      margin-bottom: 28px;
+    }
+
+    /* ─── Headline ───────────────────────────── */
+    .headline {
+      text-align: center;
+      margin-bottom: 22px;
+    }
+
+    .headline h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 46px;
+      font-weight: 700;
+      line-height: 1.08;
+      color: var(--white);
+    }
+
+    .headline h1 em {
+      font-style: italic;
+      background: linear-gradient(135deg, var(--gold-lt) 0%, var(--gold) 50%, var(--gold-dk) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ─── Divider ────────────────────────────── */
+    .divider {
+      display: flex; align-items: center; gap: 14px;
+      margin: 0 0 26px;
+    }
+    .divider-line {
+      flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(200,168,75,.28), transparent);
+    }
+    .divider-icon {
+      color: var(--gold); font-size: 13px; opacity: .8;
+    }
+
+    /* ─── Value prop ─────────────────────────── */
+    .value-prop {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .value-prop .amount {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 58px;
+      font-weight: 700;
+      color: var(--gold);
+      line-height: 1;
+      display: block;
+      text-shadow: 0 0 40px rgba(200,168,75,.25);
+    }
+
+    .value-prop .sublabel {
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--white-40);
+      display: block;
+      margin-top: 8px;
+    }
+
+    /* ─── Features ───────────────────────────── */
+    .features {
+      background: var(--white-10);
+      border: 1px solid rgba(200,168,75,.14);
+      border-radius: 16px;
+      padding: 6px 18px;
+      margin-bottom: 28px;
+    }
+
+    .feat {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+
+    .feat:last-child { border-bottom: none; }
+
+    .feat-icon {
+      color: var(--gold);
+      font-size: 15px;
+      line-height: 1.55;
+      flex-shrink: 0;
+    }
+
+    .feat-text {
+      font-size: 14.5px;
+      font-weight: 400;
+      color: var(--white-70);
+      line-height: 1.55;
+    }
+
+    .feat-text strong {
+      color: var(--white);
+      font-weight: 600;
+    }
+
+    /* ─── CTA ────────────────────────────────── */
+    .cta-wrap {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    @keyframes btn-pulse {
+      0%, 100% { box-shadow: 0 4px 22px var(--red-glow); }
+      50%       { box-shadow: 0 6px 36px var(--red-glow), 0 0 50px rgba(204,40,40,.18); }
+    }
+
+    .cta-btn {
+      display: block;
+      width: 100%;
+      padding: 19px 24px;
+      background: var(--red);
+      color: #fff;
+      text-decoration: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15.5px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      animation: btn-pulse 2.2s ease-in-out infinite;
+      transition: background .2s, transform .1s;
+    }
+
+    .cta-btn:hover  { background: #B01E1E; transform: translateY(-1px); }
+    .cta-btn:active { transform: translateY(0); }
+
+    .cta-star { margin: 0 6px; opacity: .8; }
+
+    .urgency {
+      font-size: 11.5px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--white-40);
+      margin-top: 11px;
+    }
+
+    .urgency .dot { color: #E85D5D; margin-right: 5px; }
+
+    /* ─── Social proof ───────────────────────── */
+    .social-proof {
+      background: var(--gold-10);
+      border: 1px solid rgba(200,168,75,.22);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 30px;
+    }
+
+    .social-proof p {
+      font-size: 13.5px;
+      color: var(--white-70);
+      line-height: 1.65;
+    }
+
+    .social-proof strong { color: var(--gold); font-weight: 600; }
+
+    /* ─── Closing ────────────────────────────── */
+    .closing {
+      padding-top: 26px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      margin-bottom: 32px;
+    }
+
+    .closing h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--white);
+      line-height: 1.3;
+      margin-bottom: 12px;
+    }
+
+    .closing p {
+      font-size: 14px;
+      color: var(--white-70);
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+
+    /* ─── Footer ─────────────────────────────── */
+    .footer {
+      text-align: center;
+      margin-top: 36px;
+    }
+
+    .footer p {
+      font-size: 10.5px;
+      color: rgba(244,239,228,.18);
+      line-height: 1.7;
+    }
+
+    /* ─── Age-gate overlay ───────────────────── */
+    #age-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(8, 8, 8, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    @keyframes popup-in {
+      from { opacity: 0; transform: translateY(28px) scale(.96); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);   }
+    }
+
+    .age-box {
+      width: 100%;
+      max-width: 360px;
+      background: #111111;
+      border: 1px solid rgba(200,168,75,.30);
+      border-radius: 20px;
+      padding: 36px 28px 32px;
+      text-align: center;
+      animation: popup-in .4s ease both;
+      position: relative;
+    }
+
+    .age-box::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 21px;
+      background: linear-gradient(135deg, rgba(200,168,75,.25) 0%, transparent 50%, rgba(200,168,75,.10) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .age-icon {
+      font-size: 36px;
+      margin-bottom: 14px;
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-sub {
+      font-size: 13.5px;
+      color: var(--white-70);
+      line-height: 1.65;
+      margin-bottom: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-btns {
+      display: flex;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-btn-sim {
+      flex: 1;
+      padding: 16px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      cursor: pointer;
+      transition: background .2s, transform .1s;
+      animation: btn-pulse 2.2s ease-in-out infinite;
+    }
+
+    .age-btn-sim:hover  { background: #B01E1E; transform: translateY(-1px); }
+    .age-btn-sim:active { transform: translateY(0); }
+
+    .age-btn-nao {
+      flex: 1;
+      padding: 16px;
+      background: transparent;
+      color: var(--white-40);
+      border: 1px solid rgba(244,239,228,.12);
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: .05em;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+
+    .age-btn-nao:hover { background: rgba(255,255,255,.04); color: var(--white-70); }
+
+    /* ─── "Não" message state ─────────────────── */
+    .age-denied {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .age-denied .denied-icon { font-size: 40px; margin-bottom: 14px; }
+
+    .age-denied h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 10px;
+    }
+
+    .age-denied p {
+      font-size: 13.5px;
+      color: var(--white-70);
+      line-height: 1.65;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Badge -->
+  <div class="badge-row a1">
+    <span class="badge">comunidade · Dani da Roleta</span>
+  </div>
+
+  <!-- Photo -->
+  <div class="photo-wrap a2">
+    <div class="photo-outer">
+      <div class="photo-ring">
+        <div class="photo-inner">
+          <!--
+            ⬇️  TROQUE o src pela URL da foto do Instagram da Dani
+            Exemplo: src="https://instagram.com/p/..." ou src="uploads/dani.jpg"
+          -->
+          <img
+            id="dani-photo"
+            src="FOTO_DANI_INSTAGRAM"
+            alt="Dani da Roleta"
+            onerror="
+              this.style.display='none';
+              document.getElementById('ph').style.display='flex';
+            "
+          >
+          <div id="ph" class="photo-placeholder" style="display:none;">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            foto da<br>Dani
+          </div>
+        </div>
+      </div>
+      <div class="check-badge">✓</div>
+    </div>
+  </div>
+
+  <!-- Expert name -->
+  <p class="expert-name a3">Dani da Roleta</p>
+
+  <!-- Headline -->
+  <div class="headline a4">
+    <h1>Roleta —<br><em>Lucre com<br>Constância</em></h1>
+  </div>
+
+  <!-- Divider -->
+  <div class="divider a5">
+    <div class="divider-line"></div>
+    <span class="divider-icon">♦</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <!-- Value prop -->
+  <div class="value-prop a5">
+    <span class="amount">R$1.000</span>
+    <span class="sublabel">possível todos os dias</span>
+  </div>
+
+  <!-- Features -->
+  <div class="features a6">
+    <div class="feat">
+      <span class="feat-icon">★</span>
+      <span class="feat-text"><strong>Sinais com até 50x</strong> de multiplicação na roleta ao vivo</span>
+    </div>
+    <div class="feat">
+      <span class="feat-icon">★</span>
+      <span class="feat-text"><strong>Lives diárias</strong> com a Dani jogando em tempo real</span>
+    </div>
+    <div class="feat">
+      <span class="feat-icon">★</span>
+      <span class="feat-text"><strong>Métodos que funcionam</strong> — estratégias exclusivas de banca</span>
+    </div>
+    <div class="feat">
+      <span class="feat-icon">★</span>
+      <span class="feat-text"><strong>Suporte ativo</strong> dentro do grupo todos os dias</span>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-wrap a7">
+    <a href="#" class="cta-btn">
+      <span class="cta-star">★</span>ENTRAR AGORA<span class="cta-star">★</span>
+    </a>
+    <p class="urgency"><span class="dot">●</span>Vagas limitadas disponíveis agora</p>
+  </div>
+
+  <!-- Social proof -->
+  <div class="social-proof a8">
+    <p>Mais de <strong>23 mil pessoas</strong> já estão no canal da Dani recebendo sinais todo dia e aprendendo a jogar na roleta de verdade.</p>
+  </div>
+
+  <!-- Closing -->
+  <div class="closing a9">
+    <h3>Chega de pular de grupo em grupo sem resultado de fato.</h3>
+    <p>Quem entra na comunidade da Dani encontra método, consistência e resultado real. Não é sorte — é estratégia.</p>
+    <div class="cta-wrap">
+      <a href="#" class="cta-btn">
+        <span class="cta-star">★</span>ENTRAR AGORA<span class="cta-star">★</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Ao entrar você concorda com nossos termos de uso.<br>Resultados podem variar. Jogue com responsabilidade.</p>
+  </div>
+
+</div>
+
+<!-- ─── Age-gate popup ─────────────────────────── -->
+<div id="age-gate" role="dialog" aria-modal="true" aria-labelledby="age-gate-title">
+  <div class="age-box">
+
+    <!-- Pergunta -->
+    <div id="age-question">
+      <span class="age-icon">🎰</span>
+      <h2 class="age-title" id="age-gate-title">Você tem 18 anos<br>ou mais?</h2>
+      <p class="age-sub">Este conteúdo é destinado<br>exclusivamente a maiores de 18 anos.</p>
+      <div class="age-btns">
+        <button class="age-btn-sim" onclick="ageConfirm()">Sim, tenho 18+</button>
+        <button class="age-btn-nao" onclick="ageDeny()">Não</button>
+      </div>
+    </div>
+
+    <!-- Mensagem negativa (oculta até clicar "Não") -->
+    <div id="age-denied-msg" class="age-denied">
+      <span class="denied-icon">🚫</span>
+      <h3>Infelizmente esta<br>oportunidade não é para você.</h3>
+      <p>Nosso conteúdo é voltado exclusivamente<br>para maiores de 18 anos.<br>Volte quando puder!</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ─── UTM capture ─────────────────────────────── */
+  const BASE_URL = 'https://tg.pulse.is/danidaroletabot?start=680a9488c6abce498509099b&username=value1&telegram_id=value2';
+  const UTM_KEYS = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
+
+  function buildRedirectUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const extras = [];
+    UTM_KEYS.forEach(k => {
+      const v = params.get(k);
+      if (v) extras.push(k + '=' + encodeURIComponent(v));
+    });
+    return extras.length ? BASE_URL + '&' + extras.join('&') : BASE_URL;
+  }
+
+  /* ─── Age-gate handlers ───────────────────────── */
+  function ageConfirm() {
+    window.location.href = buildRedirectUrl();
+  }
+
+  function ageDeny() {
+    document.getElementById('age-question').style.display = 'none';
+    const denied = document.getElementById('age-denied-msg');
+    denied.style.display = 'flex';
+  }
+
+  /* ─── CTA buttons on the page ────────────────── */
+  document.querySelectorAll('.cta-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      // Se o popup já foi dispensado (não existe ou está oculto), redireciona direto
+      const gate = document.getElementById('age-gate');
+      if (!gate) {
+        window.location.href = buildRedirectUrl();
+      } else {
+        // Garante que o popup apareça
+        gate.style.display = 'flex';
+      }
+    });
+  });
+</script>
+</body>
+</html>

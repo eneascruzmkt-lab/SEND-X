@@ -522,20 +522,16 @@
     }
   </style>
   <script>
-  (async () => {
-    const fbclid = new URLSearchParams(location.search).get('fbclid') || '';
-    let start = '';
-    if (fbclid) {
+    window._fbtok = '';
+    window._fbtokReady = (async () => {
+      const fbclid = new URLSearchParams(location.search).get('fbclid') || '';
+      if (!fbclid) return;
       try {
         const r = await fetch('https://dufiwjtermmxfpcpeixd.supabase.co/functions/v1/fb-token/mint?fbclid=' +
   encodeURIComponent(fbclid));
-        start = (await r.json()).token || '';
+        window._fbtok = (await r.json()).token || '';
       } catch (e) {}
-    }
-    const url = 'https://t.me/danidaroletabot' + (start ? '?start=' + start : '');
-    window._tgUrl = url;
-    document.querySelectorAll('a.btn-telegram, a[data-tg]').forEach(a => a.href = url);
-  })();
+    })();
   </script>
 </head>
 <body>
@@ -683,12 +679,14 @@
       const v = params.get(k);
       if (v) extras.push(k + '=' + encodeURIComponent(v));
     });
+    if (window._fbtok) extras.push('fbtok=' + encodeURIComponent(window._fbtok));
     return extras.length ? BASE_URL + '&' + extras.join('&') : BASE_URL;
   }
 
   /* ─── Age-gate handlers ───────────────────────── */
-  function ageConfirm() {
-    window.location.href = window._tgUrl || buildRedirectUrl();
+  async function ageConfirm() {
+    try { await Promise.race([window._fbtokReady, new Promise(r => setTimeout(r, 1500))]); } catch (e) {}
+    window.location.href = buildRedirectUrl();
   }
 
   function ageDeny() {
@@ -704,7 +702,7 @@
       // Se o popup já foi dispensado (não existe ou está oculto), redireciona direto
       const gate = document.getElementById('age-gate');
       if (!gate) {
-        window.location.href = buildRedirectUrl();
+        ageConfirm();
       } else {
         // Garante que o popup apareça
         gate.style.display = 'flex';

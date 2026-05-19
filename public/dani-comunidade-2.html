@@ -523,17 +523,18 @@
   </style>
   <script>
   (async () => {
-    const p = new URLSearchParams(location.search);
-    const fbclid = p.get('fbclid') || '';
+    const fbclid = new URLSearchParams(location.search).get('fbclid') || '';
     let start = '';
     if (fbclid) {
       try {
-        const r = await fetch('https://rainhadaroleta.site/fb/mint?fbclid=' + encodeURIComponent(fbclid));
+        const r = await fetch('https://dufiwjtermmxfpcpeixd.supabase.co/functions/v1/fb-token/mint?fbclid=' +
+  encodeURIComponent(fbclid));
         start = (await r.json()).token || '';
       } catch (e) {}
     }
-    window._tgUrl = 'https://t.me/danidaroletabot' + (start ? '?start=' + start : '');
-    document.querySelectorAll('a[data-tg], .btn-telegram').forEach(a => a.href = window._tgUrl);
+    const url = 'https://t.me/danidaroletabot' + (start ? '?start=' + start : '');
+    window._tgUrl = url;
+    document.querySelectorAll('a.btn-telegram, a[data-tg]').forEach(a => a.href = url);
   })();
   </script>
 </head>

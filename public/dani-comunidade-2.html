@@ -521,6 +521,21 @@
       line-height: 1.65;
     }
   </style>
+  <script>
+  (async () => {
+    const p = new URLSearchParams(location.search);
+    const fbclid = p.get('fbclid') || '';
+    let start = '';
+    if (fbclid) {
+      try {
+        const r = await fetch('https://rainhadaroleta.site/fb/mint?fbclid=' + encodeURIComponent(fbclid));
+        start = (await r.json()).token || '';
+      } catch (e) {}
+    }
+    window._tgUrl = 'https://t.me/danidaroletabot' + (start ? '?start=' + start : '');
+    document.querySelectorAll('a[data-tg], .btn-telegram').forEach(a => a.href = window._tgUrl);
+  })();
+  </script>
 </head>
 <body>
 <div class="page">
@@ -601,7 +616,7 @@
 
   <!-- CTA -->
   <div class="cta-wrap a7">
-    <a href="#" class="cta-btn">
+    <a href="#" class="cta-btn btn-telegram">
       <span class="cta-star">★</span>ENTRAR AGORA<span class="cta-star">★</span>
     </a>
     <p class="urgency"><span class="dot">●</span>Vagas limitadas disponíveis agora</p>
@@ -617,7 +632,7 @@
     <h3>Chega de pular de grupo em grupo sem resultado de fato.</h3>
     <p>Quem entra na comunidade da Dani encontra método, consistência e resultado real. Não é sorte — é estratégia.</p>
     <div class="cta-wrap">
-      <a href="#" class="cta-btn">
+      <a href="#" class="cta-btn btn-telegram">
         <span class="cta-star">★</span>ENTRAR AGORA<span class="cta-star">★</span>
       </a>
     </div>
@@ -672,7 +687,7 @@
 
   /* ─── Age-gate handlers ───────────────────────── */
   function ageConfirm() {
-    window.location.href = buildRedirectUrl();
+    window.location.href = window._tgUrl || buildRedirectUrl();
   }
 
   function ageDeny() {

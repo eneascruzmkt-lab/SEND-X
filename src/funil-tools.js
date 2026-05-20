@@ -1,0 +1,158 @@
+/**
+ * Tool de funil consolidado por expert — junta TODAS as fontes de dados
+ * num único retorno pra Claude analisar onde o funil "fura".
+ *
+ * Fontes:
+ *  - Planilha (gasto Meta, cliques, FTDs registrados, Telegram joins, Net P&L)
+ *  - Postbacks Apostatudo (FTDs reais por UTM)
+ *  - Klarvel (lives: pico, participantes únicos, mensagens, engajamento)
+ *  - monitorgrupo (WhatsApp: total grupos leads, membros ativos, taxa engajamento)
+ */
+
+const { executeTool: executeInsightTool } = require('./insights-tools');
+const { executeKlarvelTool } = require('./klarvel-tools');
+const { executeMonitorgrupoTool } = require('./monitorgrupo-tools');
+
+function round2(n) { return Math.round(Number(n || 0) * 100) / 100; }
+function pct(num, den) {
+  if (!den) return null;
+  return Math.round((num / den) * 1000) / 10;
+}
+
+async function get_funil_expert({ expert, periodo = '7d', de, ate, user_id = 1 }) {
+  const errors = [];
+  let metricas = null, postbacks = null, klarvel = null, mgrupos = null;
+
+  // Métricas planilha (gasto, FTDs registrados, Net P&L, telegram joins)
+  try {
+    metricas = await executeInsightTool('get_metricas_expert', { expert, periodo, de, ate, comparar: false }, user_id);
+  } catch (e) { errors.push({ fonte: 'planilha', error: e.message }); }
+
+  // Postbacks reais (FTDs tempo real)
+  try {
+    postbacks = await executeInsightTool('get_postbacks_por_utm', { expert, periodo, de, ate }, user_id);
+  } catch (e) { errors.push({ fonte: 'postbacks', error: e.message }); }
+
+  // Klarvel (lives)
+  try {
+    klarvel = await executeKlarvelTool('get_lives_resumo', { expert, periodo, de, ate });
+  } catch (e) { errors.push({ fonte: 'klarvel', error: e.message }); }
+
+  // monitorgrupo (WhatsApp)
+  try {
+    mgrupos = await executeMonitorgrupoTool('get_engajamento_grupos', { expert, periodo, de, ate });
+    if (mgrupos?.error) { errors.push({ fonte: 'monitorgrupo', error: mgrupos.error }); mgrupos = null; }
+  } catch (e) { errors.push({ fonte: 'monitorgrupo', error: e.message }); }
+
+  // Cálculo do funil
+  const gasto = metricas?.gasto || 0;
+  const cliques = metricas?.cliques || 0;
+  const cadastros = metricas?.cadastros || 0;
+  const ftds_planilha = metricas?.ftds || 0;
+  const ftds_real = Number(postbacks?.totais?.ftds || 0);
+  const ftd_amount = metricas?.ftdAmount || 0;
+  const deposits = metricas?.depositsAmount || 0;
+  const telegram_joins = metricas?.telegramJoins || 0;
+  const netPL = metricas?.netPL || 0;
+
+  const lives_total = klarvel?.total_lives || 0;
+  const lives_participantes = klarvel?.participantes_unicos_soma || 0;
+  const lives_engajamento_pct = klarvel?.taxa_engajamento_media || '0%';
+
+  const wpp_total_grupos = mgrupos?.total_grupos_leads || 0;
+  const wpp_membros = mgrupos?.total_membros || 0;
+  const wpp_ativos = mgrupos?.membros_ativos || 0;
+  const wpp_engajamento_pct = mgrupos?.taxa_engajamento || '0%';
+
+  // Funil percentual (drop-off entre etapas)
+  const funil = [];
+  if (gasto > 0)      funil.push({ etapa: 'Gasto Meta',        valor: round2(gasto), unit: 'R$' });
+  if (cliques > 0)    funil.push({ etapa: 'Cliques no Link',   valor: cliques,        ctr_pct: pct(cliques, gasto * 100 || 1) });
+  if (cadastros > 0)  funil.push({ etapa: 'Cadastros',         valor: cadastros,      conv_clique_pct: pct(cadastros, cliques) });
+  if (telegram_joins > 0) funil.push({ etapa: 'Inscritos Telegram', valor: telegram_joins, conv_cadastro_pct: pct(telegram_joins, cadastros) });
+  if (wpp_ativos > 0) funil.push({ etapa: 'Ativos WhatsApp',   valor: wpp_ativos,     do_total_membros_pct: pct(wpp_ativos, wpp_membros) });
+  if (lives_participantes > 0) funil.push({ etapa: 'Participantes Lives', valor: lives_participantes });
+  funil.push({ etapa: 'FTDs (planilha)', valor: ftds_planilha });
+  funil.push({ etapa: 'FTDs (postback real)', valor: ftds_real });
+
+  // CACs reais
+  const custoPorFTD = ftds_real > 0 ? round2(gasto / ftds_real) : null;
+  const custoPorInscritoTelegram = telegram_joins > 0 ? round2(gasto / telegram_joins) : null;
+  const custoPorAtivoWpp = wpp_ativos > 0 ? round2(gasto / wpp_ativos) : null;
+  const roi = gasto > 0 ? round2(netPL / gasto) : null;
+
+  // Alertas heurísticos (onde o funil "fura")
+  const alertas = [];
+  if (gasto > 100 && ftds_real === 0) alertas.push(`🚨 Gastou R$${round2(gasto)} sem nenhum FTD real (postback)`);
+  if (cliques > 50 && cadastros === 0) alertas.push(`⚠️ ${cliques} cliques mas 0 cadastros — landing/casa pode estar quebrada`);
+  if (cadastros > 5 && telegram_joins === 0) alertas.push(`⚠️ ${cadastros} cadastros mas 0 inscritos Telegram — falha de captação?`);
+  if (wpp_membros > 100 && wpp_ativos < wpp_membros * 0.05) alertas.push(`📉 Grupo WhatsApp com baixíssimo engajamento (${wpp_engajamento_pct})`);
+  if (lives_total > 0 && lives_participantes < 10) alertas.push(`📺 Lives com audiência baixa (${lives_participantes} participantes em ${lives_total} lives)`);
+  if (ftds_planilha !== ftds_real) alertas.push(`🔍 FTDs planilha (${ftds_planilha}) ≠ postback real (${ftds_real}) — divergência na coleta`);
+  if (netPL < 0 && gasto > 0) alertas.push(`📉 P&L negativo: R$${round2(netPL)} (ROI ${roi}x)`);
+
+  return {
+    expert,
+    periodo: metricas?.periodo || periodo,
+    funil,
+    custo_por_ftd: custoPorFTD,
+    custo_por_inscrito_telegram: custoPorInscritoTelegram,
+    custo_por_ativo_whatsapp: custoPorAtivoWpp,
+    roi,
+    net_pl: round2(netPL),
+    detalhes: {
+      planilha: metricas ? {
+        gasto: round2(gasto), cliques, cadastros,
+        ftds: ftds_planilha, ftd_amount: round2(ftd_amount),
+        deposits: round2(deposits),
+        telegram_joins, net_pl: round2(netPL),
+      } : null,
+      postbacks_real: postbacks ? {
+        ftds: ftds_real,
+        leads: Number(postbacks.totais?.leads || 0),
+        ftd_amount: round2(postbacks.totais?.ftd_payout || 0),
+        top_utm: (postbacks.utms || []).slice(0, 5),
+      } : null,
+      lives: klarvel ? {
+        total: lives_total,
+        pico_max: klarvel.pico_simultaneos_max,
+        pico_medio: klarvel.pico_simultaneos_medio,
+        participantes_unicos: lives_participantes,
+        mensagens: klarvel.mensagens_total,
+        engajamento: lives_engajamento_pct,
+      } : null,
+      whatsapp: mgrupos ? {
+        grupos_leads: wpp_total_grupos,
+        membros_total: wpp_membros,
+        membros_ativos: wpp_ativos,
+        mensagens_total: mgrupos.total_mensagens,
+        engajamento: wpp_engajamento_pct,
+      } : null,
+    },
+    alertas: alertas.length > 0 ? alertas : ['nenhum alerta crítico'],
+    fontes_indisponiveis: errors.length > 0 ? errors : undefined,
+  };
+}
+
+const FUNIL_TOOLS = [
+  {
+    name: 'get_funil_expert',
+    description: 'Funil de conversão consolidado de um expert: cruza Gasto Meta + Cliques + Cadastros + Inscritos Telegram + Ativos WhatsApp + Participantes Lives + FTDs reais. Retorna CAC por etapa, ROI, alertas heurísticos. Use quando o operador pedir visão completa de performance ou onde o funil está "furando".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        expert: { type: 'string', description: 'DANI, DEIVID, JUH...' },
+        periodo: { type: 'string', enum: ['hoje','ontem','7d','14d','30d','1m','mtd','lastm','3m','custom'] },
+        de: { type: 'string' }, ate: { type: 'string' },
+      },
+      required: ['expert'],
+    },
+  },
+];
+
+async function executeFunilTool(name, input, userId = 1) {
+  if (name !== 'get_funil_expert') throw new Error(`Funil tool desconhecida: ${name}`);
+  return await get_funil_expert({ ...input, user_id: userId });
+}
+
+module.exports = { FUNIL_TOOLS, executeFunilTool };

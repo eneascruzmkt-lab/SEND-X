@@ -150,6 +150,8 @@ const { TOOLS } = require('../insights-tools');
 const { RESEARCH_TOOLS, executeResearchTool } = require('../research-tools');
 const { executeTool } = require('../insights-tools');
 const { KLARVEL_TOOLS, executeKlarvelTool } = require('../klarvel-tools');
+const { MONITORGRUPO_TOOLS, executeMonitorgrupoTool } = require('../monitorgrupo-tools');
+const { FUNIL_TOOLS, executeFunilTool } = require('../funil-tools');
 
 function bridgeAuth(req, res, next) {
   const expected = process.env.BRIDGE_SECRET;
@@ -162,7 +164,7 @@ function bridgeAuth(req, res, next) {
 
 router.get('/tools/list', bridgeAuth, (_req, res) => {
   res.json({
-    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS],
+    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS],
   });
 });
 
@@ -188,6 +190,10 @@ router.post('/tools/execute', bridgeAuth, async (req, res) => {
       result = await executeResearchTool(name, input || {});
     } else if (KLARVEL_TOOLS.some(t => t.name === name)) {
       result = await executeKlarvelTool(name, input || {});
+    } else if (MONITORGRUPO_TOOLS.some(t => t.name === name)) {
+      result = await executeMonitorgrupoTool(name, input || {});
+    } else if (FUNIL_TOOLS.some(t => t.name === name)) {
+      result = await executeFunilTool(name, input || {}, userId);
     } else {
       result = await executeTool(name, input || {}, userId);
     }

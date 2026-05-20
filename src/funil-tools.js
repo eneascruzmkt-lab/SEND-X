@@ -67,13 +67,13 @@ async function get_funil_expert({ expert, periodo = '7d', de, ate, user_id = 1 }
   // Funil percentual (drop-off entre etapas)
   const funil = [];
   if (gasto > 0)      funil.push({ etapa: 'Gasto Meta',        valor: round2(gasto), unit: 'R$' });
-  if (cliques > 0)    funil.push({ etapa: 'Cliques no Link',   valor: cliques,        ctr_pct: pct(cliques, gasto * 100 || 1) });
-  if (cadastros > 0)  funil.push({ etapa: 'Cadastros',         valor: cadastros,      conv_clique_pct: pct(cadastros, cliques) });
-  if (telegram_joins > 0) funil.push({ etapa: 'Inscritos Telegram', valor: telegram_joins, conv_cadastro_pct: pct(telegram_joins, cadastros) });
+  if (cliques > 0)    funil.push({ etapa: 'Cliques no Link',   valor: cliques,        custo_por_clique_brl: gasto > 0 ? round2(gasto / cliques) : null });
+  if (cadastros > 0)  funil.push({ etapa: 'Cadastros',         valor: cadastros,      conv_clique_para_cadastro_pct: pct(cadastros, cliques) });
+  if (telegram_joins > 0) funil.push({ etapa: 'Inscritos Telegram', valor: telegram_joins, conv_cadastro_para_telegram_pct: pct(telegram_joins, cadastros) });
   if (wpp_ativos > 0) funil.push({ etapa: 'Ativos WhatsApp',   valor: wpp_ativos,     do_total_membros_pct: pct(wpp_ativos, wpp_membros) });
   if (lives_participantes > 0) funil.push({ etapa: 'Participantes Lives', valor: lives_participantes });
-  funil.push({ etapa: 'FTDs (planilha)', valor: ftds_planilha });
-  funil.push({ etapa: 'FTDs (postback real)', valor: ftds_real });
+  funil.push({ etapa: 'FTDs (planilha)', valor: ftds_planilha, conv_cadastro_para_ftd_pct: pct(ftds_planilha, cadastros) });
+  funil.push({ etapa: 'FTDs (postback real)', valor: ftds_real, conv_cadastro_para_ftd_pct: pct(ftds_real, cadastros) });
 
   // CACs reais
   const custoPorFTD = ftds_real > 0 ? round2(gasto / ftds_real) : null;

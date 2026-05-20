@@ -96,6 +96,18 @@ db.init().then(() => {
   cron.schedule('0 0 * * *',  () => runAdvisor('madrugada'),{ timezone: 'America/Sao_Paulo' });
   console.log('[cron-ai-advisor] agendado pra 08:00, 15:00 e 00:00 BRT');
 
+  // Smart Reminders: scanneia lives terminadas a cada 10min
+  const smartReminders = require('./src/smart-reminders');
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      const r = await smartReminders.processarLivesTerminadas(1, 30);
+      if (Array.isArray(r) && r.length > 0) {
+        console.log('[cron-reminders]', JSON.stringify(r));
+      }
+    } catch (e) { console.error('[cron-reminders]', e.message); }
+  });
+  console.log('[cron-reminders] agendado a cada 10 minutos');
+
   server.listen(PORT, () => {
     console.log(`[server] rodando em http://localhost:${PORT}`);
   });

@@ -232,6 +232,27 @@ async function init() {
     );
     CREATE INDEX IF NOT EXISTS idx_klarvel_summary_user_date ON klarvel_daily_summary(user_id, report_date DESC);
   `);
+  // Smart Reminders: lembretes inteligentes (pós-live, pós-disparo, etc.)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS smart_reminders (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      tipo            TEXT NOT NULL,
+      expert          TEXT,
+      trigger_id      TEXT,
+      trigger_data    JSONB,
+      conteudo        TEXT,
+      sugestoes       JSONB,
+      enviado_para    TEXT,
+      enviado_at      TIMESTAMPTZ,
+      status          TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','enviado','erro','ignorado')),
+      error_msg       TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(tipo, trigger_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminders_user_created ON smart_reminders(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_reminders_status ON smart_reminders(status, created_at);
+  `);
   // AI Advisor: recomendações geradas + tracking de outcome
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ai_recommendations (
@@ -812,6 +833,51 @@ module.exports = {
 
   async updateAttachmentMessageId(id, messageId) {
     await pool.query('UPDATE chat_attachments SET message_id=$2 WHERE id=$1', [id, messageId]);
+  },
+
+  // ── Smart Reminders ──────────────────────────────────
+  async insertReminder(rem) {
+    const res = await pool.query(
+      `INSERT INTO smart_reminders (user_id, tipo, expert, trigger_id, trigger_data, conteudo, sugestoes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (tipo, trigger_id) DO UPDATE SET conteudo=$6, sugestoes=$7
+       RETURNING *`,
+      [rem.user_id, rem.tipo, rem.expert, rem.trigger_id,
+       JSON.stringify(rem.trigger_data || {}), rem.conteudo,
+       JSON.stringify(rem.sugestoes || []), rem.status || 'pendente']
+    );
+    return res.rows[0];
+  },
+
+  async listReminders(userId, { tipo, status, limit = 50 } = {}) {
+    const where = ['user_id=$1']; const params = [userId];
+    if (tipo)   { params.push(tipo);   where.push(`tipo=$${params.length}`); }
+    if (status) { params.push(status); where.push(`status=$${params.length}`); }
+    params.push(limit);
+    const res = await pool.query(
+      `SELECT * FROM smart_reminders WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT $${params.length}`,
+      params
+    );
+    return res.rows;
+  },
+
+  async markReminderSent(id, group_jid) {
+    await pool.query(
+      `UPDATE smart_reminders SET status='enviado', enviado_para=$2, enviado_at=NOW() WHERE id=$1`,
+      [id, group_jid]
+    );
+  },
+
+  async markReminderError(id, errorMsg) {
+    await pool.query(
+      `UPDATE smart_reminders SET status='erro', error_msg=$2 WHERE id=$1`,
+      [id, errorMsg]
+    );
+  },
+
+  async existsReminder(tipo, triggerId) {
+    const r = await pool.query('SELECT id FROM smart_reminders WHERE tipo=$1 AND trigger_id=$2', [tipo, triggerId]);
+    return r.rows.length > 0;
   },
 
   // ── AI Advisor ──────────────────────────────────────

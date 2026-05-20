@@ -17,8 +17,18 @@ const { executeTool } = require('./insights-tools');
 const EXPERTS_DEFAULT = ['DANI', 'DEIVID', 'JUH'];
 
 const SYSTEM_PROMPT = `Você é um analista sênior de marketing digital especializado em iGaming/afiliados.
-Sua tarefa: analisar os dados consolidados dos experts do operador e gerar
-EXATAMENTE 5 recomendações priorizadas para aumentar Net P&L e FTDs nos próximos 7 dias.
+Sua tarefa: analisar os dados consolidados dos experts e gerar EXATAMENTE 5 recomendações
+priorizadas para aumentar Net P&L e FTDs.
+
+VOCÊ RECEBE 3 HORIZONTES POR EXPERT:
+- diario_ontem: o que aconteceu ontem (granularidade fina, picos/quedas pontuais)
+- semanal_7d: últimos 7 dias (tendências de curto prazo, padrões semanais)
+- mensal_30d: últimos 30 dias (visão estrutural, sazonalidade, comparação)
+
+DISTRIBUIÇÃO IDEAL DAS 5 RECOMENDAÇÕES (não rígida, mas mire isso):
+- 2 com urgencia="hoje" (acionáveis em 24h, baseadas no diário ou em alertas críticos)
+- 2 com urgencia="esta_semana" (semanais, ajustes de campanha/conteúdo)
+- 1 com urgencia="este_mes" (estratégica, baseada no mensal)
 
 REGRAS DA RESPOSTA:
 - Retorne APENAS um JSON válido (sem markdown, sem texto antes ou depois).
@@ -29,26 +39,31 @@ REGRAS DA RESPOSTA:
       "expert": "DANI | DEIVID | JUH | NUCLEAR | GERAL",
       "categoria": "meta_ads | telegram | whatsapp | lives | copy | operacional | apostatudo",
       "urgencia": "hoje | esta_semana | este_mes",
-      "acao": "descrição curta e concreta da ação (max 120 chars)",
-      "justificativa": "razão baseada em dados específicos com números (max 250 chars)",
+      "acao": "descrição curta e concreta (max 120 chars)",
+      "justificativa": "razão com números reais dos 3 horizontes quando relevante (max 280 chars)",
       "impacto_estimado": "+X FTDs/sem ou +R$Y/mês ou redução -Z% custo/FTD",
       "passos": ["passo 1 concreto", "passo 2", "passo 3"]
     }
-    // ... 5 itens totais, ordenados por impacto estimado
+    // ... 5 itens totais, ordenados por impacto estimado descendente
   ]
 }
-- Use dados reais nos números. Se um dado estiver zerado, comente.
-- Foque em ações ACIONÁVEIS hoje, não conselhos genéricos.`;
+- Use os 3 horizontes pra detectar: 'ontem fugiu da média' OU 'tendência caindo há 7d' OU 'sazonal mensal'.
+- Compare experts entre si quando relevante.
+- Ações concretas com NÚMEROS de referência. Sem conselhos genéricos.`;
 
 async function coletarDados(userId = 1, experts = EXPERTS_DEFAULT) {
   const data = { gerado_em: new Date().toISOString(), experts: {} };
   for (const expert of experts) {
     try {
-      const funil7d = await executeFunilTool('get_funil_expert', { expert, periodo: '7d' }, userId);
-      const funil30d = await executeFunilTool('get_funil_expert', { expert, periodo: '30d' }, userId);
+      const [funilOntem, funil7d, funil30d] = await Promise.all([
+        executeFunilTool('get_funil_expert', { expert, periodo: 'ontem' }, userId),
+        executeFunilTool('get_funil_expert', { expert, periodo: '7d' }, userId),
+        executeFunilTool('get_funil_expert', { expert, periodo: '30d' }, userId),
+      ]);
       data.experts[expert] = {
-        '7d': resumirFunil(funil7d),
-        '30d': resumirFunil(funil30d),
+        diario_ontem: resumirFunil(funilOntem),
+        semanal_7d: resumirFunil(funil7d),
+        mensal_30d: resumirFunil(funil30d),
       };
     } catch (e) {
       data.experts[expert] = { error: e.message };
@@ -109,10 +124,13 @@ function extractJson(text) {
 
 async function gerarRecomendacoes(userId = 1, experts = EXPERTS_DEFAULT) {
   const dados = await coletarDados(userId, experts);
-  const dadosTxt = `## DADOS CONSOLIDADOS\n\n` +
-    Object.entries(dados.experts).map(([exp, d]) =>
-      `### ${exp}\n7d: ${JSON.stringify(d['7d'])}\n30d: ${JSON.stringify(d['30d'])}`
-    ).join('\n\n');
+  const dadosTxt = `## DADOS CONSOLIDADOS POR EXPERT\n\n` +
+    Object.entries(dados.experts).map(([exp, d]) => {
+      if (d.error) return `### ${exp}\nERRO: ${d.error}`;
+      return `### ${exp}\nDIÁRIO (ontem): ${JSON.stringify(d.diario_ontem)}\n` +
+             `SEMANAL (7d): ${JSON.stringify(d.semanal_7d)}\n` +
+             `MENSAL (30d): ${JSON.stringify(d.mensal_30d)}`;
+    }).join('\n\n');
 
   const userMsg = `Analise os dados abaixo e me retorne o JSON com 5 recomendações conforme o schema do system prompt.\n\n${dadosTxt}`;
 
@@ -190,13 +208,14 @@ function fmtBR(d) {
   return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
 }
 
-async function notificarTop3(userId = 1) {
+async function notificarTop3(userId = 1, slot = '') {
   const pending = await db.listRecommendations(userId, { status: 'pendente', limit: 3 });
   if (pending.length === 0) return { sent: false, reason: 'sem recomendações pendentes' };
 
+  const slotLabel = { manha: '☀️ MANHÃ', tarde: '🌇 TARDE', madrugada: '🌙 FECHAMENTO' }[slot] || '🧠';
   const text =
-    `🧠 *RECOMENDAÇÕES DO DIA*\n` +
-    `📅 ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+    `${slotLabel} *— Recomendações IA*\n` +
+    `📅 ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}\n` +
     `━━━━━━━━━━━━━━━━━━\n\n` +
     pending.map((r, i) => {
       const emoji = r.urgencia === 'hoje' ? '🚨' : r.urgencia === 'esta_semana' ? '⚡' : '📅';
@@ -204,7 +223,7 @@ async function notificarTop3(userId = 1) {
              `${r.acao}\n` +
              `_${r.justificativa}_\n` +
              `📈 ${r.impacto_estimado}\n` +
-             `→ Veja em https://send-x-production.up.railway.app/ aba AI Advisor`;
+             `→ https://send-x-production.up.railway.app/ aba AI Advisor`;
     }).join('\n\n');
 
   // Envia via Evolution (precisa REPORT_INSTANCE + REPORT_PHONE configurados)

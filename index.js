@@ -66,6 +66,18 @@ db.init().then(() => {
   // Scheduler — dispara agendamentos pendentes a cada minuto
   scheduler.start(io);
 
+  // Cron Klarvel: agrega dados das lives do dia anterior, todo dia às 06:00 BRT
+  const cron = require('node-cron');
+  const { aggregateKlarvelForDate } = require('./src/cron/klarvel-aggregate');
+  cron.schedule('0 6 * * *', async () => {
+    console.log('[cron-klarvel] agregando lives do dia anterior…');
+    try {
+      const r = await aggregateKlarvelForDate();
+      console.log('[cron-klarvel] ok:', JSON.stringify(r));
+    } catch (e) { console.error('[cron-klarvel]', e.message); }
+  }, { timezone: 'America/Sao_Paulo' });
+  console.log('[cron-klarvel] agendado pra 06:00 BRT diário');
+
   server.listen(PORT, () => {
     console.log(`[server] rodando em http://localhost:${PORT}`);
   });

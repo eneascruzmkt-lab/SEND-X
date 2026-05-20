@@ -176,6 +176,36 @@ router.get('/ecossistema/funil', auth, async (req, res) => {
   }
 });
 
+/** POST /api/klarvel/aggregate?date=YYYY-MM-DD — força agregação manual */
+router.post('/klarvel/aggregate', auth, async (req, res) => {
+  try {
+    const { aggregateKlarvelForDate } = require('../cron/klarvel-aggregate');
+    const date = req.query.date || req.body?.date;
+    const r = await aggregateKlarvelForDate(date);
+    res.json({ ok: true, results: r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/ecossistema/comparar — comparativo expert×expert ou período×período */
+router.get('/ecossistema/comparar', auth, async (req, res) => {
+  try {
+    const input = {
+      modo: req.query.modo || 'expert_vs_expert',
+      expert_a: req.query.expert_a,
+      expert_b: req.query.expert_b,
+      periodo_a: req.query.periodo_a || '7d',
+      periodo_b: req.query.periodo_b || req.query.periodo_a || '7d',
+      de_a: req.query.de_a, ate_a: req.query.ate_a,
+      de_b: req.query.de_b, ate_b: req.query.ate_b,
+    };
+    const result = await executeFunilTool('get_comparativo_funil', input, req.userId);
+    res.json(result);
+  } catch (err) {
+    console.error('[ecossistema/comparar]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/tools/list', bridgeAuth, (_req, res) => {
   res.json({
     tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS],

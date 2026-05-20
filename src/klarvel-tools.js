@@ -229,6 +229,82 @@ async function listar_lives({ expert, periodo, de, ate, limit = 30 }) {
   };
 }
 
+async function gerar_relatorio_lives({ expert, periodo = '30d', de, ate, user_id = 1 }) {
+  const db = require('./db');
+
+  // Resolve período pra range de datas
+  const { start, end, label } = resolvePeriodo(periodo, de, ate);
+  const dateFrom = start.toISOString().slice(0, 10);
+  const dateTo = end.toISOString().slice(0, 10);
+
+  // Tenta ler do summary primeiro (rápido). Se vazio, agrega dia a dia.
+  const summaries = await db.getKlarvelSummary(user_id, expert.toUpperCase(), dateFrom, dateTo);
+
+  if (summaries.length === 0) {
+    return {
+      expert, periodo: label,
+      msg: 'Sem dados agregados no período. Aguarde o cron diário (6h BRT) ou rode aggregateKlarvelForDate manualmente.',
+      hint: 'POST /api/klarvel/aggregate?date=YYYY-MM-DD pra forçar agregação.',
+    };
+  }
+
+  // Totais
+  const sum = (k) => summaries.reduce((a, s) => a + (Number(s[k]) || 0), 0);
+  const avg = (k) => summaries.length > 0 ? Math.round(sum(k) / summaries.length) : 0;
+  const max = (k) => Math.max(...summaries.map(s => Number(s[k]) || 0));
+
+  // Tendência: primeira metade vs segunda metade
+  const half = Math.floor(summaries.length / 2);
+  const first = summaries.slice(0, half);
+  const second = summaries.slice(half);
+  const trend = (k) => {
+    const f = first.reduce((a, s) => a + (Number(s[k]) || 0), 0) / Math.max(first.length, 1);
+    const sec = second.reduce((a, s) => a + (Number(s[k]) || 0), 0) / Math.max(second.length, 1);
+    if (f === 0) return sec > 0 ? '+100%' : '0%';
+    return ((sec - f) / Math.abs(f) * 100).toFixed(1) + '%';
+  };
+
+  return {
+    expert,
+    periodo: label,
+    dias_com_lives: summaries.length,
+    totais: {
+      total_lives: sum('total_lives'),
+      duracao_total_horas: Math.round(sum('duracao_total_minutos') / 60 * 10) / 10,
+      participantes_unicos: sum('participantes_unicos'),
+      mensagens: sum('mensagens_total'),
+      autores_unicos: sum('autores_unicos'),
+    },
+    medias: {
+      lives_por_dia: avg('total_lives'),
+      pico_medio: avg('pico_simultaneos_medio'),
+      duracao_media_min: avg('duracao_total_minutos'),
+      engagement_pct: summaries.length > 0
+        ? (summaries.reduce((a, s) => a + Number(s.engagement_rate_pct || 0), 0) / summaries.length).toFixed(1) + '%'
+        : '0%',
+    },
+    recordes: {
+      pico_maximo_no_periodo: max('pico_simultaneos_max'),
+      melhor_dia: summaries.reduce((best, s) =>
+        (Number(s.participantes_unicos) || 0) > (Number(best?.participantes_unicos) || 0) ? s : best, null
+      )?.report_date,
+    },
+    tendencias: {
+      lives: trend('total_lives'),
+      participantes: trend('participantes_unicos'),
+      mensagens: trend('mensagens_total'),
+    },
+    dias: summaries.map(s => ({
+      data: s.report_date,
+      lives: s.total_lives,
+      pico_max: s.pico_simultaneos_max,
+      participantes: s.participantes_unicos,
+      mensagens: s.mensagens_total,
+      engagement: s.engagement_rate_pct + '%',
+    })),
+  };
+}
+
 const KLARVEL_TOOLS = [
   {
     name: 'get_lives_resumo',
@@ -280,11 +356,26 @@ const KLARVEL_TOOLS = [
   },
 ];
 
+KLARVEL_TOOLS.push({
+  name: 'gerar_relatorio_lives',
+  description: 'Relatório semanal/mensal/custom das lives de um expert. Lê de klarvel_daily_summary (agregada pelo cron diário) e retorna totais, médias, recordes, tendências (primeira metade vs segunda metade do período).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      expert: { type: 'string', description: 'DANI, DEIVID, JUH...' },
+      periodo: { type: 'string', enum: ['7d','14d','30d','1m','lastm','3m','custom'], description: 'default 30d' },
+      de: { type: 'string' }, ate: { type: 'string' },
+    },
+    required: ['expert'],
+  },
+});
+
 const HANDLERS = {
   get_lives_resumo,
   listar_lives,
   get_live_detalhes,
   get_mensagens_live,
+  gerar_relatorio_lives,
 };
 
 async function executeKlarvelTool(name, input) {

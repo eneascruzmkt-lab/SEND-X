@@ -134,6 +134,60 @@ async function get_funil_expert({ expert, periodo = '7d', de, ate, user_id = 1 }
   };
 }
 
+function pctVar(curr, prev) {
+  if (prev === 0 || prev == null) return curr > 0 ? 100 : 0;
+  return round2(((curr - prev) / Math.abs(prev)) * 100);
+}
+
+async function get_comparativo_funil(input, userId = 1) {
+  const {
+    expert_a = 'DANI', expert_b = 'DEIVID',
+    periodo_a = '7d', periodo_b = '7d',
+    de_a, ate_a, de_b, ate_b,
+    modo = 'expert_vs_expert', // ou 'periodo_vs_periodo' (mesmo expert, dois períodos)
+  } = input || {};
+
+  let a, b;
+  if (modo === 'periodo_vs_periodo') {
+    a = await get_funil_expert({ expert: expert_a, periodo: periodo_a, de: de_a, ate: ate_a, user_id: userId });
+    b = await get_funil_expert({ expert: expert_a, periodo: periodo_b, de: de_b, ate: ate_b, user_id: userId });
+  } else {
+    a = await get_funil_expert({ expert: expert_a, periodo: periodo_a, de: de_a, ate: ate_a, user_id: userId });
+    b = await get_funil_expert({ expert: expert_b, periodo: periodo_b || periodo_a, de: de_b, ate: ate_b, user_id: userId });
+  }
+
+  // Diff em métricas-chave
+  const m = (x, path) => path.split('.').reduce((o, k) => (o == null ? 0 : o[k]), x) || 0;
+  const diff = {
+    gasto_meta: { a: m(a, 'detalhes.planilha.gasto'), b: m(b, 'detalhes.planilha.gasto'), var_pct: pctVar(m(b, 'detalhes.planilha.gasto'), m(a, 'detalhes.planilha.gasto')) },
+    cliques: { a: m(a, 'detalhes.planilha.cliques'), b: m(b, 'detalhes.planilha.cliques'), var_pct: pctVar(m(b, 'detalhes.planilha.cliques'), m(a, 'detalhes.planilha.cliques')) },
+    cadastros: { a: m(a, 'detalhes.planilha.cadastros'), b: m(b, 'detalhes.planilha.cadastros'), var_pct: pctVar(m(b, 'detalhes.planilha.cadastros'), m(a, 'detalhes.planilha.cadastros')) },
+    ftds_real: { a: m(a, 'detalhes.postbacks_real.ftds'), b: m(b, 'detalhes.postbacks_real.ftds'), var_pct: pctVar(m(b, 'detalhes.postbacks_real.ftds'), m(a, 'detalhes.postbacks_real.ftds')) },
+    net_pl: { a: a.net_pl, b: b.net_pl, var_pct: pctVar(b.net_pl, a.net_pl) },
+    custo_por_ftd: { a: a.custo_por_ftd, b: b.custo_por_ftd, var_pct: pctVar(b.custo_por_ftd, a.custo_por_ftd) },
+    roi: { a: a.roi, b: b.roi, var_pct: pctVar(b.roi, a.roi) },
+    telegram_joins: { a: m(a, 'detalhes.planilha.telegram_joins'), b: m(b, 'detalhes.planilha.telegram_joins'), var_pct: pctVar(m(b, 'detalhes.planilha.telegram_joins'), m(a, 'detalhes.planilha.telegram_joins')) },
+    whatsapp_ativos: { a: m(a, 'detalhes.whatsapp.membros_ativos'), b: m(b, 'detalhes.whatsapp.membros_ativos'), var_pct: pctVar(m(b, 'detalhes.whatsapp.membros_ativos'), m(a, 'detalhes.whatsapp.membros_ativos')) },
+    lives_total: { a: m(a, 'detalhes.lives.total'), b: m(b, 'detalhes.lives.total'), var_pct: pctVar(m(b, 'detalhes.lives.total'), m(a, 'detalhes.lives.total')) },
+    lives_participantes: { a: m(a, 'detalhes.lives.participantes_unicos'), b: m(b, 'detalhes.lives.participantes_unicos'), var_pct: pctVar(m(b, 'detalhes.lives.participantes_unicos'), m(a, 'detalhes.lives.participantes_unicos')) },
+  };
+
+  // Vencedor por métrica (em B vs A — B é o "novo"/"alvo")
+  const insights = [];
+  if (diff.ftds_real.var_pct >= 30) insights.push(`🚀 B tem ${diff.ftds_real.var_pct}% mais FTDs reais`);
+  else if (diff.ftds_real.var_pct <= -30) insights.push(`⚠️ B tem ${Math.abs(diff.ftds_real.var_pct)}% menos FTDs reais`);
+  if (diff.custo_por_ftd.a > 0 && diff.custo_por_ftd.b > 0 && diff.custo_por_ftd.var_pct <= -20) insights.push(`💚 B é ${Math.abs(diff.custo_por_ftd.var_pct)}% mais eficiente em custo/FTD`);
+  if (diff.roi.a != null && diff.roi.b != null && diff.roi.var_pct >= 30) insights.push(`📈 B tem ROI ${diff.roi.var_pct}% melhor`);
+
+  return {
+    modo,
+    a: { ...a, label: modo === 'periodo_vs_periodo' ? a.periodo : a.expert },
+    b: { ...b, label: modo === 'periodo_vs_periodo' ? b.periodo : b.expert },
+    diff,
+    insights,
+  };
+}
+
 const FUNIL_TOOLS = [
   {
     name: 'get_funil_expert',
@@ -150,9 +204,27 @@ const FUNIL_TOOLS = [
   },
 ];
 
+FUNIL_TOOLS.push({
+  name: 'get_comparativo_funil',
+  description: 'Compara funil de 2 experts (modo expert_vs_expert) ou do mesmo expert em 2 períodos (modo periodo_vs_periodo). Retorna diff com variação % em cada métrica + insights automáticos.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      modo: { type: 'string', enum: ['expert_vs_expert', 'periodo_vs_periodo'], description: 'default expert_vs_expert' },
+      expert_a: { type: 'string' },
+      expert_b: { type: 'string' },
+      periodo_a: { type: 'string', enum: ['hoje','ontem','7d','14d','30d','1m','mtd','lastm','3m','custom'] },
+      periodo_b: { type: 'string', enum: ['hoje','ontem','7d','14d','30d','1m','mtd','lastm','3m','custom'] },
+      de_a: { type: 'string' }, ate_a: { type: 'string' },
+      de_b: { type: 'string' }, ate_b: { type: 'string' },
+    },
+  },
+});
+
 async function executeFunilTool(name, input, userId = 1) {
-  if (name !== 'get_funil_expert') throw new Error(`Funil tool desconhecida: ${name}`);
-  return await get_funil_expert({ ...input, user_id: userId });
+  if (name === 'get_funil_expert') return await get_funil_expert({ ...input, user_id: userId });
+  if (name === 'get_comparativo_funil') return await get_comparativo_funil(input, userId);
+  throw new Error(`Funil tool desconhecida: ${name}`);
 }
 
 module.exports = { FUNIL_TOOLS, executeFunilTool };

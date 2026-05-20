@@ -211,6 +211,27 @@ async function init() {
       UNIQUE(user_id, tab)
     );
   `);
+  // Agregação diária do Klarvel (lives Google Meet) — preenchida pelo cron
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS klarvel_daily_summary (
+      id                     SERIAL PRIMARY KEY,
+      user_id                INTEGER NOT NULL REFERENCES users(id),
+      expert                 TEXT NOT NULL,
+      report_date            DATE NOT NULL,
+      total_lives            INTEGER DEFAULT 0,
+      duracao_total_minutos  INTEGER DEFAULT 0,
+      pico_simultaneos_max   INTEGER DEFAULT 0,
+      pico_simultaneos_medio INTEGER DEFAULT 0,
+      participantes_unicos   INTEGER DEFAULT 0,
+      mensagens_total        INTEGER DEFAULT 0,
+      autores_unicos         INTEGER DEFAULT 0,
+      engagement_rate_pct    NUMERIC(5,2),
+      raw_lives              JSONB,
+      created_at             TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, expert, report_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_klarvel_summary_user_date ON klarvel_daily_summary(user_id, report_date DESC);
+  `);
   // Memória persistente do chat (sessões, mensagens, fatos aprendidos)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -765,6 +786,33 @@ module.exports = {
 
   async updateAttachmentMessageId(id, messageId) {
     await pool.query('UPDATE chat_attachments SET message_id=$2 WHERE id=$1', [id, messageId]);
+  },
+
+  // ── Klarvel daily summary (preenchida pelo cron) ─────
+  async upsertKlarvelDailySummary(userId, expert, date, data) {
+    await pool.query(
+      `INSERT INTO klarvel_daily_summary (user_id, expert, report_date, total_lives, duracao_total_minutos,
+         pico_simultaneos_max, pico_simultaneos_medio, participantes_unicos, mensagens_total, autores_unicos,
+         engagement_rate_pct, raw_lives)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       ON CONFLICT (user_id, expert, report_date) DO UPDATE
+       SET total_lives=$4, duracao_total_minutos=$5, pico_simultaneos_max=$6, pico_simultaneos_medio=$7,
+           participantes_unicos=$8, mensagens_total=$9, autores_unicos=$10,
+           engagement_rate_pct=$11, raw_lives=$12, created_at=NOW()`,
+      [userId, expert, date, data.total_lives, data.duracao_total_minutos, data.pico_simultaneos_max,
+       data.pico_simultaneos_medio, data.participantes_unicos, data.mensagens_total, data.autores_unicos,
+       data.engagement_rate_pct, JSON.stringify(data.raw_lives || [])]
+    );
+  },
+
+  async getKlarvelSummary(userId, expert, dateFrom, dateTo) {
+    const res = await pool.query(
+      `SELECT * FROM klarvel_daily_summary
+       WHERE user_id=$1 AND expert=$2 AND report_date BETWEEN $3 AND $4
+       ORDER BY report_date ASC`,
+      [userId, expert, dateFrom, dateTo]
+    );
+    return res.rows;
   },
 
   // ── Bridge registry (URL dinâmica do ngrok do Mac) ─────

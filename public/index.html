@@ -376,7 +376,27 @@ tailwind.config = {
             <button onclick="switchEcoPeriodo('lastm')" class="eco-periodo-btn filter-btn" data-eperiodo="lastm">Mês passado</button>
             <button onclick="switchEcoPeriodo('3m')" class="eco-periodo-btn filter-btn" data-eperiodo="3m">3 meses</button>
           </div>
-          <button onclick="loadEcossistema()" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all" title="Atualizar">↻ Atualizar</button>
+          <button onclick="toggleEcoCompare()" id="ecoCompareBtn" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-purple-400 hover:border-purple-500/50 transition-all">⇄ Comparar</button>
+          <button onclick="loadEcossistema()" class="text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all" title="Atualizar">↻</button>
+        </div>
+
+        <!-- Painel de comparação (hidden por default) -->
+        <div id="ecoComparePanel" class="bg-purple-500/5 border border-purple-500/30 rounded-xl p-3 mb-4" style="display:none">
+          <div class="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">Modo Comparar</div>
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <select id="ecoCompareModo" onchange="loadEcossistema()" class="text-xs bg-[#0c0f0c] border border-border/60 rounded px-2 py-1">
+              <option value="expert_vs_expert">Expert vs Expert</option>
+              <option value="periodo_vs_periodo">Período vs Período (mesmo expert)</option>
+            </select>
+            <span class="text-xs text-gray-500">vs</span>
+            <select id="ecoCompareExpertB" onchange="loadEcossistema()" class="text-xs bg-[#0c0f0c] border border-border/60 rounded px-2 py-1"></select>
+            <select id="ecoComparePeriodoB" onchange="loadEcossistema()" class="text-xs bg-[#0c0f0c] border border-border/60 rounded px-2 py-1">
+              <option value="hoje">Hoje</option><option value="ontem">Ontem</option>
+              <option value="7d" selected>7 dias</option><option value="14d">14 dias</option>
+              <option value="1m">Mês atual</option><option value="lastm">Mês passado</option>
+              <option value="3m">3 meses</option>
+            </select>
+          </div>
         </div>
 
         <!-- KPIs principais -->
@@ -3411,10 +3431,13 @@ function showPanel(name) {
 // ── Ecossistema (funil consolidado) ───────────────
 let ecoTab = '';
 let ecoPeriodo = '7d';
+let ecoCompareMode = false;
+let ecoTabsAvailable = [];
 
 async function initEcossistemaPanel() {
   try {
     const tabs = await api('/relatorio/tabs');
+    ecoTabsAvailable = tabs;
     const container = document.getElementById('ecoTabButtons');
     container.innerHTML = '';
     tabs.forEach((t, i) => {
@@ -3425,9 +3448,24 @@ async function initEcossistemaPanel() {
       btn.onclick = () => switchEcoTab(t);
       container.appendChild(btn);
     });
+    // popula select B
+    const selB = document.getElementById('ecoCompareExpertB');
+    if (selB) {
+      selB.innerHTML = '';
+      tabs.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; selB.appendChild(o); });
+    }
     if (tabs.length > 0 && !ecoTab) ecoTab = tabs[0];
     await loadEcossistema();
   } catch (e) { console.error('initEcossistemaPanel:', e); }
+}
+
+function toggleEcoCompare() {
+  ecoCompareMode = !ecoCompareMode;
+  document.getElementById('ecoComparePanel').style.display = ecoCompareMode ? 'block' : 'none';
+  const btn = document.getElementById('ecoCompareBtn');
+  btn.classList.toggle('text-purple-400', ecoCompareMode);
+  btn.classList.toggle('border-purple-500/50', ecoCompareMode);
+  loadEcossistema();
 }
 
 function switchEcoTab(tab) {
@@ -3456,6 +3494,22 @@ async function loadEcossistema() {
   const funil = document.getElementById('ecoFunil');
   kpis.innerHTML = '<div class="col-span-full text-center text-xs text-gray-500 py-8">Carregando…</div>';
   alertas.innerHTML = ''; funil.innerHTML = '';
+
+  // Modo comparar
+  if (ecoCompareMode) {
+    try {
+      const modo = document.getElementById('ecoCompareModo').value;
+      const expertB = document.getElementById('ecoCompareExpertB').value || ecoTab;
+      const periodoB = document.getElementById('ecoComparePeriodoB').value;
+      const q = new URLSearchParams({ modo, expert_a: ecoTab, expert_b: expertB, periodo_a: ecoPeriodo, periodo_b: periodoB });
+      const c = await api('/ecossistema/comparar?' + q.toString());
+      renderEcossistemaComparativo(c);
+      return;
+    } catch (e) {
+      kpis.innerHTML = '<div class="col-span-full text-center text-xs text-red-400 py-8">' + (e.message || 'erro') + '</div>';
+      return;
+    }
+  }
 
   try {
     const d = await api('/ecossistema/funil?expert=' + encodeURIComponent(ecoTab) + '&periodo=' + ecoPeriodo);
@@ -3536,6 +3590,59 @@ async function loadEcossistema() {
   } catch (e) {
     kpis.innerHTML = '<div class="col-span-full text-center text-xs text-red-400 py-8">' + (e.message || 'erro') + '</div>';
   }
+}
+
+function renderEcossistemaComparativo(c) {
+  const kpis = document.getElementById('ecoKpis');
+  const alertas = document.getElementById('ecoAlertas');
+  const funil = document.getElementById('ecoFunil');
+
+  // KPIs com lado a lado e variação
+  const rows = [
+    { k: 'Gasto Meta', a: fmtBRL(c.diff.gasto_meta.a), b: fmtBRL(c.diff.gasto_meta.b), var: c.diff.gasto_meta.var_pct, inverter: true },
+    { k: 'FTDs reais', a: fmtNum(c.diff.ftds_real.a), b: fmtNum(c.diff.ftds_real.b), var: c.diff.ftds_real.var_pct },
+    { k: 'Net P&L', a: fmtBRL(c.diff.net_pl.a), b: fmtBRL(c.diff.net_pl.b), var: c.diff.net_pl.var_pct },
+    { k: 'Custo/FTD', a: c.diff.custo_por_ftd.a != null ? fmtBRL(c.diff.custo_por_ftd.a) : '—', b: c.diff.custo_por_ftd.b != null ? fmtBRL(c.diff.custo_por_ftd.b) : '—', var: c.diff.custo_por_ftd.var_pct, inverter: true },
+    { k: 'ROI', a: c.diff.roi.a != null ? c.diff.roi.a + 'x' : '—', b: c.diff.roi.b != null ? c.diff.roi.b + 'x' : '—', var: c.diff.roi.var_pct },
+    { k: 'Cliques', a: fmtNum(c.diff.cliques.a), b: fmtNum(c.diff.cliques.b), var: c.diff.cliques.var_pct },
+    { k: 'Cadastros', a: fmtNum(c.diff.cadastros.a), b: fmtNum(c.diff.cadastros.b), var: c.diff.cadastros.var_pct },
+    { k: 'Telegram joins', a: fmtNum(c.diff.telegram_joins.a), b: fmtNum(c.diff.telegram_joins.b), var: c.diff.telegram_joins.var_pct },
+    { k: 'WhatsApp ativos', a: fmtNum(c.diff.whatsapp_ativos.a), b: fmtNum(c.diff.whatsapp_ativos.b), var: c.diff.whatsapp_ativos.var_pct },
+    { k: 'Lives total', a: fmtNum(c.diff.lives_total.a), b: fmtNum(c.diff.lives_total.b), var: c.diff.lives_total.var_pct },
+    { k: 'Lives participantes', a: fmtNum(c.diff.lives_participantes.a), b: fmtNum(c.diff.lives_participantes.b), var: c.diff.lives_participantes.var_pct },
+  ];
+
+  kpis.innerHTML = '<div class="col-span-full bg-surface/60 border border-border/40 rounded-xl overflow-hidden">' +
+    '<table class="w-full text-sm">' +
+    '<thead class="bg-[#0c0f0c]">' +
+    '<tr><th class="text-left p-2 text-xs text-gray-400 uppercase">Métrica</th>' +
+    `<th class="text-right p-2 text-xs text-blue-400">${c.a.label || 'A'}</th>` +
+    `<th class="text-right p-2 text-xs text-purple-400">${c.b.label || 'B'}</th>` +
+    '<th class="text-right p-2 text-xs text-gray-400">Δ %</th></tr>' +
+    '</thead><tbody>' +
+    rows.map(r => {
+      const v = r.var;
+      let cls = 'text-gray-500';
+      if (v != null && v !== 0) {
+        const good = r.inverter ? v < 0 : v > 0;
+        cls = good ? 'text-green-400' : 'text-red-400';
+      }
+      const sign = v > 0 ? '+' : '';
+      return `<tr class="border-t border-border/20"><td class="p-2 text-gray-300">${r.k}</td><td class="p-2 text-right text-white">${r.a}</td><td class="p-2 text-right text-white">${r.b}</td><td class="p-2 text-right ${cls}">${sign}${v ?? '—'}${v != null ? '%' : ''}</td></tr>`;
+    }).join('') +
+    '</tbody></table></div>';
+
+  // Insights
+  if (c.insights && c.insights.length > 0) {
+    alertas.innerHTML = `<div class="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+      <div class="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">🔍 Insights da Comparação</div>
+      <ul class="text-sm text-purple-200 space-y-1">${c.insights.map(i => `<li>• ${i}</li>`).join('')}</ul>
+    </div>`;
+  }
+
+  // Esconde funil/detalhes (na compare view os números já estão na tabela)
+  funil.innerHTML = '<div class="text-center text-xs text-gray-500 py-4">Saia do modo comparar pra ver o funil visual.</div>';
+  ['ecoMeta','ecoPostback','ecoLives','ecoWhatsapp'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = '<div class="text-gray-500">veja a tabela acima</div>'; });
 }
 
 // ── Socket ──────────────────────────────────────

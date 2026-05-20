@@ -149,6 +149,7 @@ router.get('/config/sheet-id', async (req, res) => {
 const { TOOLS } = require('../insights-tools');
 const { RESEARCH_TOOLS, executeResearchTool } = require('../research-tools');
 const { executeTool } = require('../insights-tools');
+const { KLARVEL_TOOLS, executeKlarvelTool } = require('../klarvel-tools');
 
 function bridgeAuth(req, res, next) {
   const expected = process.env.BRIDGE_SECRET;
@@ -161,7 +162,7 @@ function bridgeAuth(req, res, next) {
 
 router.get('/tools/list', bridgeAuth, (_req, res) => {
   res.json({
-    tools: [...TOOLS, ...RESEARCH_TOOLS],
+    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS],
   });
 });
 
@@ -185,6 +186,8 @@ router.post('/tools/execute', bridgeAuth, async (req, res) => {
     let result;
     if (RESEARCH_TOOLS.some(t => t.name === name)) {
       result = await executeResearchTool(name, input || {});
+    } else if (KLARVEL_TOOLS.some(t => t.name === name)) {
+      result = await executeKlarvelTool(name, input || {});
     } else {
       result = await executeTool(name, input || {}, userId);
     }

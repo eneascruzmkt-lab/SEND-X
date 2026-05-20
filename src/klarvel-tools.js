@@ -93,10 +93,14 @@ async function get_lives_resumo({ expert, periodo, de, ate }) {
 
   // Pico de participantes (max simultâneo) por meeting via running count de join-left
   // Atalho: count distinct de participantes via participantJoined
+  // Schema real dos events.data (Klarvel):
+  //   participantJoined/Left: { name, totalNow }
+  //   messageSent:            { text, sender, messageId }
+  //   participantsBaseline:   { participants: [...] }
   const participantsAgg = await db.query(
     `SELECT meeting_id,
        COUNT(*) FILTER (WHERE event='participantJoined') AS joins,
-       COUNT(DISTINCT data->>'participantId') FILTER (WHERE event='participantJoined') AS unicos
+       COUNT(DISTINCT data->>'name') FILTER (WHERE event='participantJoined') AS unicos
      FROM events WHERE meeting_id = ANY($1) GROUP BY meeting_id`,
     [meetingIds]
   );
@@ -104,7 +108,7 @@ async function get_lives_resumo({ expert, periodo, de, ate }) {
   const msgsAgg = await db.query(
     `SELECT meeting_id,
        COUNT(*) FILTER (WHERE event='messageSent') AS msgs,
-       COUNT(DISTINCT data->>'authorId') FILTER (WHERE event='messageSent') AS autores
+       COUNT(DISTINCT data->>'sender') FILTER (WHERE event='messageSent') AS autores
      FROM events WHERE meeting_id = ANY($1) GROUP BY meeting_id`,
     [meetingIds]
   );
@@ -201,7 +205,7 @@ async function get_mensagens_live({ meeting_id, limit = 100 }) {
     total: r.rows.length,
     mensagens: r.rows.map(x => ({
       ts: x.timestamp,
-      autor: x.data?.authorName || x.data?.authorId || '?',
+      autor: x.data?.sender || '?',
       texto: x.data?.text || '',
     })),
   };

@@ -224,6 +224,9 @@ tailwind.config = {
       <button class="nav-item" data-tab="insights" onclick="showPanel('insights')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z" fill="currentColor" opacity=".7"/></svg> Insights IA
       </button>
+      <button class="nav-item" data-tab="ecossistema" onclick="showPanel('ecossistema')">
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><circle cx="4" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="4" cy="15" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="15" r="1.8" fill="currentColor" opacity=".6"/><line x1="10" y1="10" x2="4" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="4" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/></svg> Ecossistema
+      </button>
       <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><path d="M10 3a7 7 0 017 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".5"/><path d="M10 6a4 4 0 014 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".7"/></svg> Feed ao vivo
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">LIVE</span>
@@ -356,6 +359,55 @@ tailwind.config = {
               </button>
             </div>
             <div id="insightsUsage" class="text-[10px] text-gray-600 mt-2 text-center"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ecossistema (funil consolidado por expert) -->
+      <div class="panel" id="panel-ecossistema">
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div id="ecoTabButtons" class="flex bg-[#0c0f0c] rounded-lg p-0.5"></div>
+          <div class="w-px h-6 bg-border/40"></div>
+          <div class="flex gap-1 flex-wrap" id="ecoPeriodButtons">
+            <button onclick="switchEcoPeriodo('hoje')" class="eco-periodo-btn filter-btn" data-eperiodo="hoje">Hoje</button>
+            <button onclick="switchEcoPeriodo('ontem')" class="eco-periodo-btn filter-btn" data-eperiodo="ontem">Ontem</button>
+            <button onclick="switchEcoPeriodo('7d')" class="eco-periodo-btn filter-btn active" data-eperiodo="7d">7 dias</button>
+            <button onclick="switchEcoPeriodo('1m')" class="eco-periodo-btn filter-btn" data-eperiodo="1m">Mês atual</button>
+            <button onclick="switchEcoPeriodo('lastm')" class="eco-periodo-btn filter-btn" data-eperiodo="lastm">Mês passado</button>
+            <button onclick="switchEcoPeriodo('3m')" class="eco-periodo-btn filter-btn" data-eperiodo="3m">3 meses</button>
+          </div>
+          <button onclick="loadEcossistema()" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all" title="Atualizar">↻ Atualizar</button>
+        </div>
+
+        <!-- KPIs principais -->
+        <div id="ecoKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+
+        <!-- Alertas -->
+        <div id="ecoAlertas" class="mb-4"></div>
+
+        <!-- Funil visual -->
+        <div class="bg-surface/60 border border-border/40 rounded-xl p-4 mb-4">
+          <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Funil de Conversão</div>
+          <div id="ecoFunil" class="space-y-2"></div>
+        </div>
+
+        <!-- Detalhes por fonte -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2">💰 Meta Ads (planilha)</div>
+            <div id="ecoMeta" class="text-sm text-gray-300 space-y-1"></div>
+          </div>
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-green-400 uppercase tracking-wide mb-2">🎯 FTDs (postback real)</div>
+            <div id="ecoPostback" class="text-sm text-gray-300 space-y-1"></div>
+          </div>
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">📺 Lives (Klarvel)</div>
+            <div id="ecoLives" class="text-sm text-gray-300 space-y-1"></div>
+          </div>
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-yellow-400 uppercase tracking-wide mb-2">📱 WhatsApp (monitorgrupo)</div>
+            <div id="ecoWhatsapp" class="text-sm text-gray-300 space-y-1"></div>
           </div>
         </div>
       </div>
@@ -850,7 +902,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -3353,6 +3405,137 @@ function showPanel(name) {
   if (name === 'composer') updatePreview();
   if (name === 'relatorio') loadRelatorio();
   if (name === 'insights') initInsightsPanel();
+  if (name === 'ecossistema') initEcossistemaPanel();
+}
+
+// ── Ecossistema (funil consolidado) ───────────────
+let ecoTab = '';
+let ecoPeriodo = '7d';
+
+async function initEcossistemaPanel() {
+  try {
+    const tabs = await api('/relatorio/tabs');
+    const container = document.getElementById('ecoTabButtons');
+    container.innerHTML = '';
+    tabs.forEach((t, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'eco-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all ' +
+        (i === 0 ? 'bg-green-500/15 text-green-400' : 'text-gray-500 hover:text-gray-300');
+      btn.textContent = t;
+      btn.onclick = () => switchEcoTab(t);
+      container.appendChild(btn);
+    });
+    if (tabs.length > 0 && !ecoTab) ecoTab = tabs[0];
+    await loadEcossistema();
+  } catch (e) { console.error('initEcossistemaPanel:', e); }
+}
+
+function switchEcoTab(tab) {
+  ecoTab = tab;
+  document.querySelectorAll('.eco-tab-btn').forEach(btn => {
+    btn.className = btn.textContent === tab
+      ? 'eco-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-green-500/15 text-green-400'
+      : 'eco-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
+  });
+  loadEcossistema();
+}
+
+function switchEcoPeriodo(p) {
+  ecoPeriodo = p;
+  document.querySelectorAll('.eco-periodo-btn').forEach(b => b.classList.toggle('active', b.dataset.eperiodo === p));
+  loadEcossistema();
+}
+
+function fmtBRL(n) { return 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtNum(n) { return (Number(n) || 0).toLocaleString('pt-BR'); }
+
+async function loadEcossistema() {
+  if (!ecoTab) return;
+  const kpis = document.getElementById('ecoKpis');
+  const alertas = document.getElementById('ecoAlertas');
+  const funil = document.getElementById('ecoFunil');
+  kpis.innerHTML = '<div class="col-span-full text-center text-xs text-gray-500 py-8">Carregando…</div>';
+  alertas.innerHTML = ''; funil.innerHTML = '';
+
+  try {
+    const d = await api('/ecossistema/funil?expert=' + encodeURIComponent(ecoTab) + '&periodo=' + ecoPeriodo);
+
+    // KPIs
+    const cards = [
+      { label: 'Gasto Meta', value: fmtBRL(d.detalhes?.planilha?.gasto || 0), color: 'blue' },
+      { label: 'FTDs reais', value: fmtNum(d.detalhes?.postbacks_real?.ftds || 0), sub: 'planilha: ' + fmtNum(d.detalhes?.planilha?.ftds || 0), color: 'green' },
+      { label: 'Net P&L', value: fmtBRL(d.net_pl), sub: d.roi != null ? 'ROI ' + d.roi + 'x' : '', color: (d.net_pl >= 0 ? 'green' : 'red') },
+      { label: 'Custo / FTD', value: d.custo_por_ftd != null ? fmtBRL(d.custo_por_ftd) : '—', color: 'amber' },
+    ];
+    kpis.innerHTML = cards.map(c => `
+      <div class="bg-surface/60 border border-border/40 rounded-xl p-3">
+        <div class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">${c.label}</div>
+        <div class="text-lg font-semibold text-${c.color}-400">${c.value}</div>
+        ${c.sub ? `<div class="text-[10px] text-gray-500 mt-0.5">${c.sub}</div>` : ''}
+      </div>`).join('');
+
+    // Alertas
+    if (d.alertas && d.alertas.length > 0 && d.alertas[0] !== 'nenhum alerta crítico') {
+      alertas.innerHTML = `<div class="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+        <div class="text-xs font-semibold text-red-400 uppercase tracking-wide mb-2">⚠️ Alertas</div>
+        <ul class="text-sm text-red-300 space-y-1">${d.alertas.map(a => `<li>• ${a}</li>`).join('')}</ul>
+      </div>`;
+    }
+
+    // Funil visual (bars proporcionais)
+    const etapas = d.funil || [];
+    const maxVal = Math.max(...etapas.map(e => Number(e.valor) || 0), 1);
+    funil.innerHTML = etapas.map((e, i) => {
+      const pct = (Number(e.valor) / maxVal) * 100;
+      const conv = Object.keys(e).filter(k => k.includes('conv_') || k.includes('custo_por_clique') || k.includes('do_total')).map(k => `<span class="text-[10px] text-gray-500 ml-2">${k.replace(/_/g, ' ')}: ${e[k]}</span>`).join('');
+      return `<div class="flex items-center gap-3">
+        <div class="w-40 text-xs text-gray-300 shrink-0">${i + 1}. ${e.etapa}</div>
+        <div class="flex-1 bg-[#0c0f0c] rounded overflow-hidden h-7 relative">
+          <div class="h-full bg-green-500/40 transition-all" style="width:${pct}%"></div>
+          <div class="absolute inset-0 flex items-center px-3 text-xs font-semibold">${e.unit === 'R$' ? fmtBRL(e.valor) : fmtNum(e.valor)} ${conv}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Detalhes por fonte
+    const pl = d.detalhes?.planilha;
+    document.getElementById('ecoMeta').innerHTML = pl ? `
+      <div>Gasto: <span class="text-white">${fmtBRL(pl.gasto)}</span></div>
+      <div>Cliques: <span class="text-white">${fmtNum(pl.cliques)}</span></div>
+      <div>Cadastros: <span class="text-white">${fmtNum(pl.cadastros)}</span></div>
+      <div>FTDs (planilha): <span class="text-white">${fmtNum(pl.ftds)}</span></div>
+      <div>FTD Amount: <span class="text-white">${fmtBRL(pl.ftd_amount)}</span></div>
+      <div>Depositos: <span class="text-white">${fmtBRL(pl.deposits)}</span></div>
+      <div>Telegram joins: <span class="text-white">${fmtNum(pl.telegram_joins)}</span></div>
+      <div>Net P&L: <span class="${pl.net_pl >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtBRL(pl.net_pl)}</span></div>` : '<div class="text-gray-500">indisponível</div>';
+
+    const pb = d.detalhes?.postbacks_real;
+    document.getElementById('ecoPostback').innerHTML = pb ? `
+      <div>FTDs reais: <span class="text-white">${fmtNum(pb.ftds)}</span></div>
+      <div>Leads: <span class="text-white">${fmtNum(pb.leads)}</span></div>
+      <div>FTD Amount real: <span class="text-white">${fmtBRL(pb.ftd_amount)}</span></div>
+      ${(pb.top_utm || []).slice(0, 3).map(u => `<div class="text-[11px] text-gray-500">• ${u.utm_source || '(direto)'}/${u.utm_medium || '-'} — ${u.ftds || 0} ftds</div>`).join('')}` : '<div class="text-gray-500">indisponível</div>';
+
+    const lv = d.detalhes?.lives;
+    document.getElementById('ecoLives').innerHTML = lv ? `
+      <div>Total lives: <span class="text-white">${fmtNum(lv.total)}</span></div>
+      <div>Pico máximo: <span class="text-white">${fmtNum(lv.pico_max)}</span></div>
+      <div>Pico médio: <span class="text-white">${fmtNum(lv.pico_medio)}</span></div>
+      <div>Participantes únicos: <span class="text-white">${fmtNum(lv.participantes_unicos)}</span></div>
+      <div>Mensagens chat: <span class="text-white">${fmtNum(lv.mensagens)}</span></div>
+      <div>Engajamento: <span class="text-white">${lv.engajamento}</span></div>` : '<div class="text-gray-500">sem lives no período</div>';
+
+    const wp = d.detalhes?.whatsapp;
+    document.getElementById('ecoWhatsapp').innerHTML = wp ? `
+      <div>Grupos leads: <span class="text-white">${fmtNum(wp.grupos_leads)}</span></div>
+      <div>Membros total: <span class="text-white">${fmtNum(wp.membros_total)}</span></div>
+      <div>Membros ativos: <span class="text-white">${fmtNum(wp.membros_ativos)}</span></div>
+      <div>Mensagens: <span class="text-white">${fmtNum(wp.mensagens_total)}</span></div>
+      <div>Engajamento: <span class="text-white">${wp.engajamento}</span></div>` : '<div class="text-gray-500">expert não cadastrado no monitorgrupo</div>';
+
+  } catch (e) {
+    kpis.innerHTML = '<div class="col-span-full text-center text-xs text-red-400 py-8">' + (e.message || 'erro') + '</div>';
+  }
 }
 
 // ── Socket ──────────────────────────────────────

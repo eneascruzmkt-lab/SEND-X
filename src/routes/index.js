@@ -162,6 +162,20 @@ function bridgeAuth(req, res, next) {
   next();
 }
 
+/** GET /api/ecossistema/funil — Aba Ecossistema (auth JWT do user) */
+router.get('/ecossistema/funil', auth, async (req, res) => {
+  try {
+    const expert = req.query.expert || 'DANI';
+    const periodo = req.query.periodo || '7d';
+    const de = req.query.de, ate = req.query.ate;
+    const result = await executeFunilTool('get_funil_expert', { expert, periodo, de, ate }, req.userId);
+    res.json(result);
+  } catch (err) {
+    console.error('[ecossistema/funil]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/tools/list', bridgeAuth, (_req, res) => {
   res.json({
     tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS],

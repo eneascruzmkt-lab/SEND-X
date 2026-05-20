@@ -94,7 +94,8 @@ function resumirFunil(f) {
 }
 
 async function callBridge(userMessage, additionalSystem) {
-  const url = process.env.BRIDGE_URL || (await db.getBridgeRegistry())?.url;
+  // Prioridade: DB (atualizado em tempo real pelo start.sh) → env var fallback
+  const url = (await db.getBridgeRegistry().catch(() => null))?.url || process.env.BRIDGE_URL;
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) throw new Error('Bridge não configurada (BRIDGE_URL/SECRET ausentes)');
 

@@ -224,6 +224,10 @@ tailwind.config = {
       <button class="nav-item" data-tab="insights" onclick="showPanel('insights')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z" fill="currentColor" opacity=".7"/></svg> Insights IA
       </button>
+      <button class="nav-item" data-tab="advisor" onclick="showPanel('advisor')">
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2a4 4 0 00-3 6.7c.6.7 1 1.5 1 2.3v.5h4v-.5c0-.8.4-1.6 1-2.3A4 4 0 0010 2z" fill="currentColor"/><path d="M7 14h6M8 16.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> AI Advisor
+        <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">NEW</span>
+      </button>
       <button class="nav-item" data-tab="ecossistema" onclick="showPanel('ecossistema')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><circle cx="4" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="4" cy="15" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="15" r="1.8" fill="currentColor" opacity=".6"/><line x1="10" y1="10" x2="4" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="4" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/></svg> Ecossistema
       </button>
@@ -361,6 +365,31 @@ tailwind.config = {
             <div id="insightsUsage" class="text-[10px] text-gray-600 mt-2 text-center"></div>
           </div>
         </div>
+      </div>
+
+      <!-- AI Advisor (recomendações geradas por IA) -->
+      <div class="panel" id="panel-advisor">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold text-white">🧠 AI Advisor</h2>
+            <p class="text-xs text-gray-500 mt-0.5">Recomendações geradas pela IA para aumentar Net P&L e FTDs</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="loadAdvisorScore()" class="text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-blue-400 hover:border-blue-500/50 transition-all">📊 Score</button>
+            <button onclick="generateAdvisor()" id="advisorGenBtn" class="text-xs px-3 py-1.5 rounded-md bg-green-500/20 text-green-400 border border-green-500/50 hover:bg-green-500/30 transition-all">✨ Gerar agora</button>
+          </div>
+        </div>
+
+        <div id="advisorScore" class="mb-4" style="display:none"></div>
+
+        <div class="flex gap-1 mb-4">
+          <button onclick="filterAdvisor('pendente')" class="advisor-filter-btn filter-btn active" data-status="pendente">Pendentes</button>
+          <button onclick="filterAdvisor('aplicado')" class="advisor-filter-btn filter-btn" data-status="aplicado">Aplicadas</button>
+          <button onclick="filterAdvisor('ignorado')" class="advisor-filter-btn filter-btn" data-status="ignorado">Ignoradas</button>
+          <button onclick="filterAdvisor('')" class="advisor-filter-btn filter-btn" data-status="">Todas</button>
+        </div>
+
+        <div id="advisorList" class="space-y-3"></div>
       </div>
 
       <!-- Ecossistema (funil consolidado por expert) -->
@@ -922,7 +951,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -3426,6 +3455,123 @@ function showPanel(name) {
   if (name === 'relatorio') loadRelatorio();
   if (name === 'insights') initInsightsPanel();
   if (name === 'ecossistema') initEcossistemaPanel();
+  if (name === 'advisor') initAdvisorPanel();
+}
+
+// ── AI Advisor ───────────────────────────────────
+let advisorStatus = 'pendente';
+
+async function initAdvisorPanel() {
+  loadAdvisorList();
+}
+
+function filterAdvisor(s) {
+  advisorStatus = s;
+  document.querySelectorAll('.advisor-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.status === s));
+  loadAdvisorList();
+}
+
+async function loadAdvisorList() {
+  const list = document.getElementById('advisorList');
+  list.innerHTML = '<div class="text-center text-xs text-gray-500 py-8">Carregando…</div>';
+  try {
+    const q = advisorStatus ? `?status=${advisorStatus}` : '';
+    const recs = await api('/ai-advisor/recomendacoes' + q);
+    if (recs.length === 0) {
+      list.innerHTML = '<div class="text-center text-sm text-gray-500 py-12">Nenhuma recomendação ' + (advisorStatus || 'cadastrada') + ' ainda. Clique <strong>✨ Gerar agora</strong> pra criar.</div>';
+      return;
+    }
+    list.innerHTML = recs.map(renderAdvisorCard).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="text-center text-xs text-red-400 py-8">' + e.message + '</div>';
+  }
+}
+
+function renderAdvisorCard(r) {
+  const urgenciaColor = r.urgencia === 'hoje' ? 'red' : r.urgencia === 'esta_semana' ? 'amber' : 'gray';
+  const urgenciaEmoji = r.urgencia === 'hoje' ? '🚨' : r.urgencia === 'esta_semana' ? '⚡' : '📅';
+  const categoriaColor = { meta_ads: 'blue', telegram: 'cyan', whatsapp: 'green', lives: 'purple', copy: 'pink', operacional: 'gray', apostatudo: 'yellow' }[r.categoria] || 'gray';
+  const passos = Array.isArray(r.passos) ? r.passos : (typeof r.passos === 'string' ? JSON.parse(r.passos || '[]') : []);
+  const outcomeBadge = r.outcome_measured_at
+    ? (r.outcome_score > 0 ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">✓ funcionou (+' + r.outcome_ftds_delta + ' FTDs / R$' + Number(r.outcome_netpl_delta).toFixed(0) + ')</span>'
+       : r.outcome_score < 0 ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">✗ não ajudou</span>'
+       : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400">neutro</span>')
+    : '';
+  const actions = r.status === 'pendente'
+    ? `<div class="flex gap-1 mt-3">
+        <button onclick="markAdvisor(${r.id}, 'aplicado')" class="text-xs px-3 py-1 rounded bg-green-500/15 text-green-400 hover:bg-green-500/30">✅ Apliquei</button>
+        <button onclick="markAdvisor(${r.id}, 'ignorado')" class="text-xs px-3 py-1 rounded bg-gray-500/15 text-gray-400 hover:bg-gray-500/30">⏭️ Ignorar</button>
+        <button onclick="discussAdvisor(${r.id})" class="text-xs px-3 py-1 rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/30">💬 Discutir</button>
+      </div>`
+    : `<div class="flex gap-1 mt-3 items-center">
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-${r.status === 'aplicado' ? 'green' : 'gray'}-500/20 text-${r.status === 'aplicado' ? 'green' : 'gray'}-400">${r.status}</span>
+        ${outcomeBadge}
+      </div>`;
+
+  return `<div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+    <div class="flex items-start gap-2 mb-2">
+      <span class="text-${urgenciaColor}-400 text-xs font-semibold">${urgenciaEmoji} ${r.urgencia || 'mes'}</span>
+      <span class="text-${categoriaColor}-400 text-[10px] px-2 py-0.5 rounded-full bg-${categoriaColor}-500/10 uppercase tracking-wide">${r.categoria || 'outro'}</span>
+      <span class="ml-auto text-xs text-gray-500">${r.expert}</span>
+    </div>
+    <div class="text-base font-medium text-white mb-1.5">${r.acao}</div>
+    <div class="text-xs text-gray-400 mb-2">${r.justificativa || ''}</div>
+    <div class="text-xs text-green-400 font-mono">📈 ${r.impacto_estimado || ''}</div>
+    ${passos.length > 0 ? '<ol class="mt-2 ml-4 text-xs text-gray-300 list-decimal space-y-0.5">' + passos.map(p => '<li>' + p + '</li>').join('') + '</ol>' : ''}
+    ${actions}
+  </div>`;
+}
+
+async function generateAdvisor() {
+  const btn = document.getElementById('advisorGenBtn');
+  btn.disabled = true; btn.textContent = '⏳ Gerando…';
+  try {
+    const r = await fetch('/api/ai-advisor/analisar', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    advisorStatus = 'pendente';
+    document.querySelectorAll('.advisor-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.status === 'pendente'));
+    toast.success ? toast.success('Geradas ' + data.count + ' recomendações') : alert('Geradas ' + data.count);
+    loadAdvisorList();
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '✨ Gerar agora';
+  }
+}
+
+async function markAdvisor(id, status) {
+  try {
+    await api('/ai-advisor/recomendacoes/' + id, { method: 'PATCH', body: { status } });
+    loadAdvisorList();
+  } catch (e) { alert(e.message); }
+}
+
+function discussAdvisor(id) {
+  showPanel('insights');
+  const input = document.getElementById('insightsInput');
+  if (input) {
+    input.value = 'me conta mais sobre a recomendação #' + id + ' (consulte a tabela ai_recommendations pelo bridge)';
+    input.focus();
+  }
+}
+
+async function loadAdvisorScore() {
+  try {
+    const s = await api('/ai-advisor/score');
+    const el = document.getElementById('advisorScore');
+    el.style.display = 'block';
+    el.innerHTML = `<div class="bg-surface/60 border border-border/40 rounded-xl p-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+      <div><div class="text-gray-500">Total</div><div class="text-white text-lg font-semibold">${s.total || 0}</div></div>
+      <div><div class="text-gray-500">Aplicadas</div><div class="text-green-400 text-lg font-semibold">${s.aplicadas || 0}</div></div>
+      <div><div class="text-gray-500">Ignoradas</div><div class="text-gray-400 text-lg font-semibold">${s.ignoradas || 0}</div></div>
+      <div><div class="text-gray-500">Δ FTDs</div><div class="text-white text-lg font-semibold">${s.ftds_total_delta || 0}</div></div>
+      <div><div class="text-gray-500">Δ Net P&L</div><div class="text-white text-lg font-semibold">R$ ${Number(s.netpl_total_delta || 0).toFixed(0)}</div></div>
+    </div>`;
+  } catch (e) { console.error(e); }
 }
 
 // ── Ecossistema (funil consolidado) ───────────────

@@ -78,6 +78,20 @@ db.init().then(() => {
   }, { timezone: 'America/Sao_Paulo' });
   console.log('[cron-klarvel] agendado pra 06:00 BRT diário');
 
+  // Cron AI Advisor: gera recomendações + mede outcomes + notifica WhatsApp, 08:00 BRT
+  const advisor = require('./src/ai-advisor');
+  cron.schedule('0 8 * * *', async () => {
+    console.log('[cron-ai-advisor] gerando recomendações…');
+    try {
+      await advisor.medirOutcomesAtrasados(1);
+      const recs = await advisor.gerarRecomendacoes(1);
+      console.log(`[cron-ai-advisor] geradas ${recs.length} recomendações`);
+      const notif = await advisor.notificarTop3(1);
+      console.log('[cron-ai-advisor] notify:', JSON.stringify(notif));
+    } catch (e) { console.error('[cron-ai-advisor]', e.message); }
+  }, { timezone: 'America/Sao_Paulo' });
+  console.log('[cron-ai-advisor] agendado pra 08:00 BRT diário');
+
   server.listen(PORT, () => {
     console.log(`[server] rodando em http://localhost:${PORT}`);
   });

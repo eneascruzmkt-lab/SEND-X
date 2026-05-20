@@ -232,6 +232,32 @@ async function init() {
     );
     CREATE INDEX IF NOT EXISTS idx_klarvel_summary_user_date ON klarvel_daily_summary(user_id, report_date DESC);
   `);
+  // AI Advisor: recomendações geradas + tracking de outcome
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_recommendations (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      generated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expert          TEXT NOT NULL,
+      categoria       TEXT,
+      urgencia        TEXT,
+      acao            TEXT NOT NULL,
+      justificativa   TEXT,
+      impacto_estimado TEXT,
+      passos          JSONB,
+      raw_data_snapshot JSONB,
+      status          TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','aplicado','ignorado','aprovado')),
+      status_at       TIMESTAMPTZ,
+      outcome_measured_at TIMESTAMPTZ,
+      outcome_ftds_delta  INTEGER,
+      outcome_netpl_delta NUMERIC(12,2),
+      outcome_score   NUMERIC(3,2),
+      notes           TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_rec_user_status ON ai_recommendations(user_id, status, generated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_ai_rec_outcome ON ai_recommendations(user_id, status, outcome_measured_at)
+      WHERE status='aplicado' AND outcome_measured_at IS NULL;
+  `);
   // Memória persistente do chat (sessões, mensagens, fatos aprendidos)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -786,6 +812,52 @@ module.exports = {
 
   async updateAttachmentMessageId(id, messageId) {
     await pool.query('UPDATE chat_attachments SET message_id=$2 WHERE id=$1', [id, messageId]);
+  },
+
+  // ── AI Advisor ──────────────────────────────────────
+  async insertRecommendation(rec) {
+    const res = await pool.query(
+      `INSERT INTO ai_recommendations
+       (user_id, expert, categoria, urgencia, acao, justificativa, impacto_estimado, passos, raw_data_snapshot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [rec.user_id, rec.expert, rec.categoria, rec.urgencia, rec.acao,
+       rec.justificativa, rec.impacto_estimado, JSON.stringify(rec.passos || []),
+       JSON.stringify(rec.raw_data_snapshot || {})]
+    );
+    return res.rows[0];
+  },
+
+  async listRecommendations(userId, { status, limit = 50 } = {}) {
+    if (status) {
+      const r = await pool.query(
+        `SELECT * FROM ai_recommendations WHERE user_id=$1 AND status=$2 ORDER BY generated_at DESC LIMIT $3`,
+        [userId, status, limit]
+      );
+      return r.rows;
+    }
+    const r = await pool.query(
+      `SELECT * FROM ai_recommendations WHERE user_id=$1 ORDER BY generated_at DESC LIMIT $2`,
+      [userId, limit]
+    );
+    return r.rows;
+  },
+
+  async updateRecommendationStatus(id, status, notes) {
+    const res = await pool.query(
+      `UPDATE ai_recommendations SET status=$2, status_at=NOW(), notes=COALESCE($3, notes)
+       WHERE id=$1 RETURNING *`,
+      [id, status, notes || null]
+    );
+    return res.rows[0];
+  },
+
+  async updateRecommendationOutcome(id, { ftds_delta, netpl_delta, score }) {
+    await pool.query(
+      `UPDATE ai_recommendations SET outcome_measured_at=NOW(),
+         outcome_ftds_delta=$2, outcome_netpl_delta=$3, outcome_score=$4
+       WHERE id=$1`,
+      [id, ftds_delta, netpl_delta, score]
+    );
   },
 
   // ── Klarvel daily summary (preenchida pelo cron) ─────

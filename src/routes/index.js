@@ -643,6 +643,9 @@ router.use(insightsRoutes);
 const attachmentsRoutes = require('./attachments');
 router.use(attachmentsRoutes);
 
+const aiAdvisorRoutes = require('./ai-advisor');
+router.use(aiAdvisorRoutes);
+
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 
 /** GET /ad-accounts — lista contas de anúncio do usuário */

@@ -52,7 +52,13 @@ function resolvePeriodo(periodo, de, ate) {
 
 async function getExpertId(name) {
   const db = pool();
-  const r = await db.query(`SELECT id FROM experts WHERE name=$1 AND is_active=true`, [name.toUpperCase()]);
+  // Busca por name OU display_name (case-insensitive) — operador pode cadastrar
+  // com qualquer dos dois (ex: name='MALVADEZA', display_name='DEIVID').
+  const upper = name.toUpperCase();
+  const r = await db.query(
+    `SELECT id FROM experts WHERE is_active=true AND (UPPER(name)=$1 OR UPPER(display_name)=$1) LIMIT 1`,
+    [upper]
+  );
   return r.rows[0]?.id || null;
 }
 

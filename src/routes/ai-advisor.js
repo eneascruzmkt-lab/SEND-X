@@ -4,6 +4,14 @@ const advisor = require('../ai-advisor');
 
 const router = Router();
 
+/** POST /api/ai-advisor/notify — força envio top 3 pendentes via WhatsApp */
+router.post('/ai-advisor/notify', async (req, res) => {
+  try {
+    const r = await advisor.notificarTop3(req.userId, req.query.slot || 'manual');
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /** POST /api/ai-advisor/analisar — força nova análise (gera 5 recomendações) */
 router.post('/ai-advisor/analisar', async (req, res) => {
   try {

@@ -141,19 +141,32 @@ async function gerarRecomendacoes(userId = 1, experts = EXPERTS_DEFAULT) {
     throw new Error('Resposta do bridge não veio em JSON válido. text=' + (bridgeResp.text || '').slice(0, 400));
   }
 
-  // Persiste cada recomendação
+  // Persiste cada recomendação — aceita variações de nome de campo
   const inserted = [];
   for (const rec of parsed.recomendacoes) {
     try {
+      // Normaliza campos (Claude pode usar sinônimos)
+      const acao = rec.acao || rec.action || rec.titulo || rec.title || '(sem ação)';
+      const urgencia = (rec.urgencia || rec.urgency || rec.prioridade || rec.priority || 'esta_semana').toLowerCase();
+      const urgNorm = urgencia.includes('hoje') || urgencia === 'urgent' ? 'hoje'
+        : urgencia.includes('semana') || urgencia === 'high' ? 'esta_semana'
+        : urgencia.includes('mes') || urgencia.includes('mês') || urgencia === 'medium' ? 'este_mes'
+        : 'esta_semana';
+      const justif = rec.justificativa || rec.justification || rec.razao || rec.reason || rec.por_que || rec.why || '';
+      const impacto = rec.impacto_estimado || rec.impacto || rec.impact || rec.estimated_impact || '';
+      let passos = rec.passos || rec.passos_concretos || rec.steps || rec.how || rec.como || rec.como_fazer || [];
+      if (typeof passos === 'string') passos = passos.split(/\n|;/).map(s => s.trim()).filter(Boolean);
+      if (!Array.isArray(passos)) passos = [String(passos)];
+
       const row = await db.insertRecommendation({
         user_id: userId,
-        expert: rec.expert || 'GERAL',
-        categoria: rec.categoria,
-        urgencia: rec.urgencia,
-        acao: rec.acao,
-        justificativa: rec.justificativa,
-        impacto_estimado: rec.impacto_estimado,
-        passos: rec.passos,
+        expert: rec.expert || rec.target || 'GERAL',
+        categoria: rec.categoria || rec.category || rec.tipo || rec.type,
+        urgencia: urgNorm,
+        acao,
+        justificativa: justif,
+        impacto_estimado: impacto,
+        passos,
         raw_data_snapshot: dados,
       });
       inserted.push(row);

@@ -174,17 +174,27 @@ Gere o resumo + sugestões conforme o schema do system prompt.`;
 
   const bridgeResp = await callBridge(ctx, LIVE_PROMPT);
   const parsed = extractJson(bridgeResp.text);
-  if (!parsed) throw new Error('Resposta do Claude não veio em JSON válido: ' + (bridgeResp.text || '').slice(0, 300));
 
+  // Fallback: se Claude não respondeu JSON, usa o texto bruto como conteúdo
+  // (perde estrutura mas pelo menos manda análise pro WhatsApp)
   return {
     meeting_id: meetingId,
     expert,
     metricas: { duracao_min: duracaoMin, pico_simultaneo: pico, total_mensagens: messages },
     analise: parsed,
+    fallback_text: parsed ? null : bridgeResp.text,
   };
 }
 
-function formatarMensagemWhatsapp({ expert, metricas, analise }) {
+function formatarMensagemWhatsapp({ expert, metricas, analise, fallback_text }) {
+  // Se análise veio sem estrutura (fallback), manda só o texto bruto com header
+  if (!analise && fallback_text) {
+    return `🎬 *LIVE FINALIZADA — ${expert}*\n` +
+      `⏱️ ${metricas.duracao_min || '?'} min · 👥 pico ${metricas.pico_simultaneo} · 💬 ${metricas.total_mensagens} msgs\n` +
+      `━━━━━━━━━━━━━━━━━━\n\n` +
+      String(fallback_text).slice(0, 3500);
+  }
+
   const lines = [];
   lines.push(`🎬 *LIVE FINALIZADA — ${expert}*`);
   lines.push(`⏱️ ${metricas.duracao_min || '?'} min · 👥 pico ${metricas.pico_simultaneo} · 💬 ${metricas.total_mensagens} msgs`);
@@ -194,7 +204,7 @@ function formatarMensagemWhatsapp({ expert, metricas, analise }) {
   for (const h of analise.highlights || []) lines.push(`• ${h}`);
   lines.push('');
 
-  if (analise.stories_para_postar_agora?.length) {
+  if (analise?.stories_para_postar_agora?.length) {
     lines.push('📱 *POSTE AGORA — Stories*');
     analise.stories_para_postar_agora.forEach((s, i) => {
       lines.push(`*Story ${i + 1}:*`);
@@ -205,7 +215,7 @@ function formatarMensagemWhatsapp({ expert, metricas, analise }) {
     });
   }
 
-  if (analise.reel_para_gravar) {
+  if (analise?.reel_para_gravar) {
     const r = analise.reel_para_gravar;
     lines.push('🎥 *REEL PARA GRAVAR*');
     lines.push(`Tema: ${r.tema}`);
@@ -215,7 +225,7 @@ function formatarMensagemWhatsapp({ expert, metricas, analise }) {
     lines.push('');
   }
 
-  if (analise.urgencia) {
+  if (analise?.urgencia) {
     const emoji = analise.urgencia === 'alta' ? '🚨' : analise.urgencia === 'media' ? '⚡' : '📅';
     lines.push(`${emoji} Urgência ${analise.urgencia}: _${analise.razao_urgencia || ''}_`);
   }

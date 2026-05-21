@@ -145,23 +145,25 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
     : { model: 'gpt_image_2', prompt, quality: 'high', resolution: '1k' };
   if (aspectRatio) params.aspect_ratio = aspectRatio;
 
-  const bridgePrompt = `Gere uma imagem usando o MCP Higgsfield seguindo EXATAMENTE estes passos:
+  const bridgePrompt = `Gere uma imagem usando o MCP Higgsfield. As ferramentas estão deferred, então siga ESTA ordem RIGOROSAMENTE:
 
-1. Use mcp__claude_ai_higgis__generate_image com este params (EXATAMENTE assim, sem modificar):
+PASSO 0 (OBRIGATÓRIO): Use ToolSearch com query="select:mcp__claude_ai_higgis__generate_image,mcp__claude_ai_higgis__job_status" e max_results=2 pra carregar as ferramentas. SEM esse passo as próximas tools não funcionam.
+
+PASSO 1: Use mcp__claude_ai_higgis__generate_image com EXATAMENTE este params (sem modificar nada):
 ${JSON.stringify(params, null, 2)}
 
-INSTRUÇÕES IMPORTANTES:
-- model "soul_v2": especializado em preservar ROSTO da pessoa da referência + colocar em cenário/pose novos
-- model "gpt_image_2": usado quando NÃO há referência (criação from-scratch)
-- medias com role:"image" = referência IDENTITÁRIA — preserva rosto/traços
-- O prompt descreve a TRANSFORMAÇÃO (cenário, pose, formato). Aplique tudo.
+INSTRUÇÕES sobre o modelo:
+- "soul_v2": preserva rosto da pessoa da referência + transforma cenário/pose (USAR quando tem medias com foto de pessoa)
+- "gpt_image_2": geração from-scratch (USAR quando não tem referência)
+- medias com role:"image" = referência IDENTITÁRIA (preserva rosto)
 
-2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 120s)
+PASSO 2: Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 120s)
 
-3. Retorne APENAS a URL da imagem final no formato exato:
-   IMAGEM_GERADA: <url>
+PASSO 3: Retorne APENAS a URL da imagem final no formato exato (sem markdown, sem código, sem explicação):
+IMAGEM_GERADA: <url>
 
-Sem explicações. Sem texto extra. Apenas a URL no formato acima.${refsTxt}`;
+⚠️ NUNCA pule o PASSO 0. NUNCA diga que o MCP não está disponível — ele está, basta carregar via ToolSearch.
+NUNCA retorne texto explicativo. APENAS a linha "IMAGEM_GERADA: <url>" no final.${refsTxt}`;
 
   let imageUrl = null;
   let bridgeText = '';

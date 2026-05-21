@@ -221,13 +221,20 @@ function stripPerguntasOffer(text) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function formatarMensagemWhatsapp({ expert, metricas, analise, fallback_text }) {
-  // Fallback: Claude não retornou JSON → manda texto bruto
+function formatarMensagemWhatsapp({ expert, metricas, texto_pronto, analise, fallback_text }) {
+  // Caminho principal: texto markdown já vem pronto do Claude (sem perguntas/ofertas)
+  if (texto_pronto) {
+    return `🎬 *Acabou sua live, ${expert}! 🔥*\n` +
+      `⏱️ ${metricas.duracao_min || '?'} min · 👥 pico ${metricas.pico_simultaneo} · 💬 ${metricas.total_mensagens} msgs\n` +
+      `━━━━━━━━━━━━━━━━━━\n\n` +
+      texto_pronto.slice(0, 3500);
+  }
+  // Fallback: texto bruto se Claude falhou
   if (!analise && fallback_text) {
     return `🎬 *Acabou sua live, ${expert}! 🔥*\n` +
       `⏱️ ${metricas.duracao_min || '?'} min · 👥 pico ${metricas.pico_simultaneo} · 💬 ${metricas.total_mensagens} msgs\n` +
       `━━━━━━━━━━━━━━━━━━\n\n` +
-      String(fallback_text).slice(0, 3500);
+      stripPerguntasOffer(String(fallback_text)).slice(0, 3500);
   }
 
   const lines = [];

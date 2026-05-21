@@ -101,12 +101,12 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
   }
   const allRefs = [...image_urls, ...savedRefs];
 
-  // Feedback inicial
+  // Feedback inicial (sem cortar o prompt pra confirmar visualmente o que entendeu)
   await sendWhatsappText(group_jid,
     `🎨 *Gerando imagem...*\n` +
-    `Prompt: _"${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"_\n` +
+    `Prompt: _"${prompt}"_\n` +
     (allRefs.length ? `Referências: ${allRefs.length} imagem(ns)\n` : '') +
-    `Modelo: Nano Banana\n` +
+    `Modelo: Nano Banana Pro\n` +
     `_Demora ~30-60s_`
   ).catch((e) => console.error('[img-gen] feedback inicial falhou:', e.message));
 

@@ -4,10 +4,19 @@ const advisor = require('../ai-advisor');
 
 const router = Router();
 
-/** POST /api/ai-advisor/notify — força envio top 3 pendentes via WhatsApp */
+/** POST /api/ai-advisor/notify — força envio top 3 pendentes via WhatsApp (modo estruturado) */
 router.post('/ai-advisor/notify', async (req, res) => {
   try {
     const r = await advisor.notificarTop3(req.userId, req.query.slot || 'manual');
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** POST /api/ai-advisor/relatorio-whatsapp?slot=manha — gera+envia relatório markdown direto */
+router.post('/ai-advisor/relatorio-whatsapp', async (req, res) => {
+  try {
+    const slot = req.query.slot || req.body?.slot || 'manha';
+    const r = await advisor.enviarRelatorioWhatsapp(req.userId, slot);
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

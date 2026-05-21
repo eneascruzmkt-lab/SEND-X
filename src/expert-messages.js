@@ -156,35 +156,39 @@ Bora pra cima! 💪"
     manha: `# Slot MANHÃ — Bom dia, ${expertName}!
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação curta* ("Bom dia, ${expertName}! 🌅" ou similar)
-2. *Como foi a presença de ontem* em UMA frase natural: comenta SÓ sobre as lives (se teve, quantas pessoas, movimento no chat) e o movimento do grupo. Exemplos:
-   - "Ontem sua live teve 41 pessoas no pico e o chat tava ligado, rolou 78 msgs."
-   - "Ontem foi um dia sem live, mas o grupo teve bastante movimento — 23 pessoas mandando msg."
-   - "Ontem o grupo tava mais quieto, só 4 mensagens. Hora de mexer com a galera."
-   NÃO mencione cadastros, jogadores, depósitos, cliques — você não tem esses dados.
-3. *3 sugestões de CONTEÚDO pra hoje* — cada uma frase imperativa com VERBO + TEMA específico. Varia entre: gravar story, gravar reel, fazer live, mandar áudio no grupo, fazer enquete, responder mensagens. Os temas devem ser do mundo do expert (aviator/roleta/cassino).
+2. *Resumo COMPLETO de ONTEM com TODOS os números* (parágrafo de 2-3 frases):
+   - Lives: quantas teve, pico de pessoas simultâneas, total assistiu, mensagens no chat, engajamento
+   - Grupo: quantas pessoas mandaram msg, total de mensagens
+   Inclui TODOS os números mas em linguagem natural. Exemplo:
+   "Ontem sua live teve pico de 42 pessoas, 44 assistiram no total e rolaram 41 mensagens no chat (25% de engajamento, audiência ativa). No grupo de 338 membros foi silêncio total, ninguém mandou mensagem ontem — hora de provocar a galera."
+3. *3 sugestões de CONTEÚDO pra hoje* — frases imperativas (Grava/Posta/Faz/Manda) com TEMA específico. Varia entre: story, reel, live, áudio no grupo, enquete. Temas do mundo do expert.
 4. Fechamento motivacional curto
 
-Tamanho: 600-900 caracteres.`,
+Tamanho: 900-1200 caracteres.`,
 
     tarde: `# Slot TARDE — ${expertName}, como tá indo?
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação rápida* ("E aí, ${expertName}! 🔥" ou similar)
-2. *Como tá o movimento do dia* em UMA frase: comenta só sobre lives feitas hoje (se teve) ou movimento atual do grupo. Compara em linguagem natural ("o grupo tá mais agitado que ontem", "ainda não rolou live, bora movimentar").
-3. *Reforço de 1-2 sugestões da manhã* — pergunta direta: "já gravou aquele reel sobre [tema]?", "rolou a live que ia chamar?"
-4. *1 sugestão extra de conteúdo pra fazer agora* — ação curta ("grava um story em selfie agora falando '${expertName} aqui, quem tá no grupo manda 🚀 se vai colar na próxima live'")
+2. *Comparação HOJE até agora vs ONTEM dia inteiro com os números explícitos*:
+   - Lives: "Hoje você já fez X lives (ontem foi Y no dia todo), pico de Z (ontem foi W), A mensagens no chat (ontem B)"
+   - Grupo: "Já tem A pessoas mandando msg (ontem foram B), com C mensagens (ontem D)"
+   Em seguida, comenta o ritmo em linguagem natural ("já dobrou ontem", "tá morno, bora", "live bombando hoje").
+3. *Reforço de 1-2 sugestões da manhã* — pergunta direta: "já gravou aquele reel?", "rolou a live que ia chamar?"
+4. *1 sugestão extra de conteúdo pra fazer agora* — ação curta tipo "grava um story em selfie agora falando '${expertName} aqui, manda 🚀 quem vai colar na próxima live'"
 5. Energia pra fechar o dia
 
-Tamanho: 500-800 caracteres.`,
+Tamanho: 700-1000 caracteres.`,
 
     noite: `# Slot NOITE — ${expertName}, fechando o dia
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação noturna* ("Boa noite, ${expertName} 🌙" ou similar)
-2. *Resumo do dia* em frase natural: lives que rolaram (quantas pessoas, movimento no chat) e movimento do grupo. Destaca o melhor momento.
-3. *Reconhecimento sincero* — uma coisa positiva que ${expertName} fez hoje (uma live boa, um conteúdo, presença forte no grupo)
-4. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã? Equipamento, ideia de conteúdo, alguém pra te ajudar com edição? Pode falar." (essa é a ÚNICA pergunta permitida)
-5. Boa noite com afeto
+2. *Resumo numérico do DIA COMPLETO*: quantas lives, pico, total assistiu, mensagens no chat, engajamento, pessoas ativas no grupo e total de mensagens. Linguagem natural mas COM os números explícitos.
+3. *Reconhecimento sincero* — destaca o melhor momento real do dia ("a live das X teve pico de Y, mandou muito bem")
+4. *Checagem das sugestões da manhã* — pergunta diretamente se as ações que sugeri pela manhã rolaram: "conseguiu gravar aquele reel? E a chamada da live, deu certo? Aquele áudio no grupo virou?" (1-2 perguntas, baseadas em sugestões plausíveis que teriam sido dadas pela manhã)
+5. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã? Equipamento, ideia de conteúdo, alguém pra te ajudar com edição? Pode falar."
+6. Boa noite com afeto
 
-Tamanho: 400-700 caracteres.`,
+Tamanho: 700-1000 caracteres.`,
   }[slot] || 'Briefing geral.';
 
   return `Você é um parceiro/coach do influenciador ${expertName} (criador de conteúdo iGaming/cassino), enviando mensagem WhatsApp direta pra ele.

@@ -58,7 +58,7 @@ async function getGrupoManagement(expertName) {
   }
 }
 
-/** Chama Claude no bridge com prompt estruturado. */
+/** Chama Claude no bridge em modo 'task' (isolado, sem CLAUDE.md/skills locais). */
 async function callBridge(message, additionalSystem) {
   const url = (await db.getBridgeRegistry().catch(() => null))?.url || process.env.BRIDGE_URL;
   const secret = process.env.BRIDGE_SECRET;
@@ -66,7 +66,7 @@ async function callBridge(message, additionalSystem) {
   const resp = await fetch(`${url}/chat`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${secret}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
-    body: JSON.stringify({ message, additional_system: additionalSystem }),
+    body: JSON.stringify({ message, additional_system: additionalSystem, mode: 'task' }),
   });
   if (!resp.ok) throw new Error(`Bridge ${resp.status}: ${await resp.text()}`);
   return resp.json();
@@ -97,34 +97,40 @@ async function sendWhatsapp(toJid, text) {
 
 // ─── Processar lives terminadas ────────────────────────────────────────────
 
-const LIVE_PROMPT = `Você é um analista sênior de marketing iGaming. Acabou de terminar uma live (Google Meet) do expert que você gerencia. Analise os dados e gere um resumo + sugestões pra POSTAR AGORA enquanto a audiência ainda está quente.
+const LIVE_PROMPT = `# Tarefa
+Sua tarefa é gerar uma mensagem WhatsApp que será enviada DIRETAMENTE para um expert (influenciador de iGaming) logo após a live dele terminar. A mensagem é PRA ELE, não pra um gestor.
 
-RETORNE EXATAMENTE este JSON (sem markdown, sem texto extra):
+# Tom
+- Fale na 2ª pessoa, direto com o expert ("você arrebentou", "sua live", "anota essas ideias")
+- Tom motivacional, prático, energético — como um gerente de produto enviando uma análise pós-evento
+- Português brasileiro, informal mas profissional
+- Sem dizer "Aytalo", sem se referir ao operador, sem dizer "o expert" em 3ª pessoa
+
+# Formato OBRIGATÓRIO da resposta
+Retorne APENAS um JSON puro (sem \`\`\`json, sem texto antes ou depois, sem comentários, sem perguntas, sem disclaimers):
+
 {
-  "highlights": [
-    "frase curta de 1 momento marcante da live (com número quando relevante)",
-    "outro highlight",
-    "..."  // 3-5 itens
-  ],
+  "highlights": ["frase curta de momento marcante 1 (com número se relevante)", "...", "..."],
   "stories_para_postar_agora": [
-    {
-      "hook": "frase de abertura para o story (max 80 chars)",
-      "conteudo": "o que mostrar/escrever no story (max 200 chars)",
-      "cta": "call-to-action"
-    }
-    // 3 itens
+    { "hook": "frase de abertura (max 80c)", "conteudo": "o que postar (max 200c)", "cta": "call-to-action" }
   ],
   "reel_para_gravar": {
-    "tema": "tema do reel baseado no que rolou na live",
-    "hook_primeiros_3s": "frase pra fisgar nos 3 primeiros segundos",
-    "estrutura": ["abertura", "desenvolvimento", "fechamento com CTA"],
+    "tema": "tema do reel",
+    "hook_primeiros_3s": "frase pra fisgar nos 3s iniciais",
+    "estrutura": ["abertura", "desenvolvimento", "fechamento+CTA"],
     "duracao_sugerida": "15s | 30s | 60s"
   },
   "urgencia": "alta | media | baixa",
-  "razao_urgencia": "por que postar agora vs depois (max 150 chars)"
+  "razao_urgencia": "max 150c"
 }
 
-Use números concretos da live. Foque em momentos virais (pico de participantes, dúvidas frequentes, frases-chave).`;
+# Regras
+- 3 a 5 highlights
+- 3 stories sugeridos
+- 1 reel sugerido
+- Foque em momentos virais: pico de participantes, dúvidas frequentes do chat, frases-chave
+- Use números concretos
+- NÃO escreva fora do JSON, NÃO faça perguntas, NÃO dispute o formato. Apenas devolva o JSON.`;
 
 async function gerarAnaliseLive(meetingId, userId = 1) {
   // 1) Detalhes da live + resumo
@@ -160,17 +166,16 @@ async function gerarAnaliseLive(meetingId, userId = 1) {
     .map(m => `${m.autor}: ${m.texto.slice(0, 150)}`)
     .join('\n');
 
-  // 4) Monta contexto pro Claude
-  const ctx = `## LIVE TERMINADA
-Expert: ${expert}
+  // 4) Monta contexto pro Claude — só dados, sem instruções de formato
+  // (instruções estão no system prompt; aqui é dado puro)
+  const ctx = `Dados da live recém-terminada de ${expert}:
+
 Duração: ${duracaoMin} minutos
 Pico simultâneo: ${pico} pessoas
-Total mensagens chat: ${messages}
+Total de mensagens no chat: ${messages}
 
-## MENSAGENS DO CHAT
-${msgsTxt || '(sem mensagens significativas)'}
-
-Gere o resumo + sugestões conforme o schema do system prompt.`;
+Mensagens do chat (autor: texto):
+${msgsTxt || '(sem mensagens significativas)'}`;
 
   const bridgeResp = await callBridge(ctx, LIVE_PROMPT);
   const parsed = extractJson(bridgeResp.text);
@@ -187,21 +192,21 @@ Gere o resumo + sugestões conforme o schema do system prompt.`;
 }
 
 function formatarMensagemWhatsapp({ expert, metricas, analise, fallback_text }) {
-  // Se análise veio sem estrutura (fallback), manda só o texto bruto com header
+  // Fallback: Claude não retornou JSON → manda texto bruto
   if (!analise && fallback_text) {
-    return `🎬 *LIVE FINALIZADA — ${expert}*\n` +
+    return `🎬 *Acabou sua live, ${expert}! 🔥*\n` +
       `⏱️ ${metricas.duracao_min || '?'} min · 👥 pico ${metricas.pico_simultaneo} · 💬 ${metricas.total_mensagens} msgs\n` +
       `━━━━━━━━━━━━━━━━━━\n\n` +
       String(fallback_text).slice(0, 3500);
   }
 
   const lines = [];
-  lines.push(`🎬 *LIVE FINALIZADA — ${expert}*`);
-  lines.push(`⏱️ ${metricas.duracao_min || '?'} min · 👥 pico ${metricas.pico_simultaneo} · 💬 ${metricas.total_mensagens} msgs`);
+  lines.push(`🎬 *Acabou sua live, ${expert}! 🔥*`);
+  lines.push(`⏱️ ${metricas.duracao_min || '?'} min · 👥 pico de ${metricas.pico_simultaneo} ao vivo · 💬 ${metricas.total_mensagens} msgs`);
   lines.push('━━━━━━━━━━━━━━━━━━');
   lines.push('');
-  lines.push('📌 *Highlights*');
-  for (const h of analise.highlights || []) lines.push(`• ${h}`);
+  lines.push('📌 *O que arrebentou:*');
+  for (const h of (analise?.highlights || [])) lines.push(`• ${h}`);
   lines.push('');
 
   if (analise?.stories_para_postar_agora?.length) {

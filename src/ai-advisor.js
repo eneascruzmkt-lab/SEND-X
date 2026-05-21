@@ -106,7 +106,7 @@ async function callBridge(userMessage, additionalSystem) {
       'Content-Type': 'application/json',
       'ngrok-skip-browser-warning': '1',
     },
-    body: JSON.stringify({ message: userMessage, additional_system: additionalSystem }),
+    body: JSON.stringify({ message: userMessage, additional_system: additionalSystem, mode: 'task' }),
   });
   if (!resp.ok) throw new Error(`Bridge ${resp.status}: ${await resp.text()}`);
   return resp.json();

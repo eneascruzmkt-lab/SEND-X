@@ -116,14 +116,22 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
       allRefs.map((u, i) => `${i + 1}. ${u}`).join('\n')
     : '';
 
+  const mediasParam = allRefs.length > 0
+    ? allRefs.map(url => ({ value: url, role: 'image' }))
+    : null;
+
   const bridgePrompt = `Gere uma imagem usando o MCP Higgsfield seguindo EXATAMENTE estes passos:
 
-1. Use mcp__claude_ai_higgis__generate_image com:
-   - model: "nano-banana" (ou similar gratuito ilimitado)
-   - prompt: "${prompt.replace(/"/g, '\\"')}"${allRefs.length > 0 ? `
-   - reference_images: ${JSON.stringify(allRefs)}` : ''}
+1. Use mcp__claude_ai_higgis__generate_image com params:
+{
+  "model": "nano_banana_pro",
+  "prompt": "${prompt.replace(/"/g, '\\"')}"${mediasParam ? `,
+  "medias": ${JSON.stringify(mediasParam)}` : ''}
+}
 
-2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até completed)
+ATENÇÃO: o parâmetro correto é "medias" (não "reference_images"). Cada item: {value: URL, role: "image"}. Isso instrui o modelo a USAR as imagens como referência (manter rosto, traços, identidade).
+
+2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 90s)
 
 3. Retorne APENAS a URL da imagem final no formato exato:
    IMAGEM_GERADA: <url>

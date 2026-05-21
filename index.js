@@ -82,13 +82,16 @@ db.init().then(() => {
   // Horários: 08:00 (manhã), 15:00 (tarde), 00:00 (madrugada/fechamento) BRT
   const advisor = require('./src/ai-advisor');
   const runAdvisor = async (slot) => {
-    console.log(`[cron-ai-advisor:${slot}] gerando recomendações…`);
+    console.log(`[cron-ai-advisor:${slot}] gerando briefing WhatsApp…`);
     try {
       await advisor.medirOutcomesAtrasados(1);
-      const recs = await advisor.gerarRecomendacoes(1, undefined, slot);
-      console.log(`[cron-ai-advisor:${slot}] geradas ${recs.length} recomendações`);
-      const notif = await advisor.notificarTop3(1, slot);
-      console.log(`[cron-ai-advisor:${slot}] notify:`, JSON.stringify(notif));
+      // Envia relatório markdown direto pro WhatsApp (sem JSON estruturado)
+      const notif = await advisor.enviarRelatorioWhatsapp(1, slot);
+      console.log(`[cron-ai-advisor:${slot}] WhatsApp:`, JSON.stringify(notif));
+      // Em paralelo: gera estruturado pra UI (não bloqueia se falhar)
+      advisor.gerarRecomendacoes(1, undefined, slot)
+        .then(recs => console.log(`[cron-ai-advisor:${slot}] UI: ${recs.length} recs`))
+        .catch(e => console.log(`[cron-ai-advisor:${slot}] UI skip:`, e.message));
     } catch (e) { console.error(`[cron-ai-advisor:${slot}]`, e.message); }
   };
   cron.schedule('0 8 * * *',  () => runAdvisor('manha'),    { timezone: 'America/Sao_Paulo' });

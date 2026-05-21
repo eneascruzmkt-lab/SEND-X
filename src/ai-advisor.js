@@ -291,4 +291,100 @@ async function notificarTop3(userId = 1, slot = '') {
   }
 }
 
-module.exports = { gerarRecomendacoes, medirOutcomesAtrasados, notificarTop3, coletarDados };
+// ─── Relatório WhatsApp direto (markdown, sem JSON estruturado) ───────────
+
+function buildRelatorioPrompt(slot) {
+  const slotInfo = {
+    manha: `# Slot MANHÃ (08:00 BRT) — BRIEFING DO DIA
+Você está enviando o briefing matinal pelo WhatsApp para o operador (Aytalo).
+
+CONTEÚDO OBRIGATÓRIO:
+1. *Fechamento de ONTEM* (use PRIORITARIAMENTE dados da PLANILHA: ftds_planilha, gasto_meta, net_pl. Postback só pra validar UTM; se divergente, sinalize)
+2. *3 ações pra HOJE* (concretas, com expert/quantidade/horário se possível)
+3. *Sugestões de conteúdo pra HOJE* (1 story por expert ativo + 1 reel pro expert que mais precisa)
+4. *Alerta* se P&L ontem foi negativo ou houver problema crítico`,
+    tarde: `# Slot TARDE (15:00 BRT) — CHECK-IN
+1. *Performance até agora vs ontem* (mesma hora aproximada)
+2. *2 ajustes pra final do dia* (pausar/escalar adsets)
+3. *Lives previstas hoje à noite* — preparação`,
+    madrugada: `# Slot MADRUGADA (00:00 BRT) — FECHAMENTO + SETUP
+1. *Resumo do dia que acabou* (gasto, FTDs planilha, Net P&L por expert)
+2. *2 preparações pra amanhã* (criativos, disparos)
+3. *Top destaque positivo do dia*`,
+  }[slot] || `Briefing operacional: resumo + 3 ações.`;
+
+  return `Você é um analista sênior de marketing iGaming gerando briefing operacional via WhatsApp pro operador Aytalo.
+
+${slotInfo}
+
+# Formato — WhatsApp
+- Markdown que renderiza no WhatsApp (*negrito*, _itálico_)
+- Emojis pra rotular (📊 🎯 🚨 💡 🎬 📈 📉)
+- Direto e prático, fala com Aytalo
+- Números específicos dos dados (R$, FTDs, %)
+- Sem tabela ascii pesada, sem listas aninhadas profundas
+- Tamanho ideal: 800-1500 caracteres
+
+# Regras absolutas
+- NUNCA faça perguntas (sem "quer que", "deseja", "posso", "se preferir", "?")
+- NUNCA peça confirmação ou ofereça salvar/comparar/enviar
+- NUNCA escreva disclaimers ("analisei os dados", "espero que ajude")
+- Comece direto, ex: "📊 *Briefing — 20/05*"
+- Termine na última recomendação. Sem despedida.`;
+}
+
+function stripPerguntas(text) {
+  if (!text) return '';
+  const banned = /^(quer que|deseja|posso|se você|se preferir|caso queira|posso te ajudar|gostaria|posso salvar|me avise|fique à vontade)/i;
+  return String(text)
+    .split('\n')
+    .filter(line => {
+      const t = line.trim();
+      if (!t) return true;
+      if (t.endsWith('?')) return false;
+      if (banned.test(t)) return false;
+      return true;
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function gerarRelatorioWhatsapp(userId = 1, slot = 'manha', experts = EXPERTS_DEFAULT) {
+  const dados = await coletarDados(userId, experts);
+  const dadosTxt = Object.entries(dados.experts).map(([exp, d]) => {
+    if (d.error) return `## ${exp}\nERRO: ${d.error}`;
+    return `## ${exp}\nDIÁRIO ONTEM: ${JSON.stringify(d.diario_ontem)}\nSEMANAL 7d: ${JSON.stringify(d.semanal_7d)}\nMENSAL 30d: ${JSON.stringify(d.mensal_30d)}`;
+  }).join('\n\n');
+
+  const bridgeResp = await callBridge(dadosTxt, buildRelatorioPrompt(slot));
+  return stripPerguntas(String(bridgeResp.text || '').trim());
+}
+
+async function enviarRelatorioWhatsapp(userId = 1, slot = 'manha') {
+  const phone = process.env.AI_ADVISOR_PHONE;
+  const instance = process.env.AI_ADVISOR_INSTANCE || process.env.REPORT_INSTANCE;
+  const evoUrl = process.env.EVOLUTION_API_URL;
+  const evoKey = process.env.EVOLUTION_API_KEY;
+  if (!phone || !instance || !evoUrl || !evoKey) return { sent: false, reason: 'envs Evolution/AI_ADVISOR ausentes' };
+
+  const texto = await gerarRelatorioWhatsapp(userId, slot);
+  if (!texto || texto.length < 60) return { sent: false, reason: 'relatório muito curto', preview: texto };
+
+  try {
+    const resp = await fetch(`${evoUrl}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: { apikey: evoKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number: phone, text: texto }),
+    });
+    if (!resp.ok) throw new Error(`Evolution ${resp.status}: ${await resp.text()}`);
+    return { sent: true, phone, slot, length: texto.length, preview: texto.slice(0, 200) };
+  } catch (e) {
+    return { sent: false, reason: e.message };
+  }
+}
+
+module.exports = {
+  gerarRecomendacoes, medirOutcomesAtrasados, notificarTop3, coletarDados,
+  gerarRelatorioWhatsapp, enviarRelatorioWhatsapp,
+};

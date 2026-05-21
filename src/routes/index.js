@@ -656,7 +656,7 @@ const expertMessagesRoutes = require('./expert-messages');
 router.use(auth, expertMessagesRoutes);
 
 const instagramRoutes = require('./instagram');
-router.use(auth, instagramRoutes);
+router.use(instagramRoutes);
 
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 

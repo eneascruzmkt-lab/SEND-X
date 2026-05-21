@@ -1,8 +1,12 @@
 const { Router } = require('express');
 const db = require('../db');
 const ig = require('../instagram-tools');
+const { auth } = require('../auth');
 
 const router = Router();
+router.use(auth);
+// Fallback userId = 1 (única conta operacional) se o middleware não setar
+router.use((req, _res, next) => { if (!req.userId) req.userId = 1; next(); });
 
 /** GET /api/instagram/discover — lista contas IG disponíveis no token FB */
 router.get('/instagram/discover', async (_req, res) => {

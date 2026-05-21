@@ -108,12 +108,13 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
   else if (/\b16:9\b|horizontal|paisagem|widescreen/i.test(lowFb)) aspectFb = '16:9';
   else if (/\b4:5\b|retrato\b/i.test(lowFb)) aspectFb = '4:5';
 
+  const modeloFb = allRefs.length > 0 ? 'Flux Kontext Max (preserva rosto)' : 'GPT Image 2';
   await sendWhatsappText(group_jid,
     `🎨 *Gerando imagem...*\n` +
     `Prompt: _"${prompt}"_\n` +
     (allRefs.length ? `Referências: ${allRefs.length} imagem(ns)\n` : '') +
     `Formato: ${aspectFb}\n` +
-    `Modelo: GPT Image 2\n` +
+    `Modelo: ${modeloFb}\n` +
     `_Demora ~60-120s_`
   ).catch((e) => console.error('[img-gen] feedback inicial falhou:', e.message));
 
@@ -135,14 +136,13 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
   else if (/\b1:1\b|quadrado|feed\b/i.test(lowerPrompt)) aspectRatio = '1:1';
   else if (/\b4:5\b|retrato\b/i.test(lowerPrompt)) aspectRatio = '4:5';
 
-  const params = {
-    model: 'gpt_image_2',
-    prompt: prompt,
-    quality: 'high',
-    resolution: '1k',
-  };
+  // Flux Kontext Max = preserva rosto + transforma cenário (context-aware editing)
+  // GPT Image 2 = mais variação mas perde identidade
+  // Usa Flux quando tem ref (precisa preservar pessoa); GPT quando é geração from scratch
+  const params = mediasParam
+    ? { model: 'flux_kontext_max', prompt, medias: mediasParam }
+    : { model: 'gpt_image_2', prompt, quality: 'high', resolution: '1k' };
   if (aspectRatio) params.aspect_ratio = aspectRatio;
-  if (mediasParam) params.medias = mediasParam;
 
   const bridgePrompt = `Gere uma imagem usando o MCP Higgsfield seguindo EXATAMENTE estes passos:
 
@@ -150,9 +150,10 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
 ${JSON.stringify(params, null, 2)}
 
 INSTRUÇÕES IMPORTANTES:
-- model: "gpt_image_2" — esse modelo TRANSFORMA a imagem de referência (não só copia)
-- medias com role:"image": usa como referência IDENTITÁRIA (rosto/traços) mas DEVE aplicar as mudanças que o prompt pede (cenário, pose, formato, vestimenta, etc)
-- O prompt descreve a MODIFICAÇÃO desejada. Aplique tudo que ele pede.
+- Quando há referência: usar "flux_kontext_max" (context-aware: preserva rosto da pessoa + transplanta pro cenário novo)
+- Sem referência: usar "gpt_image_2" (geração from-scratch alta qualidade)
+- medias com role:"image" = referência IDENTITÁRIA (preserva rosto/traços)
+- O prompt descreve a TRANSFORMAÇÃO (cenário, pose, formato). Aplique tudo.
 
 2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 120s)
 

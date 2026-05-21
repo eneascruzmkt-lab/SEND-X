@@ -658,6 +658,9 @@ router.use(auth, expertMessagesRoutes);
 const instagramRoutes = require('./instagram');
 router.use(instagramRoutes);
 
+const imgGenRoutes = require('./img-generator');
+router.use(imgGenRoutes);
+
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 
 /** GET /ad-accounts — lista contas de anúncio do usuário */

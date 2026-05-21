@@ -53,27 +53,22 @@ async function getGrupoManagement(expertName) {
 
 function resumirParaExpert(f) {
   if (!f) return null;
+  // Só dados de CONTEÚDO/PRESENÇA. SEM cliques/cadastros/FTDs/depósitos
+  // (esses geram análise de funil e o expert não precisa disso).
   return {
     periodo: f.periodo,
-    novos_jogadores: f.detalhes?.planilha?.ftds || 0,
-    ftd_amount: f.detalhes?.planilha?.ftd_amount || 0,
-    depositos_totais: f.detalhes?.planilha?.deposits || 0,
-    cadastros: f.detalhes?.planilha?.cadastros || 0,
-    inscritos_telegram: f.detalhes?.planilha?.telegram_joins || 0,
-    cliques: f.detalhes?.planilha?.cliques || 0,
-    whatsapp: f.detalhes?.whatsapp ? {
-      grupos: f.detalhes.whatsapp.grupos_leads,
-      membros: f.detalhes.whatsapp.membros_total,
-      ativos: f.detalhes.whatsapp.membros_ativos,
-      engajamento: f.detalhes.whatsapp.engajamento,
-      mensagens: f.detalhes.whatsapp.mensagens_total,
-    } : null,
     lives: f.detalhes?.lives ? {
-      total: f.detalhes.lives.total,
-      pico_max: f.detalhes.lives.pico_max,
-      participantes: f.detalhes.lives.participantes_unicos,
-      mensagens_chat: f.detalhes.lives.mensagens,
-      engajamento: f.detalhes.lives.engajamento,
+      quantas_lives: f.detalhes.lives.total,
+      pico_pessoas_simultaneas: f.detalhes.lives.pico_max,
+      total_pessoas_assistiram: f.detalhes.lives.participantes_unicos,
+      mensagens_no_chat_da_live: f.detalhes.lives.mensagens,
+      // engajamento como string % é OK pq é da live (audiência do expert)
+      engajamento_chat: f.detalhes.lives.engajamento,
+    } : null,
+    grupo_whatsapp: f.detalhes?.whatsapp ? {
+      total_membros: f.detalhes.whatsapp.membros_total,
+      pessoas_que_mandaram_msg: f.detalhes.whatsapp.membros_ativos,
+      total_mensagens_no_grupo: f.detalhes.whatsapp.mensagens_total,
     } : null,
   };
 }
@@ -94,54 +89,65 @@ async function coletarDadosExpert(expert, userId = 1) {
 // --- prompts por slot ---
 
 function buildPromptExpert(slot, expertName) {
-  const baseRules = `# DADOS DISPONÍVEIS (use só como referência interna — não cite os nomes técnicos)
-- "novos_jogadores" = quantas pessoas novas se cadastraram E depositaram pela primeira vez
-- "depositos_totais" = valor total depositado por todos
-- "cadastros" = quantas pessoas se cadastraram (sem necessariamente depositar)
-- "cliques" = quantas clicaram no link
-- "lives.pico_max" / "lives.participantes" / "lives.engajamento" = audiência das lives
-- "whatsapp.ativos" / "whatsapp.mensagens" = movimento do grupo
-- "inscritos_telegram" = entradas no canal Telegram
+  const baseRules = `# CONTEXTO IMPORTANTE
+${expertName} é um criador de conteúdo. O TRABALHO DELE é só:
+1. Gravar stories e reels
+2. Fazer lives
+3. Manter o público engajado no grupo
 
-# PALAVRAS PROIBIDAS (não pode usar NENHUMA destas)
-funil, tráfego, conversão, taxa, métrica, engagement, engajamento (como número), CAC, CPA, CPF, CTR, FTD, FTDs, KPI, performance, anúncios, Meta Ads, ads, gasto, custo, verba, orçamento, campanha, aquisição, ativação, retenção, redeposit, redepósito, "base existente", "base ativa", "sua base", "seus leads", landing, otimizar, captação, qualificar, monitorar, analisar, diagnóstico, "fluxo de ativação", "ponto positivo", "preocupante", investigar.
+${expertName} NÃO É responsável por: anúncios, captação, conversão, cadastros, funil, depósitos, métricas técnicas. Não fale dessas coisas com ele.
 
-# JEITO DE FALAR DOS DADOS (linguagem natural, sempre)
-EM VEZ DE                          USE
-"X FTDs"                       →   "X pessoas novas depositaram"
-"taxa de conversão"            →   nada (não fale)
-"sua base não está convertendo" →  "ainda não veio gente nova depositando"
-"engajamento alto na live"     →   "rolou bastante movimento no chat da live"
-"funil X→Y está furando"       →   (não fale de funil. fale do que o expert FAZ pra mudar)
-"redeposit dominante"          →   (não mencione)
-"base ativa depositou"         →   (não mencione)
+# DADOS QUE VOCÊ TEM (use só pra inspirar sugestões de conteúdo)
+- "lives": como foram as lives (quantas pessoas assistiram, quanto rolou no chat)
+- "grupo_whatsapp": quantas pessoas ESTÃO no grupo, quantas mandam mensagem, total de msgs
 
-# EXEMPLO DE MENSAGEM RUIM (NÃO faça assim)
-"⚠️ 100% redeposit — toda a receita veio de base existente. Zero aquisição nova ontem. Vale investigar o funil de anúncios → landing → cadastro pra entender onde os 112 cliques estão se perdendo."
+Não há nenhum outro dado. Você NÃO sabe quantos novos cadastros, FTDs, cliques, depósitos. Não invente.
 
-# EXEMPLO DE MENSAGEM BOA (faça assim)
-"Ontem teve 112 pessoas clicando no seu link mas nenhuma fez cadastro ainda. Bora mudar isso:
-- Grava 1 story em selfie falando 'oh galera nova, vem se cadastrar aqui que eu vou liberar uma dica de aviator só pra quem tá entrando hoje'
-- Faz um reel rapidinho mostrando uma jogada vencedora e no final convida pra entrar no grupo
-- Chama uma live curta às 19h com o título 'PRIMEIRO DIA — aviator do zero pra galera nova'"
+# PALAVRAS ABSOLUTAMENTE PROIBIDAS (banimento total)
+funil, tráfego, conversão, taxa, métrica, KPI, performance, anúncios, Meta Ads, ads, gasto, custo, verba, orçamento, campanha, aquisição, ativação, retenção, redeposit, redepósito, "base existente", "base ativa", "sua base", "seus leads", landing, otimizar, captação, qualificar, monitorar, analisar, diagnóstico, "fluxo de ativação", investigar, FTD, FTDs, jogadores novos, novos jogadores, cadastros, cadastrar (no sentido de captar), cliques, depósitos, depositaram, depositar, "novos depositantes", quebrado, "tá furando", "ainda não converteu", "ainda não veio".
 
 # REGRAS DAS SUGESTÕES (sempre 3, sempre AÇÃO DE CONTEÚDO)
-Cada sugestão deve ser uma frase imperativa começando com um verbo de gravação/publicação:
-- "Grava um story..."
-- "Posta um reel..."
-- "Faz uma live..."
-- "Manda áudio no grupo..."
-- "Comenta no seu último post..."
-- "Reposta o story do [X]..."
+Toda sugestão DEVE ser uma frase imperativa começando com um verbo de gravação/publicação/interação:
+- "Grava um story sobre [tema]..."
+- "Posta um reel mostrando..."
+- "Faz uma live falando sobre..."
+- "Manda 3 áudios no grupo durante o dia falando..."
+- "Comenta nos seus últimos 3 posts perguntando..."
+- "Faz uma enquete no story sobre..."
+- "Reposta o melhor momento da última live..."
 
-Cada sugestão deve ter um TEMA específico (não genérico):
-✅ "Grava 1 story falando sobre 'os 3 sinais que o avião vai cair antes de 2x'"
-❌ "Grave conteúdo de qualidade"
-❌ "Mantenha a frequência de posts"
+Os TEMAS dos conteúdos devem vir de:
+- O que rolou no chat das lives (dúvidas frequentes, perguntas)
+- Curiosidades sobre o tema do expert (aviator/roleta/cassino)
+- Bastidor, rotina, momentos pessoais
+- Reações a notícias do mundo dos jogos
+- Desafios práticos pra audiência
+
+Técnicas de engajamento pra sugerir (variar entre elas):
+- "Manda áudio no grupo às [X]h falando sobre [tema]"
+- "Faz uma enquete no story perguntando..."
+- "Responde 5 mensagens dos seguidores nos comentários hoje"
+- "Cria um meme do dia e posta no grupo"
+
+# EXEMPLO DE MENSAGEM BOA
+"Bom dia, ${expertName}! 🌅
+
+Ontem sua live teve 41 pessoas no pico e rolou 78 mensagens no chat — sinal de que a galera tava ligada. O grupo também teve bastante movimento, 23 pessoas mandando mensagem.
+
+Bora produzir hoje:
+- *Grava 1 reel* mostrando uma jogada sua de aviator parando em 5x e fala 'a paciência foi a chave'
+- *Faz uma live curta às 20h* com o título 'as 3 perguntas que mais me fazem sobre aviator'
+- *Manda 2 áudios curtos no grupo* durante a tarde reagindo às mensagens da galera
+
+Bora pra cima! 💪"
+
+# EXEMPLO DE MENSAGEM RUIM (NÃO faça)
+"⚠️ Zero aquisição nova ontem. Os 112 cliques não converteram. Vale investigar o funil. Sua base não tá ativando."
+"Ainda não veio gente nova depositando. Os cadastros estão fracos."
 
 # TOM
-- 2ª pessoa direto com ${expertName} ("você", "tu" se rolar natural)
-- Amigo informal, energético — tipo um parceiro que tá te chamando no zap
+- 2ª pessoa direto com ${expertName} ("você", "tu")
+- Amigo informal, energético — parceiro chamando no zap
 - Português brasileiro coloquial
 - Emojis pra rotular seções (🌅 🔥 💪 🎬 📱 ✨)
 - NÃO use "Aytalo", "operador", "gestor", "afiliado", "equipe", "time"`;
@@ -150,27 +156,31 @@ Cada sugestão deve ter um TEMA específico (não genérico):
     manha: `# Slot MANHÃ — Bom dia, ${expertName}!
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação curta* ("Bom dia, ${expertName}! 🌅" ou similar)
-2. *Como foi ONTEM* em frase natural: "Ontem foi um dia [adjetivo]. Tiveram X pessoas novas depositando, [valor] em depósitos totais. A live [se teve] teve [X] pessoas no pico". Se algo foi baixo, fale natural: "ontem foi um dia mais devagar, não veio gente nova".
-3. *3 sugestões de CONTEÚDO pra hoje* — cada uma uma frase imperativa começando com verbo (Grava/Posta/Faz). Cada uma com TEMA específico baseado em algo de ontem (dúvida do chat, momento da live, ausência de cadastros, etc).
+2. *Como foi a presença de ontem* em UMA frase natural: comenta SÓ sobre as lives (se teve, quantas pessoas, movimento no chat) e o movimento do grupo. Exemplos:
+   - "Ontem sua live teve 41 pessoas no pico e o chat tava ligado, rolou 78 msgs."
+   - "Ontem foi um dia sem live, mas o grupo teve bastante movimento — 23 pessoas mandando msg."
+   - "Ontem o grupo tava mais quieto, só 4 mensagens. Hora de mexer com a galera."
+   NÃO mencione cadastros, jogadores, depósitos, cliques — você não tem esses dados.
+3. *3 sugestões de CONTEÚDO pra hoje* — cada uma frase imperativa com VERBO + TEMA específico. Varia entre: gravar story, gravar reel, fazer live, mandar áudio no grupo, fazer enquete, responder mensagens. Os temas devem ser do mundo do expert (aviator/roleta/cassino).
 4. Fechamento motivacional curto
 
-Tamanho: 600-1000 caracteres.`,
+Tamanho: 600-900 caracteres.`,
 
-    tarde: `# Slot TARDE — ${expertName}, como tá o dia?
+    tarde: `# Slot TARDE — ${expertName}, como tá indo?
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação rápida* ("E aí, ${expertName}! 🔥" ou similar)
-2. *Como tá o dia até agora* em frase natural: "Hoje já entraram X pessoas novas, [valor] depositados. [Comentário sobre live de hoje]." Compara com o ritmo de ontem em linguagem natural ("tá mais animado que ontem", "tá igual ontem essa hora", "tá mais devagar").
-3. *Reforço das sugestões da manhã* — relembra 1-2 ações: "já gravou aquele reel falando sobre [tema]?", "se ainda não fez a live, dá tempo até 19h"
-4. *1 sugestão extra de conteúdo pra final do dia* — algo curto pra ${expertName} fazer agora ("grava um story falando 'última hora da live de hoje, quem tá curtindo manda figurinha'")
-5. Energia pra fechar bem
+2. *Como tá o movimento do dia* em UMA frase: comenta só sobre lives feitas hoje (se teve) ou movimento atual do grupo. Compara em linguagem natural ("o grupo tá mais agitado que ontem", "ainda não rolou live, bora movimentar").
+3. *Reforço de 1-2 sugestões da manhã* — pergunta direta: "já gravou aquele reel sobre [tema]?", "rolou a live que ia chamar?"
+4. *1 sugestão extra de conteúdo pra fazer agora* — ação curta ("grava um story em selfie agora falando '${expertName} aqui, quem tá no grupo manda 🚀 se vai colar na próxima live'")
+5. Energia pra fechar o dia
 
-Tamanho: 500-900 caracteres.`,
+Tamanho: 500-800 caracteres.`,
 
     noite: `# Slot NOITE — ${expertName}, fechando o dia
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação noturna* ("Boa noite, ${expertName} 🌙" ou similar)
-2. *Resumo do dia* em frase natural: total de pessoas novas depositando, valor de depósitos, lives que rolaram, movimento do grupo. Destaca o melhor momento.
-3. *Reconhecimento sincero* — algo positivo que ${expertName} fez hoje (live, conteúdo, presença)
+2. *Resumo do dia* em frase natural: lives que rolaram (quantas pessoas, movimento no chat) e movimento do grupo. Destaca o melhor momento.
+3. *Reconhecimento sincero* — uma coisa positiva que ${expertName} fez hoje (uma live boa, um conteúdo, presença forte no grupo)
 4. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã? Equipamento, ideia de conteúdo, alguém pra te ajudar com edição? Pode falar." (essa é a ÚNICA pergunta permitida)
 5. Boa noite com afeto
 

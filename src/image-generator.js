@@ -108,7 +108,7 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
   else if (/\b16:9\b|horizontal|paisagem|widescreen/i.test(lowFb)) aspectFb = '16:9';
   else if (/\b4:5\b|retrato\b/i.test(lowFb)) aspectFb = '4:5';
 
-  const modeloFb = allRefs.length > 0 ? 'Flux Kontext Max (preserva rosto)' : 'GPT Image 2';
+  const modeloFb = allRefs.length > 0 ? 'Soul V2 (preserva rosto)' : 'GPT Image 2';
   await sendWhatsappText(group_jid,
     `🎨 *Gerando imagem...*\n` +
     `Prompt: _"${prompt}"_\n` +
@@ -136,11 +136,12 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
   else if (/\b1:1\b|quadrado|feed\b/i.test(lowerPrompt)) aspectRatio = '1:1';
   else if (/\b4:5\b|retrato\b/i.test(lowerPrompt)) aspectRatio = '4:5';
 
-  // Flux Kontext Max = preserva rosto + transforma cenário (context-aware editing)
-  // GPT Image 2 = mais variação mas perde identidade
-  // Usa Flux quando tem ref (precisa preservar pessoa); GPT quando é geração from scratch
+  // Modelos ilimitados disponíveis na conta do operador:
+  // - soul_v2: preserva ROSTO/identidade via image ref → usar quando tem foto de pessoa
+  // - gpt_image_2: geração from-scratch alta qualidade → usar sem referência
+  // (Soul aceita 1 imagem max em medias)
   const params = mediasParam
-    ? { model: 'flux_kontext_max', prompt, medias: mediasParam }
+    ? { model: 'soul_v2', prompt, medias: mediasParam.slice(0, 1) }
     : { model: 'gpt_image_2', prompt, quality: 'high', resolution: '1k' };
   if (aspectRatio) params.aspect_ratio = aspectRatio;
 
@@ -150,9 +151,9 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
 ${JSON.stringify(params, null, 2)}
 
 INSTRUÇÕES IMPORTANTES:
-- Quando há referência: usar "flux_kontext_max" (context-aware: preserva rosto da pessoa + transplanta pro cenário novo)
-- Sem referência: usar "gpt_image_2" (geração from-scratch alta qualidade)
-- medias com role:"image" = referência IDENTITÁRIA (preserva rosto/traços)
+- model "soul_v2": especializado em preservar ROSTO da pessoa da referência + colocar em cenário/pose novos
+- model "gpt_image_2": usado quando NÃO há referência (criação from-scratch)
+- medias com role:"image" = referência IDENTITÁRIA — preserva rosto/traços
 - O prompt descreve a TRANSFORMAÇÃO (cenário, pose, formato). Aplique tudo.
 
 2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 120s)

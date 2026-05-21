@@ -94,63 +94,84 @@ async function coletarDadosExpert(expert, userId = 1) {
 // --- prompts por slot ---
 
 function buildPromptExpert(slot, expertName) {
-  const baseRules = `# DADOS DISPONÍVEIS (use só como referência interna)
-- "novos_jogadores" = jogadores que fizeram primeiro depósito ontem/hoje
-- "depositos_totais" = valor total depositado
+  const baseRules = `# DADOS DISPONÍVEIS (use só como referência interna — não cite os nomes técnicos)
+- "novos_jogadores" = quantas pessoas novas se cadastraram E depositaram pela primeira vez
+- "depositos_totais" = valor total depositado por todos
+- "cadastros" = quantas pessoas se cadastraram (sem necessariamente depositar)
+- "cliques" = quantas clicaram no link
 - "lives.pico_max" / "lives.participantes" / "lives.engajamento" = audiência das lives
 - "whatsapp.ativos" / "whatsapp.mensagens" = movimento do grupo
-- "inscritos_telegram" / "cadastros" / "cliques" = entradas
+- "inscritos_telegram" = entradas no canal Telegram
 
-# REGRAS DO QUE NÃO MENCIONAR (inviolável)
-- NUNCA fale de anúncios, Meta Ads, gasto, custo, CPA, CPF, CAC, ROI, verba, orçamento, campanha paga, tráfego pago
-- NUNCA dê sugestão relacionada a anúncios ou gestão de campanha
-- NUNCA fale "sua base", "seus leads", "captação", "funil", "qualificar leads", "responda os leads"
-- NUNCA mencione "Aytalo", "operador", "gestor", "afiliado", "equipe"
-- NUNCA escreva métricas frias de funil ("conversão de X%", "engagement rate"). Traduza pra realidade do expert.
+# PALAVRAS PROIBIDAS (não pode usar NENHUMA destas)
+funil, tráfego, conversão, taxa, métrica, engagement, engajamento (como número), CAC, CPA, CPF, CTR, FTD, FTDs, KPI, performance, anúncios, Meta Ads, ads, gasto, custo, verba, orçamento, campanha, aquisição, ativação, retenção, redeposit, redepósito, "base existente", "base ativa", "sua base", "seus leads", landing, otimizar, captação, qualificar, monitorar, analisar, diagnóstico, "fluxo de ativação", "ponto positivo", "preocupante", investigar.
 
-# REGRAS DAS SUGESTÕES (foco em CONTEÚDO/PRESENÇA)
-As sugestões devem ser AÇÕES DE CONTEÚDO que ${expertName} pode produzir/publicar:
-✅ "Grave 3 stories falando sobre [tema específico]"
-✅ "Faça uma chamada de live pras 20h com o gancho [X]"
-✅ "Posta um reel mostrando [bastidor/resultado/dica]"
-✅ "Comenta no seu post do feed convidando todo mundo pra próxima live"
-✅ "Grava um story em selfie respondendo a dúvida mais comum que rolou ontem"
-❌ "Monitore sua base"
-❌ "Responda os leads"
-❌ "Analise o engajamento"
-❌ "Otimize sua captação"
+# JEITO DE FALAR DOS DADOS (linguagem natural, sempre)
+EM VEZ DE                          USE
+"X FTDs"                       →   "X pessoas novas depositaram"
+"taxa de conversão"            →   nada (não fale)
+"sua base não está convertendo" →  "ainda não veio gente nova depositando"
+"engajamento alto na live"     →   "rolou bastante movimento no chat da live"
+"funil X→Y está furando"       →   (não fale de funil. fale do que o expert FAZ pra mudar)
+"redeposit dominante"          →   (não mencione)
+"base ativa depositou"         →   (não mencione)
+
+# EXEMPLO DE MENSAGEM RUIM (NÃO faça assim)
+"⚠️ 100% redeposit — toda a receita veio de base existente. Zero aquisição nova ontem. Vale investigar o funil de anúncios → landing → cadastro pra entender onde os 112 cliques estão se perdendo."
+
+# EXEMPLO DE MENSAGEM BOA (faça assim)
+"Ontem teve 112 pessoas clicando no seu link mas nenhuma fez cadastro ainda. Bora mudar isso:
+- Grava 1 story em selfie falando 'oh galera nova, vem se cadastrar aqui que eu vou liberar uma dica de aviator só pra quem tá entrando hoje'
+- Faz um reel rapidinho mostrando uma jogada vencedora e no final convida pra entrar no grupo
+- Chama uma live curta às 19h com o título 'PRIMEIRO DIA — aviator do zero pra galera nova'"
+
+# REGRAS DAS SUGESTÕES (sempre 3, sempre AÇÃO DE CONTEÚDO)
+Cada sugestão deve ser uma frase imperativa começando com um verbo de gravação/publicação:
+- "Grava um story..."
+- "Posta um reel..."
+- "Faz uma live..."
+- "Manda áudio no grupo..."
+- "Comenta no seu último post..."
+- "Reposta o story do [X]..."
+
+Cada sugestão deve ter um TEMA específico (não genérico):
+✅ "Grava 1 story falando sobre 'os 3 sinais que o avião vai cair antes de 2x'"
+❌ "Grave conteúdo de qualidade"
+❌ "Mantenha a frequência de posts"
 
 # TOM
-- 2ª pessoa direto com ${expertName} ("você")
-- Amigo motivacional, energético, prático — não corporativo
-- Português informal
-- Emojis pra rotular seções (🌅 🔥 💪 🎬 📱 ✨)`;
+- 2ª pessoa direto com ${expertName} ("você", "tu" se rolar natural)
+- Amigo informal, energético — tipo um parceiro que tá te chamando no zap
+- Português brasileiro coloquial
+- Emojis pra rotular seções (🌅 🔥 💪 🎬 📱 ✨)
+- NÃO use "Aytalo", "operador", "gestor", "afiliado", "equipe", "time"`;
 
   const slotInfo = {
     manha: `# Slot MANHÃ — Bom dia, ${expertName}!
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação curta* ("Bom dia, ${expertName}! 🌅" ou similar)
-2. *Como foi ONTEM* (USE APENAS diario_ontem — nada de "essa semana"): em frases naturais conte quantos novos jogadores, valor de depósitos, como foi a live (se teve), movimento do grupo. Tom de "ó como foi seu dia ontem".
-3. *3 sugestões de CONTEÚDO pra hoje* — cada uma deve ser uma ação de gravar/postar/fazer live/conversar. Use temas ligados ao que rolou ontem (ex: "Ontem teve 41 mensagens no chat da live perguntando sobre X — grava um reel respondendo essa dúvida"). NÃO repita estrutura, varie entre story / reel / live / engajamento direto.
-4. Frase de fechamento curta motivacional
+2. *Como foi ONTEM* em frase natural: "Ontem foi um dia [adjetivo]. Tiveram X pessoas novas depositando, [valor] em depósitos totais. A live [se teve] teve [X] pessoas no pico". Se algo foi baixo, fale natural: "ontem foi um dia mais devagar, não veio gente nova".
+3. *3 sugestões de CONTEÚDO pra hoje* — cada uma uma frase imperativa começando com verbo (Grava/Posta/Faz). Cada uma com TEMA específico baseado em algo de ontem (dúvida do chat, momento da live, ausência de cadastros, etc).
+4. Fechamento motivacional curto
 
 Tamanho: 600-1000 caracteres.`,
 
     tarde: `# Slot TARDE — ${expertName}, como tá o dia?
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação rápida* ("E aí, ${expertName}! 🔥" ou similar)
-2. *Como está o dia até agora* (use parcial_hoje): conte quantos novos jogadores parciais, movimento das lives de hoje, atividade do grupo. Comparar com o ritmo de ontem se fizer sentido.
-3. *Reforço das sugestões da manhã* — pergunte/lembre 1-2 ações que sugeri de manhã ("já gravou aquele reel sobre X?", "se ainda não fez a chamada da live, dá tempo até as 19h"). PERMITIDO fazer 1-2 perguntas SÓ desse tipo de reforço.
-4. Energia pra fechar o dia
+2. *Como tá o dia até agora* em frase natural: "Hoje já entraram X pessoas novas, [valor] depositados. [Comentário sobre live de hoje]." Compara com o ritmo de ontem em linguagem natural ("tá mais animado que ontem", "tá igual ontem essa hora", "tá mais devagar").
+3. *Reforço das sugestões da manhã* — relembra 1-2 ações: "já gravou aquele reel falando sobre [tema]?", "se ainda não fez a live, dá tempo até 19h"
+4. *1 sugestão extra de conteúdo pra final do dia* — algo curto pra ${expertName} fazer agora ("grava um story falando 'última hora da live de hoje, quem tá curtindo manda figurinha'")
+5. Energia pra fechar bem
 
-Tamanho: 400-800 caracteres.`,
+Tamanho: 500-900 caracteres.`,
 
     noite: `# Slot NOITE — ${expertName}, fechando o dia
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação noturna* ("Boa noite, ${expertName} 🌙" ou similar)
-2. *Resumo geral do dia* (use parcial_hoje como dia completo): novos jogadores, depósitos, lives, engajamento. Destaque o que foi melhor.
-3. *Reconhecimento sincero* — algo positivo que ${expertName} fez hoje
-4. *Pergunta de cuidado*: "tem algo que eu posso fazer pra te ajudar amanhã / pra deixar mais leve pra você?" (essa é a PERGUNTA permitida)
+2. *Resumo do dia* em frase natural: total de pessoas novas depositando, valor de depósitos, lives que rolaram, movimento do grupo. Destaca o melhor momento.
+3. *Reconhecimento sincero* — algo positivo que ${expertName} fez hoje (live, conteúdo, presença)
+4. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã? Equipamento, ideia de conteúdo, alguém pra te ajudar com edição? Pode falar." (essa é a ÚNICA pergunta permitida)
 5. Boa noite com afeto
 
 Tamanho: 400-700 caracteres.`,

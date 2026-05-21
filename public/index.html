@@ -228,6 +228,10 @@ tailwind.config = {
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2a4 4 0 00-3 6.7c.6.7 1 1.5 1 2.3v.5h4v-.5c0-.8.4-1.6 1-2.3A4 4 0 0010 2z" fill="currentColor"/><path d="M7 14h6M8 16.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> AI Advisor
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">NEW</span>
       </button>
+      <button class="nav-item" data-tab="instagram" onclick="showPanel('instagram')">
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="5" r="0.9" fill="currentColor"/></svg> Instagram
+        <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">NEW</span>
+      </button>
       <button class="nav-item" data-tab="ecossistema" onclick="showPanel('ecossistema')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><circle cx="4" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="4" cy="15" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="15" r="1.8" fill="currentColor" opacity=".6"/><line x1="10" y1="10" x2="4" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="4" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/></svg> Ecossistema
       </button>
@@ -390,6 +394,53 @@ tailwind.config = {
         </div>
 
         <div id="advisorList" class="space-y-3"></div>
+      </div>
+
+      <!-- Instagram (métricas via Graph API + snapshots diários) -->
+      <div class="panel" id="panel-instagram">
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div id="igTabButtons" class="flex bg-[#0c0f0c] rounded-lg p-0.5"></div>
+          <div class="flex gap-1 flex-wrap" id="igPeriodButtons">
+            <button onclick="switchIgPeriodo('hoje')" class="ig-periodo-btn filter-btn" data-iperiodo="hoje">Hoje</button>
+            <button onclick="switchIgPeriodo('ontem')" class="ig-periodo-btn filter-btn" data-iperiodo="ontem">Ontem</button>
+            <button onclick="switchIgPeriodo('7d')" class="ig-periodo-btn filter-btn active" data-iperiodo="7d">7 dias</button>
+            <button onclick="switchIgPeriodo('30d')" class="ig-periodo-btn filter-btn" data-iperiodo="30d">30 dias</button>
+          </div>
+          <button onclick="openIgSetup()" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-pink-400 hover:border-pink-500/50 transition-all">⚙️ Mapear contas</button>
+          <button onclick="snapshotIgNow()" class="text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-blue-400 hover:border-blue-500/50 transition-all">📸 Snapshot agora</button>
+          <button onclick="loadInstagram()" class="text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50 transition-all">↻</button>
+        </div>
+
+        <div id="igAccountInfo" class="mb-4"></div>
+        <div id="igKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+        <div id="igChart" class="bg-surface/60 border border-border/40 rounded-xl p-4 mb-4">
+          <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">📈 Seguidores ao longo do período</div>
+          <div id="igChartSvg" class="h-40"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-pink-400 uppercase tracking-wide mb-2">📊 Resumo do Período</div>
+            <div id="igDetalhe" class="text-sm text-gray-300 space-y-1"></div>
+          </div>
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">🎬 Posts Recentes</div>
+            <div id="igPosts" class="text-xs text-gray-300 space-y-2 max-h-72 overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Setup IG -->
+      <div id="igSetupModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-surface border border-border rounded-xl p-5 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white">Mapear contas Instagram → Experts</h3>
+            <button onclick="closeIgSetup()" class="text-gray-400 hover:text-white">✕</button>
+          </div>
+          <p class="text-xs text-gray-500 mb-3">Contas Instagram Business detectadas no seu token Facebook:</p>
+          <div id="igDiscovered" class="space-y-2 mb-4"></div>
+          <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Já mapeadas</div>
+          <div id="igMapped" class="space-y-1"></div>
+        </div>
       </div>
 
       <!-- Ecossistema (funil consolidado por expert) -->
@@ -951,7 +1002,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', instagram: 'Instagram', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -3456,6 +3507,208 @@ function showPanel(name) {
   if (name === 'insights') initInsightsPanel();
   if (name === 'ecossistema') initEcossistemaPanel();
   if (name === 'advisor') initAdvisorPanel();
+  if (name === 'instagram') initInstagramPanel();
+}
+
+// ── Instagram ────────────────────────────────────
+let igExpert = '';
+let igPeriodo = '7d';
+
+async function initInstagramPanel() {
+  try {
+    const accounts = await api('/instagram/accounts');
+    const container = document.getElementById('igTabButtons');
+    container.innerHTML = '';
+    if (accounts.length === 0) {
+      container.innerHTML = '<div class="px-3 py-1.5 text-xs text-amber-400">⚠️ Nenhuma conta mapeada — clique ⚙️ pra cadastrar</div>';
+      return;
+    }
+    accounts.forEach((acc, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'ig-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all ' +
+        (i === 0 ? 'bg-pink-500/15 text-pink-400' : 'text-gray-500 hover:text-gray-300');
+      btn.textContent = acc.expert;
+      btn.onclick = () => switchIgExpert(acc.expert);
+      container.appendChild(btn);
+    });
+    if (accounts.length > 0 && !igExpert) igExpert = accounts[0].expert;
+    await loadInstagram();
+  } catch (e) { console.error('initInstagramPanel:', e); }
+}
+
+function switchIgExpert(expert) {
+  igExpert = expert;
+  document.querySelectorAll('.ig-tab-btn').forEach(b => {
+    b.className = b.textContent === expert
+      ? 'ig-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all bg-pink-500/15 text-pink-400'
+      : 'ig-tab-btn px-4 py-1.5 rounded-md text-xs font-semibold transition-all text-gray-500 hover:text-gray-300';
+  });
+  loadInstagram();
+}
+
+function switchIgPeriodo(p) {
+  igPeriodo = p;
+  document.querySelectorAll('.ig-periodo-btn').forEach(b => b.classList.toggle('active', b.dataset.iperiodo === p));
+  loadInstagram();
+}
+
+async function loadInstagram() {
+  if (!igExpert) return;
+  const kpis = document.getElementById('igKpis');
+  const detalhe = document.getElementById('igDetalhe');
+  const posts = document.getElementById('igPosts');
+  const accountInfo = document.getElementById('igAccountInfo');
+  kpis.innerHTML = '<div class="col-span-full text-center text-xs text-gray-500 py-8">Carregando…</div>';
+  detalhe.innerHTML = ''; posts.innerHTML = '';
+  try {
+    const m = await api('/instagram/metricas?expert=' + encodeURIComponent(igExpert) + '&periodo=' + igPeriodo);
+    if (m.error) { kpis.innerHTML = '<div class="col-span-full text-center text-xs text-red-400 py-8">' + m.error + '</div>'; return; }
+
+    accountInfo.innerHTML = `<div class="flex items-center gap-3 bg-surface/40 border border-border/30 rounded-xl p-3">
+      ${m.profile_pic_url ? `<img src="${m.profile_pic_url}" class="w-12 h-12 rounded-full object-cover">` : ''}
+      <div>
+        <div class="text-base font-semibold text-white">@${m.ig_username}</div>
+        <div class="text-xs text-gray-500">${m.seguidores_atual?.toLocaleString('pt-BR') || '?'} seguidores · ${m.total_posts || 0} posts</div>
+      </div>
+    </div>`;
+
+    const delta = m.novos_seguidores_periodo;
+    const deltaStr = delta != null ? (delta > 0 ? '+' : '') + delta : '—';
+    const deltaColor = delta > 0 ? 'green' : delta < 0 ? 'red' : 'gray';
+
+    const cards = [
+      { label: 'Seguidores Atual', value: m.seguidores_atual?.toLocaleString('pt-BR') || '—', color: 'pink' },
+      { label: 'Δ Seguidores (' + igPeriodo + ')', value: deltaStr, color: deltaColor },
+      { label: 'Posts no Período', value: m.posts_no_periodo ?? '—', color: 'purple' },
+      { label: 'Alcance Total', value: m.reach_total?.toLocaleString('pt-BR') || '—', color: 'blue' },
+    ];
+    kpis.innerHTML = cards.map(c => `
+      <div class="bg-surface/60 border border-border/40 rounded-xl p-3">
+        <div class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">${c.label}</div>
+        <div class="text-lg font-semibold text-${c.color}-400">${c.value}</div>
+      </div>`).join('');
+
+    drawIgChart(m.serie_diaria || []);
+
+    detalhe.innerHTML = `
+      <div>Seguidores início período: <span class="text-white">${m.seguidores_inicio_periodo?.toLocaleString('pt-BR') || '—'}</span></div>
+      <div>Seguidores atual: <span class="text-white">${m.seguidores_atual?.toLocaleString('pt-BR') || '—'}</span></div>
+      <div>Novos no período: <span class="text-${deltaColor}-400">${deltaStr}</span></div>
+      <div>Posts publicados: <span class="text-white">${m.posts_no_periodo ?? '—'}</span></div>
+      <div>Alcance total: <span class="text-white">${m.reach_total?.toLocaleString('pt-BR') || 0}</span></div>
+      <div>Impressões: <span class="text-white">${m.impressions_total?.toLocaleString('pt-BR') || 0}</span></div>
+      <div>Visualizações de perfil: <span class="text-white">${m.profile_views_total?.toLocaleString('pt-BR') || 0}</span></div>
+      <div>Cliques no link: <span class="text-white">${m.website_clicks_total?.toLocaleString('pt-BR') || 0}</span></div>
+      <div class="text-[10px] text-gray-500 mt-2">${m.snapshots_count || 0} snapshots no período</div>`;
+
+    try {
+      const postList = await api('/instagram/posts?expert=' + encodeURIComponent(igExpert) + '&limit=8');
+      posts.innerHTML = (postList || []).map(p => `
+        <a href="${p.permalink}" target="_blank" class="flex gap-2 p-2 rounded-lg hover:bg-surface/50 transition-all">
+          ${p.thumbnail_url || p.media_url ? `<img src="${p.thumbnail_url || p.media_url}" class="w-12 h-12 rounded object-cover shrink-0">` : '<div class="w-12 h-12 bg-surface rounded shrink-0"></div>'}
+          <div class="flex-1 min-w-0">
+            <div class="truncate text-gray-300">${(p.caption || '(sem legenda)').slice(0, 80)}</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">❤️ ${p.like_count ?? 0} · 💬 ${p.comments_count ?? 0} · ${p.media_type}</div>
+          </div>
+        </a>`).join('') || '<div class="text-gray-500">Sem posts</div>';
+    } catch { posts.innerHTML = '<div class="text-gray-500">Sem posts disponíveis</div>'; }
+  } catch (e) {
+    kpis.innerHTML = '<div class="col-span-full text-center text-xs text-red-400 py-8">' + (e.message || 'erro') + '</div>';
+  }
+}
+
+function drawIgChart(series) {
+  const el = document.getElementById('igChartSvg');
+  if (series.length < 2) { el.innerHTML = '<div class="text-xs text-gray-500 text-center py-12">Aguardando mais snapshots…</div>'; return; }
+  const w = el.clientWidth || 600, h = 140;
+  const vals = series.map(s => s.followers || 0);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = Math.max(max - min, 1);
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * (w - 20) + 10;
+    const y = h - 10 - ((v - min) / range) * (h - 30);
+    return `${x},${y}`;
+  }).join(' ');
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" class="w-full h-full">
+    <polyline points="${pts}" fill="none" stroke="#ec4899" stroke-width="2"/>
+    ${vals.map((v, i) => {
+      const x = (i / (vals.length - 1)) * (w - 20) + 10;
+      const y = h - 10 - ((v - min) / range) * (h - 30);
+      return `<circle cx="${x}" cy="${y}" r="3" fill="#ec4899"/>`;
+    }).join('')}
+    <text x="10" y="15" fill="#888" font-size="10">${max.toLocaleString('pt-BR')}</text>
+    <text x="10" y="${h-5}" fill="#888" font-size="10">${min.toLocaleString('pt-BR')}</text>
+  </svg>`;
+}
+
+async function openIgSetup() {
+  document.getElementById('igSetupModal').classList.remove('hidden');
+  const discovered = document.getElementById('igDiscovered');
+  const mapped = document.getElementById('igMapped');
+  discovered.innerHTML = '<div class="text-xs text-gray-500">Buscando contas…</div>';
+  mapped.innerHTML = '';
+  try {
+    const [accs, mappedList] = await Promise.all([
+      api('/instagram/discover'),
+      api('/instagram/accounts'),
+    ]);
+    if (!accs.length) {
+      discovered.innerHTML = '<div class="text-xs text-amber-400">Nenhuma conta IG business detectada. Verifique o FB_ACCESS_TOKEN.</div>';
+    } else {
+      discovered.innerHTML = accs.map(a => `
+        <div class="flex items-center gap-2 p-2 border border-border/40 rounded-lg">
+          <img src="${a.profile_pic_url}" class="w-10 h-10 rounded-full">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold text-white">@${a.ig_username}</div>
+            <div class="text-[10px] text-gray-500">${a.followers_count?.toLocaleString('pt-BR') || '?'} seguidores · ${a.fb_page_name}</div>
+          </div>
+          <select id="exp_${a.ig_user_id}" class="text-xs bg-[#0c0f0c] border border-border rounded px-2 py-1">
+            <option value="">— escolher expert —</option>
+            <option value="DANI">DANI</option><option value="DEIVID">DEIVID</option>
+            <option value="JUH">JUH</option><option value="NUCLEAR">NUCLEAR</option>
+          </select>
+          <button onclick='mapIgAccount(${JSON.stringify(a).replace(/'/g, "&apos;")})' class="text-xs px-3 py-1 rounded bg-pink-500/20 text-pink-400">Mapear</button>
+        </div>`).join('');
+    }
+    mapped.innerHTML = mappedList.map(m => `
+      <div class="flex items-center justify-between p-2 text-xs border border-border/30 rounded">
+        <span><strong>${m.expert}</strong> → @${m.ig_username}</span>
+        <button onclick="unmapIg('${m.expert}')" class="text-red-400 hover:text-red-300">remover</button>
+      </div>`).join('') || '<div class="text-xs text-gray-500">Nenhuma ainda</div>';
+  } catch (e) {
+    discovered.innerHTML = '<div class="text-xs text-red-400">' + e.message + '</div>';
+  }
+}
+
+function closeIgSetup() { document.getElementById('igSetupModal').classList.add('hidden'); }
+
+async function mapIgAccount(a) {
+  const expert = document.getElementById('exp_' + a.ig_user_id).value;
+  if (!expert) { alert('Escolha um expert'); return; }
+  try {
+    await api('/instagram/accounts', { method: 'POST', body: {
+      expert, ig_user_id: a.ig_user_id, ig_username: a.ig_username,
+      fb_page_id: a.fb_page_id, fb_page_name: a.fb_page_name, profile_pic_url: a.profile_pic_url,
+    }});
+    openIgSetup();
+    initInstagramPanel();
+  } catch (e) { alert(e.message); }
+}
+
+async function unmapIg(expert) {
+  if (!confirm('Remover mapeamento de ' + expert + '?')) return;
+  await api('/instagram/accounts/' + expert, { method: 'DELETE' });
+  openIgSetup();
+  initInstagramPanel();
+}
+
+async function snapshotIgNow() {
+  if (!confirm('Forçar snapshot agora pra todas as contas mapeadas?')) return;
+  try {
+    const r = await api('/instagram/snapshot', { method: 'POST', body: {} });
+    alert('Snapshot ok pra ' + r.results.length + ' conta(s). Recarregando…');
+    loadInstagram();
+  } catch (e) { alert(e.message); }
 }
 
 // ── AI Advisor ───────────────────────────────────

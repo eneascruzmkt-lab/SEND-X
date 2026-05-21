@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roleta — O Guia Completo do Jogo Mais Elegante do Cassino</title>
+  <meta name="description" content="Aprenda tudo sobre a roleta: regras, tipos de apostas, estratégias clássicas e a história do jogo mais icônico dos cassinos modernos." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=Jost:wght@300;400;500&family=UnifrakturMaguntia&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --ink:    #0e0c09;
+      --paper:  #f5f0e8;
+      --cream:  #ede7d4;
+      --gold:   #b8944a;
+      --gold2:  #d4a85c;
+      --red:    #8b1a1a;
+      --muted:  #6b6456;
+      --line:   rgba(184,148,74,.35);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 18px;
+      line-height: 1.75;
+      overflow-x: hidden;
+    }
+
+    /* ── grain overlay ─────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 999; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: .45;
+    }
+
+    /* ── top bar ───────────────────────────────── */
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: 'Jost', sans-serif;
+      font-size: 11px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .topbar span { opacity: .7; }
+    .topbar a { color: var(--gold); text-decoration: none; }
+
+    /* ── masthead ──────────────────────────────── */
+    .masthead {
+      text-align: center;
+      padding: 60px 24px 40px;
+      border-bottom: 3px double var(--line);
+      position: relative;
+    }
+    .issue-label {
+      font-family: 'Jost', sans-serif;
+      font-size: 10px; letter-spacing: .35em;
+      text-transform: uppercase; color: var(--gold);
+      display: block; margin-bottom: 18px;
+    }
+    .masthead h1 {
+      font-family: 'UnifrakturMaguntia', cursive;
+      font-size: clamp(48px, 10vw, 110px);
+      font-weight: 400;
+      line-height: .95;
+      color: var(--ink);
+      letter-spacing: .01em;
+    }
+    .masthead-sub {
+      margin-top: 18px;
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: clamp(15px, 2.2vw, 21px);
+      color: var(--muted);
+      letter-spacing: .04em;
+    }
+
+    /* ── ornament ──────────────────────────────── */
+    .ornament {
+      text-align: center;
+      font-size: 22px;
+      color: var(--gold);
+      letter-spacing: .3em;
+      padding: 20px 0 14px;
+      opacity: .7;
+    }
+
+    /* ── wheel hero ────────────────────────────── */
+    .wheel-hero {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 50px 20px 30px;
+      position: relative;
+    }
+    .wheel-wrap {
+      position: relative;
+      width: min(380px, 88vw);
+      height: min(380px, 88vw);
+    }
+
+    /* outer ring glow */
+    .wheel-wrap::before {
+      content: '';
+      position: absolute; inset: -18px;
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--gold) 0deg, transparent 2deg,
+        transparent 88deg, var(--gold) 90deg,
+        transparent 92deg, transparent 178deg,
+        var(--gold) 180deg, transparent 182deg,
+        transparent 268deg, var(--gold) 270deg,
+        transparent 272deg, transparent 358deg,
+        var(--gold) 360deg
+      );
+      opacity: .3;
+      animation: rotateWheel 60s linear infinite;
+    }
+
+    .wheel {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      position: relative;
+      animation: rotateWheel 20s linear infinite;
+      filter: drop-shadow(0 0 32px rgba(184,148,74,.25));
+    }
+
+    @keyframes rotateWheel {
+      to { transform: rotate(360deg); }
+    }
+
+    /* SVG wheel inline */
+    .wheel svg { width: 100%; height: 100%; }
+
+    /* ball */
+    .wheel-ball {
+      position: absolute;
+      width: 14px; height: 14px;
+      background: radial-gradient(circle at 35% 30%, #fff 0%, #d0cac0 60%, #a09880 100%);
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0,0,0,.4), inset 0 1px 3px rgba(255,255,255,.8);
+      top: 14%;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: ballOrbit 4.7s cubic-bezier(.4,0,.6,1) infinite;
+      z-index: 2;
+    }
+    @keyframes ballOrbit {
+      0%   { transform: translate(-50%, 0) rotate(0deg)   translateX(130px) rotate(0deg);    opacity:1; }
+      85%  { transform: translate(-50%, 0) rotate(720deg) translateX(80px)  rotate(-720deg); opacity:1; }
+      90%  { opacity: .6; }
+      100% { transform: translate(-50%, 0) rotate(790deg) translateX(60px)  rotate(-790deg); opacity:1; }
+    }
+
+    /* ── layout grid ───────────────────────────── */
+    .container { max-width: 920px; margin: 0 auto; padding: 0 28px; }
+
+    /* ── dropcap section ───────────────────────── */
+    .lead-section {
+      padding: 50px 0 30px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 60px;
+      align-items: start;
+      border-top: 1px solid var(--line);
+    }
+    @media(max-width:680px){ .lead-section{ grid-template-columns: 1fr; } }
+
+    .lead-text p:first-of-type::first-letter {
+      font-size: 5.5em;
+      float: left;
+      line-height: .78;
+      margin: 0 10px -6px 0;
+      font-family: 'UnifrakturMaguntia', cursive;
+      color: var(--gold);
+    }
+    .lead-text p { margin-bottom: 1.1em; font-size: 1.05em; }
+
+    .lead-sidebar {
+      padding: 30px 0 0;
+    }
+    .sidebar-card {
+      background: var(--ink);
+      color: var(--paper);
+      padding: 30px 28px;
+      position: relative;
+    }
+    .sidebar-card::before {
+      content: '';
+      position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px;
+      border: 1px solid rgba(184,148,74,.4);
+      pointer-events: none;
+    }
+    .sidebar-card h3 {
+      font-size: 11px;
+      font-family: 'Jost', sans-serif;
+      letter-spacing: .25em;
+      text-transform: uppercase;
+      color: var(--gold2);
+      margin-bottom: 16px;
+    }
+    .sidebar-card ul { list-style: none; }
+    .sidebar-card ul li {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      font-size: .95em;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .sidebar-card ul li:last-child { border-bottom: none; }
+    .badge {
+      background: var(--gold);
+      color: var(--ink);
+      font-family: 'Jost', sans-serif;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+    .badge.red { background: var(--red); color: #fff; }
+    .badge.grey { background: #444; color: #ccc; }
+
+    /* ── chapter headings ──────────────────────── */
+    .chapter {
+      padding: 60px 0 20px;
+      border-top: 1px solid var(--line);
+    }
+    .chapter-num {
+      font-family: 'Jost', sans-serif;
+      font-size: 10px; letter-spacing: .3em;
+      text-transform: uppercase; color: var(--gold);
+      display: block; margin-bottom: 12px;
+    }
+    .chapter h2 {
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 600;
+      line-height: 1.05;
+      color: var(--ink);
+    }
+    .chapter h2 em { font-style: italic; color: var(--red); }
+
+    .chapter p { margin: 1em 0; max-width: 660px; }
+
+    /* ── pull quote ────────────────────────────── */
+    .pull-quote {
+      margin: 50px 0;
+      padding: 36px 48px;
+      border-left: 4px solid var(--gold);
+      border-right: 4px solid var(--gold);
+      text-align: center;
+      background: var(--cream);
+      position: relative;
+    }
+    .pull-quote::before, .pull-quote::after {
+      content: '—';
+      position: absolute;
+      font-size: 60px;
+      font-family: 'Cormorant Garamond', serif;
+      color: var(--gold);
+      opacity: .25;
+      line-height: 0;
+    }
+    .pull-quote::before { top: 42px; left: 18px; }
+    .pull-quote::after  { bottom: 32px; right: 18px; }
+    .pull-quote p {
+      font-size: clamp(18px, 3vw, 26px);
+      font-style: italic;
+      line-height: 1.4;
+      color: var(--ink);
+      font-weight: 300;
+    }
+    .pull-quote cite {
+      display: block;
+      margin-top: 14px;
+      font-style: normal;
+      font-family: 'Jost', sans-serif;
+      font-size: 11px; letter-spacing: .25em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    /* ── bets table ────────────────────────────── */
+    .bets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 2px;
+      margin: 36px 0;
+    }
+    .bet-card {
+      background: var(--cream);
+      padding: 22px 20px;
+      position: relative;
+      overflow: hidden;
+      transition: background .2s;
+    }
+    .bet-card:hover { background: var(--ink); color: var(--paper); }
+    .bet-card:hover .bet-name { color: var(--gold2); }
+    .bet-card:hover .bet-payout { color: #fff; }
+    .bet-card:hover .bet-desc { color: rgba(245,240,232,.7); }
+    .bet-accent {
+      position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%;
+    }
+    .bet-name {
+      font-size: 14px;
+      font-family: 'Jost', sans-serif;
+      font-weight: 500;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: var(--gold);
+    }
+    .bet-payout {
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .bet-desc { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+
+    /* ── two-col text ──────────────────────────── */
+    .two-col {
+      columns: 2 340px;
+      gap: 48px;
+      margin: 20px 0;
+    }
+    .two-col p { margin-bottom: 1em; break-inside: avoid; }
+
+    /* ── strategy cards ────────────────────────── */
+    .strat-list { margin: 30px 0; }
+    .strat-item {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 0 24px;
+      padding: 28px 0;
+      border-bottom: 1px solid var(--line);
+      align-items: start;
+    }
+    .strat-num {
+      font-family: 'UnifrakturMaguntia', cursive;
+      font-size: 52px;
+      line-height: 1;
+      color: var(--cream);
+      text-shadow: 0 0 0 var(--gold);
+      -webkit-text-stroke: 1px var(--gold);
+    }
+    .strat-body h4 {
+      font-size: 20px; font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .strat-body p { font-size: .97em; color: var(--muted); }
+
+    /* ── roulette comparison ───────────────────── */
+    .compare-table {
+      width: 100%; border-collapse: collapse; margin: 28px 0;
+      font-family: 'Jost', sans-serif; font-size: 13.5px;
+    }
+    .compare-table th {
+      background: var(--ink); color: var(--paper);
+      padding: 12px 18px; text-align: left;
+      letter-spacing: .12em; text-transform: uppercase;
+      font-weight: 400;
+    }
+    .compare-table td {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .compare-table tr:nth-child(even) td { background: var(--cream); }
+    .compare-table .highlight { color: var(--gold); font-weight: 500; }
+
+    /* ── footer ────────────────────────────────── */
+    footer {
+      margin-top: 80px;
+      border-top: 3px double var(--line);
+      padding: 40px 28px;
+      text-align: center;
+    }
+    footer p {
+      font-size: 12px;
+      font-family: 'Jost', sans-serif;
+      color: var(--muted);
+      letter-spacing: .06em;
+      line-height: 1.8;
+    }
+    footer .footer-logo {
+      font-family: 'UnifrakturMaguntia', cursive;
+      font-size: 36px; color: var(--gold); opacity: .5;
+      display: block; margin-bottom: 16px;
+    }
+    .disclaimer {
+      margin-top: 20px;
+      background: var(--cream);
+      border: 1px solid var(--line);
+      padding: 18px 24px;
+      font-size: 11.5px;
+      font-family: 'Jost', sans-serif;
+      color: var(--muted);
+      letter-spacing: .02em;
+      line-height: 1.7;
+      text-align: left;
+    }
+
+    /* ── scroll reveal ─────────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* ── number board decoration ───────────────── */
+    .number-board {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin: 28px 0; justify-content: flex-start;
+    }
+    .num {
+      width: 36px; height: 36px;
+      border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Jost', sans-serif;
+      font-size: 12px; font-weight: 500;
+      color: #fff;
+      transition: transform .15s;
+    }
+    .num:hover { transform: scale(1.15); }
+    .num.r  { background: var(--red); }
+    .num.b  { background: #1a1a1a; }
+    .num.g  { background: #1a6b3c; }
+
+    /* responsive tweaks */
+    @media (max-width: 600px) {
+      .topbar { padding: 10px 16px; }
+      .container { padding: 0 18px; }
+      .pull-quote { padding: 28px 24px; }
+      .strat-num { font-size: 38px; }
+      .bets-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- top bar -->
+  <div class="topbar">
+    <span>Guia de Cassino &nbsp;·&nbsp; Edição Especial</span>
+    <span>Vol. I &nbsp;·&nbsp; A Roleta</span>
+  </div>
+
+  <!-- masthead -->
+  <header class="masthead">
+    <span class="issue-label">Guia Completo</span>
+    <h1>Roleta</h1>
+    <p class="masthead-sub">História, Regras, Apostas &amp; Estratégias do Jogo Mais Elegante do Cassino</p>
+  </header>
+
+  <div class="ornament">✦ &nbsp;&nbsp;&nbsp; ✦ &nbsp;&nbsp;&nbsp; ✦</div>
+
+  <!-- animated wheel -->
+  <section class="wheel-hero">
+    <div class="wheel-wrap">
+      <div class="wheel">
+        <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="outerRing" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stop-color="#c8a862"/>
+              <stop offset="100%" stop-color="#7a5e2a"/>
+            </radialGradient>
+          </defs>
+
+          <!-- outer gold ring -->
+          <circle cx="200" cy="200" r="198" fill="url(#outerRing)" />
+          <!-- bg disc -->
+          <circle cx="200" cy="200" r="185" fill="#1a1209" />
+
+          <!-- alternating red/black sectors — 37 numbers (European) -->
+          <g id="sectors">
+            <!-- We'll draw 37 sectors. Red: 1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36 -->
+            <!-- Rotation per number: 360/37 ≈ 9.73° -->
+            <!-- Sector colours match European roulette order: 0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26 -->
+            <!-- For visual purposes we alternate red/black for 36 numbers + green for 0 -->
+          </g>
+
+          <!-- Build sectors via JS below, but for the static SVG we paint bands -->
+          <g id="wheel-sectors"></g>
+
+          <!-- inner black hub -->
+          <circle cx="200" cy="200" r="90" fill="#0e0c09" />
+          <!-- hub ring -->
+          <circle cx="200" cy="200" r="90" fill="none" stroke="#b8944a" stroke-width="2" />
+          <circle cx="200" cy="200" r="80" fill="none" stroke="#b8944a" stroke-width=".5" opacity=".5"/>
+
+          <!-- center diamond -->
+          <polygon points="200,165 215,200 200,235 185,200" fill="none" stroke="#b8944a" stroke-width="1.5" opacity=".7"/>
+          <circle cx="200" cy="200" r="8" fill="#b8944a" />
+          <circle cx="200" cy="200" r="3" fill="#f5f0e8" />
+        </svg>
+      </div>
+      <div class="wheel-ball"></div>
+    </div>
+  </section>
+
+  <!-- draw sectors with JS -->
+  <script>
+    (function() {
+      const svg = document.querySelector('#wheel-sectors');
+      const ns = 'http://www.w3.org/2000/svg';
+      const cx = 200, cy = 200, outerR = 182, innerR = 93;
+      // European order
+      const order = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+      const reds  = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+      const n = order.length;
+      const step = (2 * Math.PI) / n;
+
+      order.forEach((num, i) => {
+        const startAngle = i * step - Math.PI / 2;
+        const endAngle   = (i + 1) * step - Math.PI / 2;
+        const x1 = cx + outerR * Math.cos(startAngle);
+        const y1 = cy + outerR * Math.sin(startAngle);
+        const x2 = cx + outerR * Math.cos(endAngle);
+        const y2 = cy + outerR * Math.sin(endAngle);
+        const x3 = cx + innerR * Math.cos(endAngle);
+        const y3 = cy + innerR * Math.sin(endAngle);
+        const x4 = cx + innerR * Math.cos(startAngle);
+        const y4 = cy + innerR * Math.sin(startAngle);
+
+        const path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', `M${x1},${y1} A${outerR},${outerR} 0 0,1 ${x2},${y2} L${x3},${y3} A${innerR},${innerR} 0 0,0 ${x4},${y4} Z`);
+        const color = num === 0 ? '#1a6b3c' : reds.has(num) ? '#8b1a1a' : '#111';
+        path.setAttribute('fill', color);
+        path.setAttribute('stroke', '#b8944a');
+        path.setAttribute('stroke-width', '0.8');
+        svg.appendChild(path);
+
+        // number label
+        const midAngle = startAngle + step / 2;
+        const labelR = (outerR + innerR) / 2;
+        const tx = cx + labelR * Math.cos(midAngle);
+        const ty = cy + labelR * Math.sin(midAngle);
+        const text = document.createElementNS(ns, 'text');
+        text.setAttribute('x', tx);
+        text.setAttribute('y', ty);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('transform', `rotate(${(midAngle * 180 / Math.PI) + 90}, ${tx}, ${ty})`);
+        text.setAttribute('font-size', '7');
+        text.setAttribute('font-family', 'Jost, sans-serif');
+        text.setAttribute('fill', '#f5f0e8');
+        text.setAttribute('font-weight', '400');
+        text.textContent = num;
+        svg.appendChild(text);
+      });
+    })();
+  </script>
+
+  <!-- ── CONTENT ── -->
+  <main class="container">
+
+    <!-- lead section -->
+    <section class="lead-section reveal">
+      <div class="lead-text">
+        <p>
+          Nenhum outro jogo de cassino carrega tanto peso simbólico quanto a roleta. Desde o século XVIII, quando Blaise Pascal tentava criar uma máquina de movimento perpétuo e inadvertidamente inventou o mecanismo que viria a dominar os salões de Monte Carlo, a roda giratória se tornou sinônimo de destino, fortuna e a eterna tensão entre o acaso e o cálculo humano.
+        </p>
+        <p>
+          O apelo é universal: qualquer pessoa entende instantaneamente o que acontece quando a bolinha de marfim desliza sobre a roda polida. Não há cartas para decorar, nem hierarquias complexas de mãos. Há apenas a elegância matemática de 37 números, uma bolinha e a inevitabilidade da física.
+        </p>
+        <p>
+          Este guia cobre tudo que um jogador precisa saber — das apostas mais simples às estratégias mais debatidas —, sem romantizar nem demonizar o jogo.
+        </p>
+      </div>
+      <div class="lead-sidebar">
+        <div class="sidebar-card">
+          <h3>Referência Rápida</h3>
+          <ul>
+            <li>Tipo <span class="badge">Europeia</span></li>
+            <li>Números <span style="color:var(--gold2)">0 – 36</span></li>
+            <li>Casa (europeia) <span class="badge">2,70%</span></li>
+            <li>Casa (americana) <span class="badge red">5,26%</span></li>
+            <li>Bolinho <span class="badge grey">Marfim / Acrílico</span></li>
+            <li>Aposta mín. <span style="color:var(--gold2)">variável</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Chapter 1 ── -->
+    <section class="chapter reveal">
+      <span class="chapter-num">Capítulo I</span>
+      <h2>A História de Uma <em>Roda Eterna</em></h2>
+      <div class="two-col">
+        <p>
+          O nome vem do francês — simplesmente "pequena roda". A versão que conhecemos hoje consolidou-se em Paris por volta de 1796, descrita com detalhes precisos em novelas da época. A roda já tinha o layout familiar: números de 1 a 36 alternados em vermelho e preto, mais um único zero verde.
+        </p>
+        <p>
+          Em 1843, os irmãos François e Louis Blanc introduziram a roleta de zero único em Bad Homburg, Alemanha, para competir com cassinos rivais. A vantagem da casa caiu pela metade — e o público nunca mais quis a versão duplo-zero se pudesse evitar.
+        </p>
+        <p>
+          Quando o jogo cruzou o Atlântico no século XIX, os operadores americanos adicionaram o "00" para aumentar a margem. Essa escolha dividiu permanentemente a roleta em dois mundos: a versão europeia, refinada e precisa; e a americana, com maior vantagem da casa.
+        </p>
+        <p>
+          Hoje a roleta eletrônica ao vivo conecta milhões de jogadores a dealers reais filmados em estúdios de Malta e Barcelona, mas a física do jogo é exatamente a mesma de há 200 anos.
+        </p>
+      </div>
+    </section>
+
+    <!-- pull quote -->
+    <div class="pull-quote reveal">
+      <p>"A roleta é a única máquina do cassino que não pretende ser outra coisa. Ela é pura, honesta e implacável."</p>
+      <cite>— Enciclopédia dos Jogos de Cassino, 1928</cite>
+    </div>
+
+    <!-- ── Chapter 2 ── -->
+    <section class="chapter reveal">
+      <span class="chapter-num">Capítulo II</span>
+      <h2>As Apostas: <em>Mapa Completo</em></h2>
+      <p>As apostas se dividem em duas categorias: <strong>internas</strong> (dentro do grid numerado) e <strong>externas</strong> (fora do grid, cobrindo grandes grupos).</p>
+
+      <div class="bets-grid">
+        <!-- straight up -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:var(--red)"></span>
+          <div class="bet-name">Pleno (Straight Up)</div>
+          <div class="bet-payout">35:1</div>
+          <div class="bet-desc">Aposta em um único número. O maior pagamento da mesa.</div>
+        </div>
+        <!-- split -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:#c07a2a"></span>
+          <div class="bet-name">Cavalo (Split)</div>
+          <div class="bet-payout">17:1</div>
+          <div class="bet-desc">2 números adjacentes. Ficha na linha divisória.</div>
+        </div>
+        <!-- street -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:var(--gold)"></span>
+          <div class="bet-name">Transversal (Street)</div>
+          <div class="bet-payout">11:1</div>
+          <div class="bet-desc">Uma linha horizontal de 3 números.</div>
+        </div>
+        <!-- corner -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:#6b8a2a"></span>
+          <div class="bet-name">Quadrado (Corner)</div>
+          <div class="bet-payout">8:1</div>
+          <div class="bet-desc">4 números formando um quadrado no layout.</div>
+        </div>
+        <!-- line -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:#2a5e8a"></span>
+          <div class="bet-name">Seção (Line)</div>
+          <div class="bet-payout">5:1</div>
+          <div class="bet-desc">Dois streets consecutivos — 6 números.</div>
+        </div>
+        <!-- dozen -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:#6a2a8a"></span>
+          <div class="bet-name">Dúzia (Dozen)</div>
+          <div class="bet-payout">2:1</div>
+          <div class="bet-desc">1ª (1–12), 2ª (13–24) ou 3ª (25–36) dúzia.</div>
+        </div>
+        <!-- column -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:#8a2a2a"></span>
+          <div class="bet-name">Coluna (Column)</div>
+          <div class="bet-payout">2:1</div>
+          <div class="bet-desc">Uma das 3 colunas verticais de 12 números.</div>
+        </div>
+        <!-- even/odd -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:var(--muted)"></span>
+          <div class="bet-name">Par / Ímpar</div>
+          <div class="bet-payout">1:1</div>
+          <div class="bet-desc">Todos os pares ou todos os ímpares (0 perde).</div>
+        </div>
+        <!-- red/black -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:var(--red)"></span>
+          <div class="bet-name">Vermelho / Preto</div>
+          <div class="bet-payout">1:1</div>
+          <div class="bet-desc">A aposta mais popular e visualmente icônica.</div>
+        </div>
+        <!-- high/low -->
+        <div class="bet-card">
+          <span class="bet-accent" style="background:#3a6a3a"></span>
+          <div class="bet-name">Alto / Baixo</div>
+          <div class="bet-payout">1:1</div>
+          <div class="bet-desc">1–18 (manque) ou 19–36 (passe).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- number board -->
+    <section class="reveal" style="padding: 20px 0 50px;">
+      <div style="font-family:'Jost',sans-serif; font-size:10px; letter-spacing:.3em; text-transform:uppercase; color:var(--gold); margin-bottom:14px;">
+        Disposição — Ordem Europeia
+      </div>
+      <div class="number-board" id="numboard"></div>
+    </section>
+
+    <script>
+      const order = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+      const reds  = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+      const board = document.getElementById('numboard');
+      order.forEach(n => {
+        const div = document.createElement('div');
+        div.className = 'num ' + (n===0 ? 'g' : reds.has(n) ? 'r' : 'b');
+        div.textContent = n;
+        board.appendChild(div);
+      });
+    </script>
+
+    <!-- ── Chapter 3 ── -->
+    <section class="chapter reveal">
+      <span class="chapter-num">Capítulo III</span>
+      <h2>Europeia vs. Americana vs. <em>Francesa</em></h2>
+      <p>Nem toda roleta é igual. As três versões principais diferem em layout e, principalmente, em vantagem matemática para a casa.</p>
+
+      <table class="compare-table" style="margin-top:28px;">
+        <thead>
+          <tr>
+            <th>Versão</th>
+            <th>Zeros</th>
+            <th>Vantagem da Casa</th>
+            <th>Regra Especial</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Europeia</strong></td>
+            <td>0 (1 zero)</td>
+            <td class="highlight">2,70 %</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><strong>Francesa</strong></td>
+            <td>0 (1 zero)</td>
+            <td class="highlight">1,35 %*</td>
+            <td>La Partage / En Prison</td>
+          </tr>
+          <tr>
+            <td><strong>Americana</strong></td>
+            <td>0 + 00 (2 zeros)</td>
+            <td style="color:var(--red)">5,26 %</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:.87em; color:var(--muted); font-family:'Jost',sans-serif; margin-top:-6px;">
+        * Somente para apostas de dinheiro igual (vermelho/preto, par/ímpar, alto/baixo) com a regra La Partage em vigor.
+      </p>
+
+      <p style="margin-top:20px;">
+        <strong>La Partage</strong> ("a divisão") é a regra francesa que devolve metade da aposta par/ímpar quando cai o zero. <strong>En Prison</strong> é variante: a aposta fica "presa" para o próximo giro em vez de ser devolvida. Ambas reduzem a vantagem da casa para 1,35% — fazendo da roleta francesa matematicamente a mais favorável ao jogador entre todos os jogos de cassino clássicos.
+      </p>
+    </section>
+
+    <!-- ── Chapter 4 ── -->
+    <section class="chapter reveal">
+      <span class="chapter-num">Capítulo IV</span>
+      <h2>Estratégias Clássicas: <em>O que funciona</em> (e o que não)</h2>
+      <p>Nenhuma estratégia elimina a vantagem da casa em longo prazo — a matemática é inegociável. Mas os sistemas abaixo têm lógica de gestão de banca que pode influenciar a experiência do jogo.</p>
+
+      <div class="strat-list">
+        <div class="strat-item">
+          <div class="strat-num">I</div>
+          <div class="strat-body">
+            <h4>Martingale</h4>
+            <p>Dobra a aposta após cada derrota. Recupera todas as perdas com um único acerto. Exige banca ilimitada (que não existe) e esbarra nos limites de mesa. Funciona no curto prazo; inevitavelmente falha no longo prazo.</p>
+          </div>
+        </div>
+        <div class="strat-item">
+          <div class="strat-num">II</div>
+          <div class="strat-body">
+            <h4>Fibonacci</h4>
+            <p>Segue a sequência 1–1–2–3–5–8–13… Após cada derrota sobe um passo; após ganho retrocede dois. Progressão mais suave que Martingale — menor risco de explodir a banca, mas recuperação mais lenta.</p>
+          </div>
+        </div>
+        <div class="strat-item">
+          <div class="strat-num">III</div>
+          <div class="strat-body">
+            <h4>D'Alembert</h4>
+            <p>Aumenta uma unidade após derrota, diminui uma após vitória. Baseia-se na falácia do equilibrio — que não existe na roleta — mas gera oscilações pequenas e previsíveis, úteis para jogar com orçamento definido.</p>
+          </div>
+        </div>
+        <div class="strat-item">
+          <div class="strat-num">IV</div>
+          <div class="strat-body">
+            <h4>James Bond (Flat)</h4>
+            <p>Distribui chips fixos: 70% nos altos (19–36), 25% na linha 13–18, 5% no zero. Cobre 25 dos 37 números. Perde apenas se cair 1–12. Estratégia de "cobertura máxima" — sem progressão, sem Martingale.</p>
+          </div>
+        </div>
+        <div class="strat-item">
+          <div class="strat-num">V</div>
+          <div class="strat-body">
+            <h4>Gestão de Banca Simples</h4>
+            <p>Define um orçamento fixo por sessão; nunca ultrapassa. Separa o ganho do capital original assim que aparecer. Sai quando atingir +30% ou −50% do orçamento. Não parece glamourosa, mas é a única estratégia que protege você de verdade.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- pull quote 2 -->
+    <div class="pull-quote reveal">
+      <p>"A melhor estratégia na roleta é ter uma — não importa qual, contanto que você a siga."</p>
+      <cite>— Axioma clássico dos jogadores profissionais</cite>
+    </div>
+
+    <!-- ── Chapter 5 ── -->
+    <section class="chapter reveal">
+      <span class="chapter-num">Capítulo V</span>
+      <h2>Etiqueta e <em>Vocabulário</em></h2>
+      <div class="two-col">
+        <p><strong>Jetons:</strong> fichas coloridas exclusivas da roleta, atribuídas a cada jogador para evitar confusão de apostas.</p>
+        <p><strong>Croupier:</strong> o dealer da roleta. Chama "faites vos jeux" (façam suas apostas) e "rien ne va plus" (não é mais possível apostar) antes do lançamento.</p>
+        <p><strong>Racetrack:</strong> o layout oval secundário presente em muitas mesas, permitindo apostar em grupos de números pela posição geográfica na roda (Voisins du Zéro, Tiers du Cylindre, Orphelins).</p>
+        <p><strong>Announced bets:</strong> apostas chamadas em voz alta ao croupier, sem fichas físicas na mesa, quando o tempo é curto.</p>
+        <p><strong>En plein:</strong> termo francês para aposta plena (straight up) em um único número.</p>
+        <p><strong>Biased wheel:</strong> roda com desgaste físico que favorece certos números de forma não-aleatória — rara em cassinos modernos, mas explorada famosamente no século XX.</p>
+        <p><strong>Hot numbers:</strong> ilusão cognitiva. Números que saíram recentemente não têm maior probabilidade de sair novamente. Cada giro é independente.</p>
+      </div>
+    </section>
+
+    <div class="ornament" style="padding: 40px 0 10px;">✦ &nbsp;&nbsp;&nbsp; ✦ &nbsp;&nbsp;&nbsp; ✦</div>
+
+  </main>
+
+  <!-- footer -->
+  <footer>
+    <span class="footer-logo">Roleta</span>
+    <p>
+      Guia editorial independente sobre jogos de cassino.<br/>
+      Conteúdo produzido com fins informativos e educacionais.
+    </p>
+    <div class="disclaimer" style="max-width:760px; margin: 18px auto 0;">
+      <strong>Jogo Responsável:</strong> Jogos de cassino envolvem risco financeiro. Somente adultos maiores de 18 anos podem participar onde legalmente permitido. Se o jogo interfere em sua vida financeira ou emocional, procure ajuda. Brasil: CVV 188 (24h). Nunca aposte mais do que pode perder.
+    </div>
+  </footer>
+
+  <!-- scroll reveal -->
+  <script>
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  </script>
+
+</body>
+</html>

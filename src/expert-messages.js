@@ -68,24 +68,48 @@ function resumirParaExpert(f) {
       mensagens_no_chat_da_live: f.detalhes.lives.mensagens,
       engajamento_chat: f.detalhes.lives.engajamento,
     } : null,
-    grupo_whatsapp: f.detalhes?.whatsapp ? {
-      total_membros: f.detalhes.whatsapp.membros_total,
-      pessoas_que_mandaram_msg: f.detalhes.whatsapp.membros_ativos,
-      total_mensagens_no_grupo: f.detalhes.whatsapp.mensagens_total,
-    } : null,
   };
 }
 
 async function coletarDadosExpert(expert, userId = 1) {
-  const [ontem, hoje, sete] = await Promise.all([
+  const { executeMonitorgrupoTool } = require('./monitorgrupo-tools');
+  const ig = require('./instagram-tools');
+
+  const [ontem, hoje, gruposOntem, gruposHoje, igOntem, igHoje] = await Promise.all([
     executeFunilTool('get_funil_expert', { expert, periodo: 'ontem' }, userId).catch(() => null),
     executeFunilTool('get_funil_expert', { expert, periodo: 'hoje' }, userId).catch(() => null),
-    executeFunilTool('get_funil_expert', { expert, periodo: '7d' }, userId).catch(() => null),
+    executeMonitorgrupoTool('get_engajamento_por_grupo', { expert, periodo: 'ontem' }).catch(() => null),
+    executeMonitorgrupoTool('get_engajamento_por_grupo', { expert, periodo: 'hoje' }).catch(() => null),
+    ig.getInstagramMetrics(userId, expert, 'ontem').catch(() => null),
+    ig.getInstagramMetrics(userId, expert, 'hoje').catch(() => null),
   ]);
+
+  // Resumir grupos por slot (lista de cada grupo com suas métricas)
+  function resumirGrupos(g) {
+    if (!g || !g.grupos) return null;
+    return g.grupos.map(x => ({
+      nome: x.nome,
+      total_membros: x.total_membros,
+      ativos: x.ativos,
+      mensagens: x.total_mensagens,
+      novos_membros: x.novos_membros,
+      saidas: x.saidas,
+      saldo: x.saldo,
+    }));
+  }
+  function resumirIg(i) {
+    if (!i || i.error) return null;
+    return {
+      seguidores_atual: i.seguidores_atual,
+      novos_seguidores: i.novos_seguidores_periodo,
+      unfollows: i.unfollows_periodo,
+      saldo: i.saldo_seguidores_periodo,
+    };
+  }
+
   return {
-    diario_ontem: resumirParaExpert(ontem),
-    parcial_hoje: resumirParaExpert(hoje),
-    semanal_7d: resumirParaExpert(sete),
+    diario_ontem: { ...resumirParaExpert(ontem), grupos_whatsapp: resumirGrupos(gruposOntem), instagram: resumirIg(igOntem) },
+    parcial_hoje: { ...resumirParaExpert(hoje), grupos_whatsapp: resumirGrupos(gruposHoje), instagram: resumirIg(igHoje) },
   };
 }
 
@@ -99,14 +123,19 @@ ${expertName} é um criador de conteúdo. O TRABALHO DELE é:
 3. Manter o público engajado no grupo
 
 # DADOS QUE VOCÊ TEM
-- "resultado": cadastros (gente que se cadastrou), novos_jogadores_depositaram (FTDs - primeira vez depositando), valor_total_depositado, valor_primeiro_deposito
-- "lives": como foram as lives (quantas, pico, assistiram, mensagens no chat)
-- "grupo_whatsapp": movimento do grupo
+- "resultado": cadastros, novos_jogadores_depositaram (FTDs), valor_total_depositado, valor_primeiro_deposito
+- "lives": como foram (quantas, pico, assistiram, msgs chat)
+- "grupos_whatsapp": LISTA — UM ITEM POR GRUPO. Cada item tem nome, total_membros, ativos, mensagens, novos_membros, saidas, saldo. SEMPRE comente CADA GRUPO SEPARADAMENTE (alguns experts têm múltiplos grupos com leads sobrepostos).
+- "instagram": seguidores_atual, novos_seguidores, unfollows, saldo (entradas - saídas)
 
-Use TODOS esses números nos resumos (manhã/tarde/noite). Linguagem natural:
+Linguagem natural:
 - "novos_jogadores_depositaram" → "X pessoas novas depositaram pela primeira vez"
 - "valor_total_depositado" → "R$ Y em depósitos no total"
 - "cadastros" → "X pessoas se cadastraram"
+- "instagram.novos_seguidores" → "X pessoas novas te seguiram"
+- "instagram.unfollows" → "Y pessoas deixaram de te seguir"
+- "instagram.saldo" → "saldo de Z seguidores" (positivo=ganho líquido)
+- grupos_whatsapp: SEMPRE mencione cada grupo pelo NOME e seu movimento separado.
 
 # PALAVRAS ABSOLUTAMENTE PROIBIDAS (banimento total)
 funil, tráfego, conversão, taxa, métrica, KPI, performance, anúncios, Meta Ads, ads, gasto, custo, verba, orçamento, campanha, aquisição, ativação, retenção, redeposit, redepósito, "base existente", "base ativa", "sua base", "leads já da base", "depósito veio da base", "valor veio dos antigos", landing, otimizar, captação, qualificar, monitorar, analisar, diagnóstico, "fluxo de ativação", investigar, quebrado, "tá furando", CAC, CPA, CPF, CTR.
@@ -167,45 +196,44 @@ Bora pra cima! 💪"
     manha: `# Slot MANHÃ — Bom dia, ${expertName}!
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação curta* ("Bom dia, ${expertName}! 🌅" ou similar)
-2. *Resumo COMPLETO de ONTEM com TODOS os números* (parágrafo de 3-4 frases):
-   - *Resultado*: X pessoas se cadastraram, Y depositaram pela primeira vez, R$ Z em depósitos no total
-   - *Lives*: quantas teve, pico, total assistiu, mensagens no chat, engajamento
-   - *Grupo*: quantas pessoas mandaram msg, total de mensagens
-   Linguagem natural. Exemplo:
-   "Ontem entraram 6 cadastros novos e 1 pessoa depositou pela primeira vez (R$ 50). A live teve pico de 42 pessoas, 44 assistiram e rolou 41 msgs no chat (25% de engajamento). No grupo de 338 membros foi silêncio, ninguém mandou mensagem — bora provocar a galera."
-3. *3 sugestões de CONTEÚDO pra hoje* — frases imperativas (Grava/Posta/Faz/Manda) com TEMA específico. Varia entre: story, reel, live, áudio no grupo, enquete. Temas do mundo do expert.
+2. *Resumo COMPLETO de ONTEM com TODOS os números* (4-5 frases):
+   - *Resultado*: cadastros, novos depositantes, R$ depositados
+   - *Lives*: quantas, pico, assistiram, msgs chat
+   - *Instagram*: X pessoas novas te seguiram, Y deixaram de seguir, saldo Z
+   - *Grupos WhatsApp* (CADA GRUPO SEPARADAMENTE pelo NOME): pra cada grupo, mencione o nome e o movimento dele (quantas pessoas ativas, quantas msgs, quantas entraram, quantas saíram)
+3. *3 sugestões de CONTEÚDO pra hoje* — frases imperativas (Grava/Posta/Faz/Manda) com TEMA específico.
 4. Fechamento motivacional curto
 
-Tamanho: 1000-1400 caracteres.`,
+Tamanho: 1200-1700 caracteres.`,
 
     tarde: `# Slot TARDE — ${expertName}, como tá indo?
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação rápida* ("E aí, ${expertName}! 🔥" ou similar)
 2. *Comparação HOJE até agora vs ONTEM dia inteiro com TODOS os números*:
-   - Resultado: "Hoje já temos X cadastros (ontem Y), Z pessoas depositaram pela primeira vez (ontem W), R$ A em depósitos (ontem R$ B)"
-   - Lives: "X lives feitas (ontem Y), pico de Z (ontem W), A mensagens no chat (ontem B)"
-   - Grupo: "A pessoas ativas (ontem B), C mensagens (ontem D)"
-   Em seguida, comenta o ritmo em linguagem natural ("já dobrou ontem", "tá morno, bora", "live bombando hoje").
-3. *Reforço de 1-2 sugestões da manhã* — pergunta direta: "já gravou aquele reel?", "rolou a live que ia chamar?"
-4. *1 sugestão extra de conteúdo pra fazer agora* — ação curta tipo "grava um story em selfie agora falando '${expertName} aqui, manda 🚀 quem vai colar na próxima live'"
+   - Resultado: cadastros e depositantes hoje vs ontem, R$ depositados
+   - Lives: hoje vs ontem (qtd, pico, msgs chat)
+   - Instagram: seguidores ganhos hoje vs ontem
+   - Grupos WhatsApp: CADA GRUPO pelo nome, comparando hoje vs ontem (ex: "No COMUNIDADE DA RAINHA: 15 ativos hoje (ontem 23), no DANI - RAINHA DA ROLETA 22 ativos (ontem 18)")
+3. *Reforço de 1-2 sugestões da manhã* — perguntas tipo "já gravou aquele reel?"
+4. *1 sugestão extra de conteúdo pra fazer agora* — ação curta
 5. Energia pra fechar o dia
 
-Tamanho: 900-1300 caracteres.`,
+Tamanho: 1100-1500 caracteres.`,
 
     noite: `# Slot NOITE — ${expertName}, fechando o dia
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação noturna* ("Boa noite, ${expertName} 🌙" ou similar)
 2. *Resumo numérico do DIA COMPLETO* com TODOS os números:
-   - Resultado: X cadastros novos, Y pessoas depositaram pela primeira vez, R$ Z total em depósitos
-   - Lives: quantas, pico, total assistiu, mensagens chat, engajamento
-   - Grupo: pessoas ativas e total de mensagens
-   Linguagem natural mas COM os números explícitos.
-3. *Reconhecimento sincero* — destaca o melhor momento real do dia ("a live das X teve pico de Y, mandou muito bem")
-4. *Checagem das sugestões da manhã* — pergunta diretamente se as ações que sugeri pela manhã rolaram: "conseguiu gravar aquele reel? E a chamada da live, deu certo? Aquele áudio no grupo virou?" (1-2 perguntas, baseadas em sugestões plausíveis que teriam sido dadas pela manhã)
-5. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã? Equipamento, ideia de conteúdo, alguém pra te ajudar com edição? Pode falar."
+   - Resultado: cadastros, novos depositantes, R$ depositados
+   - Lives: quantas, pico, msgs chat
+   - Instagram: novos seguidores - unfollows = saldo
+   - Grupos WhatsApp: CADA GRUPO pelo nome com seu movimento (ativos, msgs, entradas, saídas)
+3. *Reconhecimento sincero* — destaca o melhor momento real do dia
+4. *Checagem das sugestões da manhã* — "conseguiu gravar aquele reel?", "rolou a live?"
+5. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã?"
 6. Boa noite com afeto
 
-Tamanho: 900-1300 caracteres.`,
+Tamanho: 1100-1500 caracteres.`,
   }[slot] || 'Briefing geral.';
 
   return `Você é um parceiro/coach do influenciador ${expertName} (criador de conteúdo iGaming/cassino), enviando mensagem WhatsApp direta pra ele.

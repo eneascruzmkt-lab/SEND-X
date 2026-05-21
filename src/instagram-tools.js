@@ -64,7 +64,6 @@ async function fetchInstagramSnapshot(igUserId) {
   });
 
   // Insights (métricas agregadas - últimos 30 dias)
-  // Métricas disponíveis pra Instagram Business: reach, impressions, profile_views, website_clicks
   let insights = {};
   try {
     const since = Math.floor((Date.now() - 30 * 86400000) / 1000);
@@ -79,8 +78,31 @@ async function fetchInstagramSnapshot(igUserId) {
       insights[m.name] = (m.values || []).reduce((a, v) => a + (Number(v.value) || 0), 0);
     }
   } catch (e) {
-    // Insights podem falhar se token sem permissão — segue sem
     console.error('[instagram] insights falhou:', e.message);
+  }
+
+  // Follows e Unfollows do dia ANTERIOR (Graph API só libera D-1)
+  // Métrica: follows_and_unfollows com breakdown=follow_type
+  let new_follows = null, unfollows = null;
+  try {
+    const since = Math.floor((Date.now() - 2 * 86400000) / 1000);
+    const until = Math.floor(Date.now() / 1000);
+    const ff = await fbGet(`/${igUserId}/insights`, {
+      metric: 'follows_and_unfollows',
+      period: 'day',
+      since, until,
+      metric_type: 'total_value',
+      breakdown: 'follow_type',
+    });
+    const data = ff.data?.[0];
+    const breakdown = data?.total_value?.breakdowns?.[0]?.results || [];
+    for (const b of breakdown) {
+      const dim = b.dimension_values?.[0];
+      if (dim === 'FOLLOWER') new_follows = Number(b.value) || 0;
+      if (dim === 'NON_FOLLOWER' || dim === 'UNFOLLOW') unfollows = Number(b.value) || 0;
+    }
+  } catch (e) {
+    console.error('[instagram] follows_and_unfollows falhou:', e.message);
   }
 
   return {
@@ -91,6 +113,9 @@ async function fetchInstagramSnapshot(igUserId) {
     media_count: profile.media_count,
     profile_pic_url: profile.profile_picture_url,
     insights,
+    new_follows,
+    unfollows,
+    net_followers: (new_follows != null && unfollows != null) ? new_follows - unfollows : null,
   };
 }
 
@@ -132,9 +157,16 @@ async function fetchAllSnapshots(userId = 1, targetDate = null) {
         impressions: snap.insights?.impressions,
         profile_views: snap.insights?.profile_views,
         website_clicks: snap.insights?.website_clicks,
+        new_follows: snap.new_follows,
+        unfollows: snap.unfollows,
         raw: snap,
       });
-      results.push({ expert: acc.expert, ig_username: acc.ig_username, followers: snap.followers_count, ok: true });
+      results.push({
+        expert: acc.expert, ig_username: acc.ig_username,
+        followers: snap.followers_count,
+        new_follows: snap.new_follows, unfollows: snap.unfollows, net: snap.net_followers,
+        ok: true,
+      });
     } catch (e) {
       results.push({ expert: acc.expert, ig_username: acc.ig_username, error: e.message });
     }
@@ -169,6 +201,9 @@ async function getInstagramMetrics(userId, expert, periodo = '7d', deStr, ateStr
   const totalImpressions = snapshots.reduce((a, s) => a + (Number(s.impressions) || 0), 0);
   const totalProfileViews = snapshots.reduce((a, s) => a + (Number(s.profile_views) || 0), 0);
   const totalWebsiteClicks = snapshots.reduce((a, s) => a + (Number(s.website_clicks) || 0), 0);
+  const totalNewFollows = snapshots.reduce((a, s) => a + (Number(s.new_follows) || 0), 0);
+  const totalUnfollows = snapshots.reduce((a, s) => a + (Number(s.unfollows) || 0), 0);
+  const netFollowers = (totalNewFollows > 0 || totalUnfollows > 0) ? totalNewFollows - totalUnfollows : null;
   const mediaCountFim = snapshots[snapshots.length - 1]?.media_count ?? current?.media_count ?? null;
   const mediaCountInicio = snapshots[0]?.media_count ?? null;
   const postsNoPeriodo = (mediaCountFim != null && mediaCountInicio != null)
@@ -181,7 +216,10 @@ async function getInstagramMetrics(userId, expert, periodo = '7d', deStr, ateStr
     periodo: range.label,
     seguidores_atual: followersAtual,
     seguidores_inicio_periodo: followersInicio,
-    novos_seguidores_periodo: novosSeguidores,
+    delta_total_seguidores: novosSeguidores,
+    novos_seguidores_periodo: totalNewFollows > 0 ? totalNewFollows : null,
+    unfollows_periodo: totalUnfollows > 0 ? totalUnfollows : null,
+    saldo_seguidores_periodo: netFollowers,
     total_posts: current?.media_count ?? null,
     posts_no_periodo: postsNoPeriodo,
     reach_total: totalReach,
@@ -192,6 +230,9 @@ async function getInstagramMetrics(userId, expert, periodo = '7d', deStr, ateStr
     serie_diaria: snapshots.map(s => ({
       date: s.snapshot_date,
       followers: s.followers_count,
+      new_follows: s.new_follows,
+      unfollows: s.unfollows,
+      net: (s.new_follows != null && s.unfollows != null) ? s.new_follows - s.unfollows : null,
       reach: s.reach,
       impressions: s.impressions,
     })),

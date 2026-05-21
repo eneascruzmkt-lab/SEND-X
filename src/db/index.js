@@ -264,6 +264,9 @@ async function init() {
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, ig_user_id, snapshot_date)
     );
+    ALTER TABLE instagram_daily_snapshots
+      ADD COLUMN IF NOT EXISTS new_follows INTEGER,
+      ADD COLUMN IF NOT EXISTS unfollows INTEGER;
     CREATE INDEX IF NOT EXISTS idx_ig_snapshots_user_date ON instagram_daily_snapshots(user_id, ig_user_id, snapshot_date DESC);
   `);
   // Smart Reminders: lembretes inteligentes (pós-live, pós-disparo, etc.)
@@ -909,13 +912,15 @@ module.exports = {
   async upsertInstagramSnapshot(userId, snap) {
     await pool.query(
       `INSERT INTO instagram_daily_snapshots
-       (user_id, ig_user_id, expert, snapshot_date, followers_count, media_count, reach, impressions, profile_views, website_clicks, raw)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       (user_id, ig_user_id, expert, snapshot_date, followers_count, media_count, reach, impressions, profile_views, website_clicks, new_follows, unfollows, raw)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (user_id, ig_user_id, snapshot_date) DO UPDATE
-       SET followers_count=$5, media_count=$6, reach=$7, impressions=$8, profile_views=$9, website_clicks=$10, raw=$11`,
+       SET followers_count=$5, media_count=$6, reach=$7, impressions=$8, profile_views=$9, website_clicks=$10, new_follows=$11, unfollows=$12, raw=$13`,
       [userId, snap.ig_user_id, snap.expert, snap.snapshot_date,
        snap.followers_count, snap.media_count, snap.reach, snap.impressions,
-       snap.profile_views, snap.website_clicks, JSON.stringify(snap.raw || {})]
+       snap.profile_views, snap.website_clicks,
+       snap.new_follows, snap.unfollows,
+       JSON.stringify(snap.raw || {})]
     );
   },
 

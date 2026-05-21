@@ -3572,15 +3572,15 @@ async function loadInstagram() {
       </div>
     </div>`;
 
-    const delta = m.novos_seguidores_periodo;
-    const deltaStr = delta != null ? (delta > 0 ? '+' : '') + delta : '—';
-    const deltaColor = delta > 0 ? 'green' : delta < 0 ? 'red' : 'gray';
+    const saldo = m.saldo_seguidores_periodo;
+    const saldoStr = saldo != null ? (saldo > 0 ? '+' : '') + saldo : '—';
+    const saldoColor = saldo > 0 ? 'green' : saldo < 0 ? 'red' : 'gray';
 
     const cards = [
       { label: 'Seguidores Atual', value: m.seguidores_atual?.toLocaleString('pt-BR') || '—', color: 'pink' },
-      { label: 'Δ Seguidores (' + igPeriodo + ')', value: deltaStr, color: deltaColor },
-      { label: 'Posts no Período', value: m.posts_no_periodo ?? '—', color: 'purple' },
-      { label: 'Alcance Total', value: m.reach_total?.toLocaleString('pt-BR') || '—', color: 'blue' },
+      { label: '➕ Novos Seguidores', value: m.novos_seguidores_periodo != null ? '+' + m.novos_seguidores_periodo : '—', color: 'green' },
+      { label: '➖ Unfollows', value: m.unfollows_periodo != null ? '-' + m.unfollows_periodo : '—', color: 'red' },
+      { label: '⚖️ Saldo (' + igPeriodo + ')', value: saldoStr, color: saldoColor },
     ];
     kpis.innerHTML = cards.map(c => `
       <div class="bg-surface/60 border border-border/40 rounded-xl p-3">
@@ -3593,7 +3593,11 @@ async function loadInstagram() {
     detalhe.innerHTML = `
       <div>Seguidores início período: <span class="text-white">${m.seguidores_inicio_periodo?.toLocaleString('pt-BR') || '—'}</span></div>
       <div>Seguidores atual: <span class="text-white">${m.seguidores_atual?.toLocaleString('pt-BR') || '—'}</span></div>
-      <div>Novos no período: <span class="text-${deltaColor}-400">${deltaStr}</span></div>
+      <div>Δ total seguidores: <span class="text-${(m.delta_total_seguidores > 0 ? 'green' : m.delta_total_seguidores < 0 ? 'red' : 'gray')}-400">${m.delta_total_seguidores != null ? (m.delta_total_seguidores > 0 ? '+' : '') + m.delta_total_seguidores : '—'}</span></div>
+      <div>Novos seguidores no período: <span class="text-green-400">${m.novos_seguidores_periodo ?? '—'}</span></div>
+      <div>Unfollows no período: <span class="text-red-400">${m.unfollows_periodo ?? '—'}</span></div>
+      <div>Saldo líquido: <span class="text-${saldoColor}-400">${saldoStr}</span></div>
+      <div class="border-t border-border/40 my-2"></div>
       <div>Posts publicados: <span class="text-white">${m.posts_no_periodo ?? '—'}</span></div>
       <div>Alcance total: <span class="text-white">${m.reach_total?.toLocaleString('pt-BR') || 0}</span></div>
       <div>Impressões: <span class="text-white">${m.impressions_total?.toLocaleString('pt-BR') || 0}</span></div>

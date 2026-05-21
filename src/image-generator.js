@@ -101,13 +101,20 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
   }
   const allRefs = [...image_urls, ...savedRefs];
 
-  // Feedback inicial (sem cortar o prompt pra confirmar visualmente o que entendeu)
+  // Detect aspect ratio aqui pra mostrar no feedback (cálculo repetido abaixo)
+  const lowFb = prompt.toLowerCase();
+  let aspectFb = '1:1';
+  if (/\b9:16\b|storie|story|vertical|reels?\b/i.test(lowFb)) aspectFb = '9:16';
+  else if (/\b16:9\b|horizontal|paisagem|widescreen/i.test(lowFb)) aspectFb = '16:9';
+  else if (/\b4:5\b|retrato\b/i.test(lowFb)) aspectFb = '4:5';
+
   await sendWhatsappText(group_jid,
     `🎨 *Gerando imagem...*\n` +
     `Prompt: _"${prompt}"_\n` +
     (allRefs.length ? `Referências: ${allRefs.length} imagem(ns)\n` : '') +
-    `Modelo: Nano Banana Pro\n` +
-    `_Demora ~30-60s_`
+    `Formato: ${aspectFb}\n` +
+    `Modelo: GPT Image 2\n` +
+    `_Demora ~60-120s_`
   ).catch((e) => console.error('[img-gen] feedback inicial falhou:', e.message));
 
   // Monta prompt pro Claude usar o MCP Higgsfield
@@ -120,18 +127,34 @@ async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_
     ? allRefs.map(url => ({ value: url, role: 'image' }))
     : null;
 
+  // Detecta aspect ratio pedido no prompt
+  const lowerPrompt = prompt.toLowerCase();
+  let aspectRatio = null;
+  if (/\b9:16\b|storie|story|vertical|reels?\b/i.test(lowerPrompt)) aspectRatio = '9:16';
+  else if (/\b16:9\b|horizontal|paisagem|widescreen/i.test(lowerPrompt)) aspectRatio = '16:9';
+  else if (/\b1:1\b|quadrado|feed\b/i.test(lowerPrompt)) aspectRatio = '1:1';
+  else if (/\b4:5\b|retrato\b/i.test(lowerPrompt)) aspectRatio = '4:5';
+
+  const params = {
+    model: 'gpt_image_2',
+    prompt: prompt,
+    quality: 'high',
+    resolution: '1k',
+  };
+  if (aspectRatio) params.aspect_ratio = aspectRatio;
+  if (mediasParam) params.medias = mediasParam;
+
   const bridgePrompt = `Gere uma imagem usando o MCP Higgsfield seguindo EXATAMENTE estes passos:
 
-1. Use mcp__claude_ai_higgis__generate_image com params:
-{
-  "model": "nano_banana_pro",
-  "prompt": "${prompt.replace(/"/g, '\\"')}"${mediasParam ? `,
-  "medias": ${JSON.stringify(mediasParam)}` : ''}
-}
+1. Use mcp__claude_ai_higgis__generate_image com este params (EXATAMENTE assim, sem modificar):
+${JSON.stringify(params, null, 2)}
 
-ATENÇÃO: o parâmetro correto é "medias" (não "reference_images"). Cada item: {value: URL, role: "image"}. Isso instrui o modelo a USAR as imagens como referência (manter rosto, traços, identidade).
+INSTRUÇÕES IMPORTANTES:
+- model: "gpt_image_2" — esse modelo TRANSFORMA a imagem de referência (não só copia)
+- medias com role:"image": usa como referência IDENTITÁRIA (rosto/traços) mas DEVE aplicar as mudanças que o prompt pede (cenário, pose, formato, vestimenta, etc)
+- O prompt descreve a MODIFICAÇÃO desejada. Aplique tudo que ele pede.
 
-2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 90s)
+2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até status="completed", máximo 120s)
 
 3. Retorne APENAS a URL da imagem final no formato exato:
    IMAGEM_GERADA: <url>

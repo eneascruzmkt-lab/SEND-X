@@ -105,22 +105,29 @@ async function coletarDados(userId = 1, experts = EXPERTS_DEFAULT) {
 
 function resumirFunil(f) {
   if (!f) return null;
+  // FTDs vem APENAS da planilha (fonte oficial). Postback fica fora do contexto da IA.
+  const ftds = f.detalhes?.planilha?.ftds || 0;
+  const gasto = f.detalhes?.planilha?.gasto || 0;
   return {
     periodo: f.periodo,
-    gasto_meta: f.detalhes?.planilha?.gasto || 0,
+    gasto_meta: gasto,
     cliques: f.detalhes?.planilha?.cliques || 0,
     cadastros: f.detalhes?.planilha?.cadastros || 0,
     telegram_joins: f.detalhes?.planilha?.telegram_joins || 0,
-    ftds_planilha: f.detalhes?.planilha?.ftds || 0,
-    ftds_postback: f.detalhes?.postbacks_real?.ftds || 0,
+    ftds, // <- fonte única: planilha
+    ftd_amount: f.detalhes?.planilha?.ftd_amount || 0,
+    deposits_amount: f.detalhes?.planilha?.deposits || 0,
     net_pl: f.net_pl,
     roi: f.roi,
-    custo_por_ftd: f.custo_por_ftd,
+    custo_por_ftd: ftds > 0 && gasto > 0 ? Math.round((gasto / ftds) * 100) / 100 : null,
     custo_por_clique: f.detalhes?.planilha?.gasto && f.detalhes?.planilha?.cliques
       ? Math.round((f.detalhes.planilha.gasto / f.detalhes.planilha.cliques) * 100) / 100 : null,
     whatsapp: f.detalhes?.whatsapp || null,
     lives: f.detalhes?.lives || null,
-    alertas: f.alertas || [],
+    // alertas filtrados: removemos os de postback (não-aplicáveis dado o foco em planilha)
+    alertas: (f.alertas || []).filter(a =>
+      !/postback/i.test(a) && !/divergência na coleta/i.test(a)
+    ),
   };
 }
 
@@ -299,7 +306,7 @@ function buildRelatorioPrompt(slot) {
 Você está enviando o briefing matinal pelo WhatsApp para o operador (Aytalo).
 
 CONTEÚDO OBRIGATÓRIO:
-1. *Fechamento de ONTEM* (use PRIORITARIAMENTE dados da PLANILHA: ftds_planilha, gasto_meta, net_pl. Postback só pra validar UTM; se divergente, sinalize)
+1. *Fechamento de ONTEM* (use ftds, gasto_meta, net_pl, ftd_amount, deposits_amount, roi)
 2. *3 ações pra HOJE* (concretas, com expert/quantidade/horário se possível)
 3. *Sugestões de conteúdo pra HOJE* (1 story por expert ativo + 1 reel pro expert que mais precisa)
 4. *Alerta* se P&L ontem foi negativo ou houver problema crítico`,
@@ -317,6 +324,12 @@ CONTEÚDO OBRIGATÓRIO:
 
 ${slotInfo}
 
+# FONTE DE DADOS — REGRA INVIOLÁVEL
+- O campo *ftds* é a FONTE OFICIAL DE FTDs (vem da planilha/Backoffice Apostatudo)
+- NÃO mencione "postback", "FTDs reais", "FTDs reais vs planilha", divergências de fonte
+- Net P&L já considera FTDs e depósitos da planilha — confie nele
+- ftd_amount e deposits_amount complementam o valor monetário
+
 # Formato — WhatsApp
 - Markdown que renderiza no WhatsApp (*negrito*, _itálico_)
 - Emojis pra rotular (📊 🎯 🚨 💡 🎬 📈 📉)
@@ -329,6 +342,7 @@ ${slotInfo}
 - NUNCA faça perguntas (sem "quer que", "deseja", "posso", "se preferir", "?")
 - NUNCA peça confirmação ou ofereça salvar/comparar/enviar
 - NUNCA escreva disclaimers ("analisei os dados", "espero que ajude")
+- NUNCA mencione postback, divergência de dados ou fontes secundárias
 - Comece direto, ex: "📊 *Briefing — 20/05*"
 - Termine na última recomendação. Sem despedida.`;
 }

@@ -255,6 +255,11 @@ router.post('/tools/execute', bridgeAuth, async (req, res) => {
 const postbackRouter = require('./postback');
 router.use(postbackRouter);
 
+// Image generator é chamado server-to-server pelo monitorgrupo
+// (auth via Bearer BRIDGE_SECRET, não JWT) — montado ANTES do middleware auth
+const imgGenRoutesPub = require('./img-generator');
+router.use(imgGenRoutesPub);
+
 // ══════════════════════════════════════════════════════════
 //  TODAS AS ROTAS ABAIXO REQUEREM AUTENTICAÇÃO (Bearer JWT)
 // ══════════════════════════════════════════════════════════
@@ -658,8 +663,7 @@ router.use(auth, expertMessagesRoutes);
 const instagramRoutes = require('./instagram');
 router.use(instagramRoutes);
 
-const imgGenRoutes = require('./img-generator');
-router.use(imgGenRoutes);
+// img-generator montado acima (antes do auth)
 
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 

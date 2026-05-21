@@ -281,7 +281,11 @@ async function enviarMensagensExperts({ userId = 1, slot = 'manha', modo = 'test
         dadosTxt = `Dados de ${expert} — DIA HOJE:\n${JSON.stringify(dados.parcial_hoje)}`;
       }
 
-      const bridge = await callBridge(dadosTxt, buildPromptExpert(slot, expert));
+      const sysPrompt = buildPromptExpert(slot, expert);
+      console.log(`[expert-msg] ${expert}/${slot} system_prompt: ${sysPrompt.length}c`);
+      console.log(`[expert-msg] ${expert}/${slot} user_msg: ${dadosTxt.length}c`);
+      const bridge = await callBridge(dadosTxt, sysPrompt);
+      console.log(`[expert-msg] ${expert}/${slot} resp: ${(bridge.text || '').length}c first200=${(bridge.text || '').slice(0, 200)}`);
       const texto = stripPerguntas(String(bridge.text || '').trim(), allowQuestion);
       if (!texto || texto.length < 60) {
         results.push({ expert, error: 'msg muito curta', preview: texto });

@@ -26,4 +26,15 @@ router.post('/expert-messages/enviar', async (req, res) => {
   }
 });
 
+/** GET /api/expert-messages/debug — retorna o texto cru do Claude (sem enviar WhatsApp) */
+router.get('/expert-messages/debug', async (req, res) => {
+  try {
+    const slot = req.query.slot || 'manha';
+    const expert = (req.query.expert || 'DEIVID').toUpperCase();
+    const em = require('../expert-messages');
+    const dados = await em.coletarDadosExpert(expert, req.userId);
+    res.json({ slot, expert, dados_enviados_ao_claude: dados });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

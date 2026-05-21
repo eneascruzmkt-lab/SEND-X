@@ -232,6 +232,40 @@ async function init() {
     );
     CREATE INDEX IF NOT EXISTS idx_klarvel_summary_user_date ON klarvel_daily_summary(user_id, report_date DESC);
   `);
+  // Instagram: mapeamento expert→IG business account + snapshots diários
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS instagram_accounts (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      expert          TEXT NOT NULL,
+      ig_user_id      TEXT NOT NULL,
+      ig_username     TEXT,
+      fb_page_id      TEXT,
+      fb_page_name    TEXT,
+      profile_pic_url TEXT,
+      is_active       BOOLEAN NOT NULL DEFAULT true,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, expert),
+      UNIQUE(user_id, ig_user_id)
+    );
+    CREATE TABLE IF NOT EXISTS instagram_daily_snapshots (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      ig_user_id      TEXT NOT NULL,
+      expert          TEXT,
+      snapshot_date   DATE NOT NULL,
+      followers_count INTEGER,
+      media_count     INTEGER,
+      reach           INTEGER,
+      impressions     INTEGER,
+      profile_views   INTEGER,
+      website_clicks  INTEGER,
+      raw             JSONB,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, ig_user_id, snapshot_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ig_snapshots_user_date ON instagram_daily_snapshots(user_id, ig_user_id, snapshot_date DESC);
+  `);
   // Smart Reminders: lembretes inteligentes (pós-live, pós-disparo, etc.)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS smart_reminders (
@@ -833,6 +867,66 @@ module.exports = {
 
   async updateAttachmentMessageId(id, messageId) {
     await pool.query('UPDATE chat_attachments SET message_id=$2 WHERE id=$1', [id, messageId]);
+  },
+
+  // ── Instagram ──────────────────────────────────────
+  async listInstagramAccounts(userId) {
+    const r = await pool.query(
+      `SELECT * FROM instagram_accounts WHERE user_id=$1 AND is_active=true ORDER BY expert`,
+      [userId]
+    );
+    return r.rows;
+  },
+
+  async upsertInstagramAccount(userId, account) {
+    const r = await pool.query(
+      `INSERT INTO instagram_accounts (user_id, expert, ig_user_id, ig_username, fb_page_id, fb_page_name, profile_pic_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (user_id, expert) DO UPDATE
+       SET ig_user_id=$3, ig_username=$4, fb_page_id=$5, fb_page_name=$6, profile_pic_url=$7, is_active=true
+       RETURNING *`,
+      [userId, account.expert, account.ig_user_id, account.ig_username,
+       account.fb_page_id, account.fb_page_name, account.profile_pic_url]
+    );
+    return r.rows[0];
+  },
+
+  async deleteInstagramAccount(userId, expert) {
+    await pool.query(
+      `UPDATE instagram_accounts SET is_active=false WHERE user_id=$1 AND expert=$2`,
+      [userId, expert]
+    );
+  },
+
+  async getInstagramAccountByExpert(userId, expert) {
+    const r = await pool.query(
+      `SELECT * FROM instagram_accounts WHERE user_id=$1 AND UPPER(expert)=$2 AND is_active=true LIMIT 1`,
+      [userId, expert.toUpperCase()]
+    );
+    return r.rows[0] || null;
+  },
+
+  async upsertInstagramSnapshot(userId, snap) {
+    await pool.query(
+      `INSERT INTO instagram_daily_snapshots
+       (user_id, ig_user_id, expert, snapshot_date, followers_count, media_count, reach, impressions, profile_views, website_clicks, raw)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (user_id, ig_user_id, snapshot_date) DO UPDATE
+       SET followers_count=$5, media_count=$6, reach=$7, impressions=$8, profile_views=$9, website_clicks=$10, raw=$11`,
+      [userId, snap.ig_user_id, snap.expert, snap.snapshot_date,
+       snap.followers_count, snap.media_count, snap.reach, snap.impressions,
+       snap.profile_views, snap.website_clicks, JSON.stringify(snap.raw || {})]
+    );
+  },
+
+  async getInstagramSnapshots(userId, igUserId, fromDate, toDate) {
+    const r = await pool.query(
+      `SELECT * FROM instagram_daily_snapshots
+       WHERE user_id=$1 AND ig_user_id=$2 AND snapshot_date BETWEEN $3 AND $4
+       ORDER BY snapshot_date ASC`,
+      [userId, igUserId, fromDate, toDate]
+    );
+    return r.rows;
   },
 
   // ── Smart Reminders ──────────────────────────────────

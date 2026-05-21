@@ -99,6 +99,17 @@ db.init().then(() => {
   cron.schedule('0 0 * * *',  () => runAdvisor('madrugada'),{ timezone: 'America/Sao_Paulo' });
   console.log('[cron-ai-advisor] agendado pra 08:00, 15:00 e 00:00 BRT');
 
+  // Cron Instagram snapshot diário às 07:00 BRT
+  const instagram = require('./src/instagram-tools');
+  cron.schedule('0 7 * * *', async () => {
+    console.log('[cron-instagram] snapshot diário…');
+    try {
+      const r = await instagram.fetchAllSnapshots(1);
+      console.log('[cron-instagram] ok:', JSON.stringify(r));
+    } catch (e) { console.error('[cron-instagram]', e.message); }
+  }, { timezone: 'America/Sao_Paulo' });
+  console.log('[cron-instagram] agendado pra 07:00 BRT diário');
+
   // Smart Reminders: scanneia lives terminadas a cada 10min
   const smartReminders = require('./src/smart-reminders');
   cron.schedule('*/10 * * * *', async () => {

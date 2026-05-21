@@ -152,6 +152,7 @@ const { executeTool } = require('../insights-tools');
 const { KLARVEL_TOOLS, executeKlarvelTool } = require('../klarvel-tools');
 const { MONITORGRUPO_TOOLS, executeMonitorgrupoTool } = require('../monitorgrupo-tools');
 const { FUNIL_TOOLS, executeFunilTool } = require('../funil-tools');
+const { INSTAGRAM_TOOLS, executeInstagramTool } = require('../instagram-tools');
 
 function bridgeAuth(req, res, next) {
   const expected = process.env.BRIDGE_SECRET;
@@ -208,7 +209,7 @@ router.get('/ecossistema/comparar', auth, async (req, res) => {
 
 router.get('/tools/list', bridgeAuth, (_req, res) => {
   res.json({
-    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS],
+    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS, ...INSTAGRAM_TOOLS],
   });
 });
 
@@ -238,6 +239,8 @@ router.post('/tools/execute', bridgeAuth, async (req, res) => {
       result = await executeMonitorgrupoTool(name, input || {});
     } else if (FUNIL_TOOLS.some(t => t.name === name)) {
       result = await executeFunilTool(name, input || {}, userId);
+    } else if (INSTAGRAM_TOOLS.some(t => t.name === name)) {
+      result = await executeInstagramTool(name, input || {}, userId);
     } else {
       result = await executeTool(name, input || {}, userId);
     }
@@ -651,6 +654,9 @@ router.use(smartRemindersRoutes);
 
 const expertMessagesRoutes = require('./expert-messages');
 router.use(auth, expertMessagesRoutes);
+
+const instagramRoutes = require('./instagram');
+router.use(auth, instagramRoutes);
 
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 

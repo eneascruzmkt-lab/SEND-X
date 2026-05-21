@@ -649,6 +649,9 @@ router.use(aiAdvisorRoutes);
 const smartRemindersRoutes = require('./smart-reminders');
 router.use(smartRemindersRoutes);
 
+const expertMessagesRoutes = require('./expert-messages');
+router.use(auth, expertMessagesRoutes);
+
 // ── Ad Accounts (Meta Ads por expert) ──────────────────
 
 /** GET /ad-accounts — lista contas de anúncio do usuário */

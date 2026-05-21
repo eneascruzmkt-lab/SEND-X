@@ -3,14 +3,29 @@
  *
  * Fluxo:
  *  1. monitorgrupo webhook detecta msg `/img` em grupo role='management' do expert
- *     → chama POST /api/img-generator/process com {group_jid, prompt, image_urls, sender}
- *  2. Este módulo monta prompt pro bridge (Claude com MCP higgis)
- *  3. Claude no Mac usa mcp__claude_ai_higgis__media_upload + generate_image
- *  4. Aguarda job COMPLETED via job_status, pega URL final
- *  5. Envia imagem gerada pro grupo via Evolution sendMedia
+ *  2. Se houve imagem anexada: monitorgrupo baixa via Evolution + manda base64
+ *  3. SEND-X recebe base64 → salva como arquivo público em /public/uploads/
+ *  4. Bridge recebe URL pública → MCP Higgsfield gera com Nano Banana
+ *  5. SEND-X recebe URL da imagem gerada → envia via Evolution sendMedia
  */
 
 const db = require('./db');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const UPLOADS_DIR = path.join(__dirname, '..', 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+function saveBase64Image(base64Data, mimeType = 'image/jpeg') {
+  const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+  const filename = `imggen-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
+  const filepath = path.join(UPLOADS_DIR, filename);
+  // Remove data:image/xxx;base64, prefix se existir
+  const clean = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
+  fs.writeFileSync(filepath, Buffer.from(clean, 'base64'));
+  return `/uploads/${filename}`;
+}
 
 async function callBridge(message, mode = 'chat') {
   const url = (await db.getBridgeRegistry().catch(() => null))?.url || process.env.BRIDGE_URL;
@@ -68,69 +83,87 @@ async function sendWhatsappText(toJid, text) {
  * Processa solicitação de geração de imagem.
  * @param {Object} opts { group_jid, prompt, image_urls, sender_name, expert }
  */
-async function processarSolicitacao({ group_jid, prompt, image_urls = [], sender_name = '', expert = '' }) {
+async function processarSolicitacao({ group_jid, prompt, image_urls = [], image_base64_list = [], sender_name = '', expert = '' }) {
   if (!group_jid || !prompt) throw new Error('group_jid e prompt obrigatórios');
+
+  console.log(`[img-gen] start group=${group_jid} expert=${expert} prompt="${prompt.slice(0, 60)}..." refs=${image_urls.length}+${image_base64_list.length}`);
+
+  // Salva base64 vindo do WhatsApp em arquivos públicos
+  const publicHost = process.env.PUBLIC_URL || 'https://send-x-production.up.railway.app';
+  const savedRefs = [];
+  for (const b64 of image_base64_list) {
+    try {
+      const relPath = saveBase64Image(b64);
+      const publicUrl = `${publicHost}${relPath}`;
+      savedRefs.push(publicUrl);
+      console.log(`[img-gen] ref salva: ${publicUrl}`);
+    } catch (e) { console.error('[img-gen] save base64 falhou:', e.message); }
+  }
+  const allRefs = [...image_urls, ...savedRefs];
 
   // Feedback inicial
   await sendWhatsappText(group_jid,
     `🎨 *Gerando imagem...*\n` +
-    `Prompt: _"${prompt}"_\n` +
-    (image_urls.length ? `Referências: ${image_urls.length} imagem(ns)\n` : '') +
+    `Prompt: _"${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"_\n` +
+    (allRefs.length ? `Referências: ${allRefs.length} imagem(ns)\n` : '') +
     `Modelo: Nano Banana\n` +
     `_Demora ~30-60s_`
-  ).catch(() => {});
+  ).catch((e) => console.error('[img-gen] feedback inicial falhou:', e.message));
 
   // Monta prompt pro Claude usar o MCP Higgsfield
-  const refsTxt = image_urls.length > 0
-    ? `\n\nVocê tem ${image_urls.length} imagens de referência (passe como reference_images no generate_image):\n` +
-      image_urls.map((u, i) => `${i + 1}. ${u}`).join('\n')
+  const refsTxt = allRefs.length > 0
+    ? `\n\nVocê tem ${allRefs.length} imagens de referência (passe como reference_images no generate_image):\n` +
+      allRefs.map((u, i) => `${i + 1}. ${u}`).join('\n')
     : '';
 
   const bridgePrompt = `Gere uma imagem usando o MCP Higgsfield seguindo EXATAMENTE estes passos:
 
 1. Use mcp__claude_ai_higgis__generate_image com:
    - model: "nano-banana" (ou similar gratuito ilimitado)
-   - prompt: "${prompt.replace(/"/g, '\\"')}"${image_urls.length > 0 ? `
-   - reference_images: ${JSON.stringify(image_urls)}` : ''}
+   - prompt: "${prompt.replace(/"/g, '\\"')}"${allRefs.length > 0 ? `
+   - reference_images: ${JSON.stringify(allRefs)}` : ''}
 
-2. Quando retornar um job_id, use mcp__claude_ai_higgis__job_status pra acompanhar (loop a cada ~10s até status="completed")
+2. Se retornar job_id, use mcp__claude_ai_higgis__job_status (loop ~10s até completed)
 
-3. Quando completar, retorne APENAS a URL da imagem final num formato:
+3. Retorne APENAS a URL da imagem final no formato exato:
    IMAGEM_GERADA: <url>
 
-NÃO escreva explicações, dialogo ou texto extra. Apenas siga os passos e retorne a URL no formato acima.${refsTxt}`;
+Sem explicações. Sem texto extra. Apenas a URL no formato acima.${refsTxt}`;
 
   let imageUrl = null;
+  let bridgeText = '';
   try {
     const resp = await callBridge(bridgePrompt, 'chat');
-    imageUrl = extractUrl(resp.text);
-    if (!imageUrl) {
-      // Tenta fallback: o texto pode ter a URL sem o prefixo
-      const match = String(resp.text || '').match(/IMAGEM_GERADA:\s*(\S+)/);
-      if (match) imageUrl = match[1];
-    }
+    bridgeText = resp.text || '';
+    console.log(`[img-gen] bridge resp len=${bridgeText.length} first500="${bridgeText.slice(0, 500)}"`);
+    // Tenta primeiro o formato IMAGEM_GERADA: <url>
+    const match = bridgeText.match(/IMAGEM_GERADA:\s*(\S+)/);
+    if (match) imageUrl = match[1].replace(/[<>]/g, ''); // remove < > se vier
+    if (!imageUrl) imageUrl = extractUrl(bridgeText);
+    console.log(`[img-gen] imageUrl extraído: ${imageUrl}`);
     if (!imageUrl) {
       await sendWhatsappText(group_jid,
-        `❌ *Não consegui gerar a imagem.*\n\n` +
-        `Resposta do gerador:\n_${(resp.text || '').slice(0, 500)}_`
+        `❌ *Não consegui gerar a imagem.*\n\n_${bridgeText.slice(0, 400)}_`
       );
-      return { ok: false, error: 'sem url na resposta', bridge_text: resp.text };
+      return { ok: false, error: 'sem url na resposta', bridge_text: bridgeText };
     }
   } catch (e) {
+    console.error('[img-gen] bridge falhou:', e.message);
     await sendWhatsappText(group_jid, `❌ Erro ao gerar imagem: ${e.message}`).catch(() => {});
     return { ok: false, error: e.message };
   }
 
   // Envia a imagem gerada pro grupo
   try {
-    await sendWhatsappImage(group_jid, imageUrl,
+    const sendResult = await sendWhatsappImage(group_jid, imageUrl,
       sender_name ? `✨ Pronto, @${sender_name.split('@')[0]}` : '✨ Imagem gerada'
     );
+    console.log(`[img-gen] sendMedia OK:`, JSON.stringify(sendResult).slice(0, 200));
     return { ok: true, image_url: imageUrl };
   } catch (e) {
-    // Fallback: manda só o link
-    await sendWhatsappText(group_jid, `✨ Imagem gerada (não consegui mandar como mídia, segue link):\n${imageUrl}`);
-    return { ok: true, image_url: imageUrl, fallback_text: true };
+    console.error('[img-gen] sendMedia falhou:', e.message);
+    await sendWhatsappText(group_jid, `✨ *Imagem gerada* (não consegui mandar como mídia):\n${imageUrl}`);
+    return { ok: true, image_url: imageUrl, fallback_text: true, send_error: e.message };
   }
 }
 

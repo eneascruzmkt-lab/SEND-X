@@ -110,7 +110,7 @@ db.init().then(() => {
   }, { timezone: 'America/Sao_Paulo' });
   console.log('[cron-instagram] agendado pra 07:00 BRT diário');
 
-  // Smart Reminders: scanneia lives terminadas a cada 10min
+  // Smart Reminders: scanneia lives terminadas a cada 10min (TZ irrelevante na frequência)
   const smartReminders = require('./src/smart-reminders');
   cron.schedule('*/10 * * * *', async () => {
     try {
@@ -119,8 +119,23 @@ db.init().then(() => {
         console.log('[cron-reminders]', JSON.stringify(r));
       }
     } catch (e) { console.error('[cron-reminders]', e.message); }
-  });
+  }, { timezone: 'America/Sao_Paulo' });
   console.log('[cron-reminders] agendado a cada 10 minutos');
+
+  // Cron Expert Messages: envia mensagens pros grupos management dos experts
+  // Horários: 09:00 (bom dia), 16:00 (tarde), 22:00 (noite) BRT
+  const expertMessages = require('./src/expert-messages');
+  const runExpertMessages = async (slot) => {
+    console.log(`[cron-expert-msg:${slot}] enviando pros grupos dos experts…`);
+    try {
+      const results = await expertMessages.enviarMensagensExperts({ userId: 1, slot, modo: 'prod' });
+      console.log(`[cron-expert-msg:${slot}]`, JSON.stringify(results));
+    } catch (e) { console.error(`[cron-expert-msg:${slot}]`, e.message); }
+  };
+  cron.schedule('0 9 * * *',  () => runExpertMessages('manha'), { timezone: 'America/Sao_Paulo' });
+  cron.schedule('0 16 * * *', () => runExpertMessages('tarde'), { timezone: 'America/Sao_Paulo' });
+  cron.schedule('0 22 * * *', () => runExpertMessages('noite'), { timezone: 'America/Sao_Paulo' });
+  console.log('[cron-expert-msg] agendado pra 09:00, 16:00 e 22:00 BRT (modo PROD)');
 
   server.listen(PORT, () => {
     console.log(`[server] rodando em http://localhost:${PORT}`);

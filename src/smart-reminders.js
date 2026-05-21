@@ -97,48 +97,58 @@ async function sendWhatsapp(toJid, text) {
 
 // ─── Processar lives terminadas ────────────────────────────────────────────
 
-const LIVE_PROMPT = `# Contexto
-Esta tarefa gera uma mensagem WhatsApp enviada DIRETO para um expert (influenciador iGaming) logo após a live dele terminar. A mensagem é PRA ELE — não para um gestor.
+function buildLivePromptUser(expertName, contextoLive) {
+  return `# Tarefa
+Gerar mensagem WhatsApp que vai DIRETO pra ${expertName} agora, logo após a live dele terminar. É pra ele, não pra um gestor.
 
-# Tom obrigatório
-- 2ª pessoa direto com o expert ("você arrebentou", "sua live", "grava esse reel agora", "posta esse story")
-- Motivacional, prático, energético — como um gerente de mídia entregando o "guia pós-live"
-- Português brasileiro informal mas profissional
-- NÃO mencionar "Aytalo", "operador" ou "gestor"
-- NÃO se referir ao expert em 3ª pessoa
-- NUNCA fazer perguntas no output (ex: "quer que eu salve?", "deseja...")
-- NUNCA pedir confirmação de formato, NUNCA explicar o que vai fazer
+# Regras inegociáveis
+- 2ª pessoa, falando com ${expertName} ("você", "tua live", "manda esse story", "grava esse reel")
+- Tom de coach/parceiro: motivacional, prático, energético
+- NUNCA fazer perguntas no output
+- NUNCA escrever "quer que eu", "deseja", "posso registrar", "se preferir", "gostaria"
+- NUNCA explicar o que vai fazer ou pedir confirmação
+- NUNCA mencionar "Aytalo", "operador", "gestor"
+- Sem despedida no final ("Bora!" no final é ok, mas nada de "qualquer coisa me chama" ou "fico à disposição")
 
-# Formato OBRIGATÓRIO da resposta
-Apenas um JSON puro. Zero texto antes ou depois. Zero \`\`\`json. Zero comentários. Zero perguntas. Zero disclaimers.
+# Estrutura OBRIGATÓRIA da resposta (texto markdown pronto pra WhatsApp)
 
-{
-  "highlights": ["3 a 5 momentos marcantes da live (com número quando relevante)"],
-  "stories_para_postar_agora": [
-    { "hook": "frase de abertura (max 80c)", "conteudo": "o que escrever/mostrar no story (max 200c)", "cta": "call-to-action curto" }
-  ],
-  "story_de_bastidor": {
-    "tema": "ideia de story informal/bastidor pra gravar agora (selfie/voz pós-live)",
-    "fala_sugerida": "o que você fala/escreve no story",
-    "cta": "call-to-action"
-  },
-  "reel_para_gravar": {
-    "tema": "tema do reel baseado no melhor momento da live",
-    "hook_primeiros_3s": "frase pra fisgar nos primeiros 3 segundos",
-    "estrutura": ["abertura", "desenvolvimento", "fechamento+CTA"],
-    "duracao_sugerida": "15s | 30s | 60s"
-  },
-  "urgencia": "alta | media | baixa",
-  "razao_urgencia": "max 150c"
+📊 *Resumo da live*
+[1-2 frases sobre como foi a live: tema principal, momento alto, clima]
+
+🔥 *Destaques do chat*
+[3-5 bullets com momentos marcantes: wins de membros, hits altos, frases-chave que rolaram, perguntas frequentes. Cite nomes dos membros e números quando relevantes.]
+
+💬 *Engajamento*
+[1-2 bullets sobre clima/movimento do chat]
+
+📱 *Posta esses 3 stories agora:*
+1. *Story 1:* [hook curto]
+   _O que postar:_ [o que escrever/mostrar — concreto, baseado em momento da live]
+   _CTA:_ [call-to-action]
+2. *Story 2:* [...]
+3. *Story 3:* [...]
+
+🎙️ *Story de bastidor (grava em selfie/voz AGORA, com energia da live):*
+*Tema:* [ideia conectada ao melhor momento]
+*Fala sugerida:* [frase pronta pra falar no story]
+*CTA:* [call-to-action]
+
+🎥 *Reel pra gravar ainda hoje*
+*Tema:* [baseado em momento ou pergunta recorrente da live]
+*Hook (3s):* [frase pra fisgar logo no início]
+*Estrutura:* [abertura → desenvolvimento → fechamento+CTA, separado por →]
+*Duração:* [15s, 30s ou 60s]
+
+# Regras das sugestões
+- TODAS as 3 sugestões de story + bastidor + reel devem ser CONCRETAS, baseadas em algo que ROLOU NA LIVE (frase, momento, win, pergunta)
+- Cite números reais da live nos hooks quando fizer sentido
+- Foco: viralizar nas próximas 2 horas + chamar mais gente pra próxima live
+
+# Dados da live recém-terminada
+${contextoLive}
+
+Escreva AGORA a mensagem WhatsApp pra ${expertName} seguindo TODA a estrutura acima. Comece com "📊 *Resumo da live*" — sem saudação, sem intro. Termine no Reel — sem despedida, sem pergunta.`;
 }
-
-# Regras
-- EXATAMENTE 3 stories no array stories_para_postar_agora
-- 1 story_de_bastidor adicional (gravado em selfie/voz, agora mesmo, ainda com energia da live)
-- 1 reel pra gravar ainda hoje
-- Foque em momentos virais: pico participantes, dúvidas frequentes do chat, frases-chave
-- Use números concretos da live
-- Responda APENAS o JSON acima — qualquer texto extra quebra o sistema`;
 
 async function gerarAnaliseLive(meetingId, userId = 1) {
   // 1) Detalhes da live + resumo
@@ -174,29 +184,41 @@ async function gerarAnaliseLive(meetingId, userId = 1) {
     .map(m => `${m.autor}: ${m.texto.slice(0, 150)}`)
     .join('\n');
 
-  // 4) Monta contexto pro Claude — só dados, sem instruções de formato
-  // (instruções estão no system prompt; aqui é dado puro)
-  const ctx = `Dados da live recém-terminada de ${expert}:
-
-Duração: ${duracaoMin} minutos
+  // 4) Monta contexto + prompt num único user message (system prompt do bridge é ignorado)
+  const contextoLive = `Duração: ${duracaoMin} minutos
 Pico simultâneo: ${pico} pessoas
-Total de mensagens no chat: ${messages}
+Total mensagens chat: ${messages}
 
 Mensagens do chat (autor: texto):
 ${msgsTxt || '(sem mensagens significativas)'}`;
 
-  const bridgeResp = await callBridge(ctx, LIVE_PROMPT);
-  const parsed = extractJson(bridgeResp.text);
+  const userMsg = buildLivePromptUser(expert, contextoLive);
+  const bridgeResp = await callBridge(userMsg, '');
+  const textoLimpo = stripPerguntasOffer(String(bridgeResp.text || '').trim());
 
-  // Fallback: se Claude não respondeu JSON, usa o texto bruto como conteúdo
-  // (perde estrutura mas pelo menos manda análise pro WhatsApp)
   return {
     meeting_id: meetingId,
     expert,
     metricas: { duracao_min: duracaoMin, pico_simultaneo: pico, total_mensagens: messages },
-    analise: parsed,
-    fallback_text: parsed ? null : bridgeResp.text,
+    texto_pronto: textoLimpo,
   };
+}
+
+function stripPerguntasOffer(text) {
+  if (!text) return '';
+  // Remove blocos finais que contém perguntas/ofertas (3-5 últimos parágrafos suspeitos)
+  let lines = String(text).split('\n');
+  const offerRegex = /^(quer que|deseja|posso (?:registrar|salvar|comparar|gerar)|se você|se preferir|caso queira|gostaria|fico à dispos)/i;
+  // Itera de trás pra frente e remove linhas suspeitas no final
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1].trim();
+    if (!last) { lines.pop(); continue; }
+    if (last.endsWith('?')) { lines.pop(); continue; }
+    if (offerRegex.test(last)) { lines.pop(); continue; }
+    if (/^---+$/.test(last)) { lines.pop(); continue; }
+    break;
+  }
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function formatarMensagemWhatsapp({ expert, metricas, analise, fallback_text }) {

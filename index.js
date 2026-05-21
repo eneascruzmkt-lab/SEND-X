@@ -85,7 +85,7 @@ db.init().then(() => {
     console.log(`[cron-ai-advisor:${slot}] gerando recomendações…`);
     try {
       await advisor.medirOutcomesAtrasados(1);
-      const recs = await advisor.gerarRecomendacoes(1);
+      const recs = await advisor.gerarRecomendacoes(1, undefined, slot);
       console.log(`[cron-ai-advisor:${slot}] geradas ${recs.length} recomendações`);
       const notif = await advisor.notificarTop3(1, slot);
       console.log(`[cron-ai-advisor:${slot}] notify:`, JSON.stringify(notif));

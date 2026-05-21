@@ -15,7 +15,8 @@ router.post('/ai-advisor/notify', async (req, res) => {
 /** POST /api/ai-advisor/analisar — força nova análise (gera 5 recomendações) */
 router.post('/ai-advisor/analisar', async (req, res) => {
   try {
-    const recs = await advisor.gerarRecomendacoes(req.userId);
+    const slot = req.query.slot || req.body?.slot || '';
+    const recs = await advisor.gerarRecomendacoes(req.userId, undefined, slot);
     res.json({ ok: true, count: recs.length, recomendacoes: recs });
   } catch (e) {
     console.error('[ai-advisor/analisar]', e.message);

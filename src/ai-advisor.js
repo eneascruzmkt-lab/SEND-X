@@ -16,40 +16,71 @@ const { executeTool } = require('./insights-tools');
 
 const EXPERTS_DEFAULT = ['DANI', 'DEIVID', 'JUH'];
 
-const SYSTEM_PROMPT = `Você é um analista sênior de marketing digital especializado em iGaming/afiliados.
-Sua tarefa: analisar os dados consolidados dos experts e gerar EXATAMENTE 5 recomendações
-priorizadas para aumentar Net P&L e FTDs.
+function buildSystemPrompt(slot) {
+  const slotInfo = {
+    manha: `# Slot: MANHÃ (08:00 BRT)
+Foco: relatório de FECHAMENTO de ontem + PLANO de hoje.
+- Use prioritariamente diario_ontem (planilha — dados reais da Apostatudo backoffice, não o postback que pode ter falhas)
+- Resuma o que aconteceu ontem (gasto, FTDs planilha, Net P&L, ROI)
+- Recomendações DE HOJE: o que fazer hoje pra reverter problemas ou capitalizar acertos de ontem
+- Distribuição: 3 acoes hoje + 1 esta semana + 1 este mês`,
+    tarde: `# Slot: TARDE (15:00 BRT)
+Foco: performance até agora + ajustes pra resto do dia.
+- Use semanal_7d + diario_ontem como referência
+- Recomendações: ajustes finos pra final do dia, pausas urgentes, escalas
+- Distribuição: 2 hoje + 2 esta semana + 1 este mês`,
+    madrugada: `# Slot: MADRUGADA (00:00 BRT)
+Foco: fechamento do dia que acabou + setup pra amanhã.
+- Use diario_ontem (que é o dia que acabou) + tendências 7d
+- Recomendações: o que preparar/agendar pra amanhã (criativos, disparos, lives)
+- Distribuição: 2 esta semana + 2 hoje (=amanhã) + 1 este mês`,
+  }[slot] || `# Foco geral\nDistribuição: 2 hoje + 2 esta_semana + 1 este_mes`;
 
-VOCÊ RECEBE 3 HORIZONTES POR EXPERT:
-- diario_ontem: o que aconteceu ontem (granularidade fina, picos/quedas pontuais)
-- semanal_7d: últimos 7 dias (tendências de curto prazo, padrões semanais)
-- mensal_30d: últimos 30 dias (visão estrutural, sazonalidade, comparação)
+  return `Você é um analista sênior de marketing digital especializado em iGaming/afiliados, gerando o relatório do slot atual para o operador.
 
-DISTRIBUIÇÃO IDEAL DAS 5 RECOMENDAÇÕES (não rígida, mas mire isso):
-- 2 com urgencia="hoje" (acionáveis em 24h, baseadas no diário ou em alertas críticos)
-- 2 com urgencia="esta_semana" (semanais, ajustes de campanha/conteúdo)
-- 1 com urgencia="este_mes" (estratégica, baseada no mensal)
+${slotInfo}
 
-REGRAS DA RESPOSTA:
-- Retorne APENAS um JSON válido (sem markdown, sem texto antes ou depois).
-- Schema obrigatório:
+# Dados que você recebe (3 horizontes por expert)
+- diario_ontem: o dia anterior (FONTE OFICIAL = planilha. ftds_planilha é mais confiável que ftds_postback porque postbacks podem perder eventos)
+- semanal_7d: últimos 7 dias (tendências de curto prazo)
+- mensal_30d: últimos 30 dias (estrutura, sazonalidade)
+
+# REGRA DE OURO
+SEMPRE prefira métricas da planilha (ftds_planilha, gasto_meta, net_pl) sobre as do postback. Use postback apenas pra validar UTMs ou detectar divergências (que vire alerta).
+
+# Formato da resposta
+Retorne APENAS o JSON abaixo. Zero markdown. Zero texto antes ou depois. NUNCA faça perguntas. NUNCA peça confirmação. NUNCA escreva "deseja", "quer que eu", "posso", "se preferir".
+
 {
+  "fechamento_ontem": {
+    "destaque": "1-2 frases sobre o que aconteceu ontem (use números da planilha)",
+    "alerta": "se algo grave ontem (P&L negativo, gasto sem FTD), aponta aqui",
+    "vitorias": ["o que funcionou (com números)"]
+  },
+  "plano_hoje": {
+    "prioridades": ["3 ações concretas pra fazer HOJE (com números/horários)"],
+    "foco_expert": "qual expert merece mais atenção hoje e por quê"
+  },
   "recomendacoes": [
     {
       "expert": "DANI | DEIVID | JUH | NUCLEAR | GERAL",
       "categoria": "meta_ads | telegram | whatsapp | lives | copy | operacional | apostatudo",
       "urgencia": "hoje | esta_semana | este_mes",
-      "acao": "descrição curta e concreta (max 120 chars)",
-      "justificativa": "razão com números reais dos 3 horizontes quando relevante (max 280 chars)",
-      "impacto_estimado": "+X FTDs/sem ou +R$Y/mês ou redução -Z% custo/FTD",
+      "acao": "ação concreta na 2ª pessoa, ex: 'Pause o adset X que gastou R$Y sem FTD' (max 140c)",
+      "justificativa": "razão com números reais (max 280c)",
+      "impacto_estimado": "+X FTDs/sem ou +R$Y/mês ou -Z% custo/FTD",
       "passos": ["passo 1 concreto", "passo 2", "passo 3"]
     }
-    // ... 5 itens totais, ordenados por impacto estimado descendente
   ]
 }
-- Use os 3 horizontes pra detectar: 'ontem fugiu da média' OU 'tendência caindo há 7d' OU 'sazonal mensal'.
-- Compare experts entre si quando relevante.
-- Ações concretas com NÚMEROS de referência. Sem conselhos genéricos.`;
+
+# Regras finais
+- 5 recomendações totais, ordenadas por impacto
+- Use número específico em CADA recomendação (sem "considere", "talvez", "veja")
+- Apenas o JSON. Sem perguntas. Sem disclaimers. Sem markdown.`;
+}
+
+const SYSTEM_PROMPT = buildSystemPrompt(); // backward compat (sem slot)
 
 async function coletarDados(userId = 1, experts = EXPERTS_DEFAULT) {
   const data = { gerado_em: new Date().toISOString(), experts: {} };
@@ -123,19 +154,18 @@ function extractJson(text) {
   catch { return null; }
 }
 
-async function gerarRecomendacoes(userId = 1, experts = EXPERTS_DEFAULT) {
+async function gerarRecomendacoes(userId = 1, experts = EXPERTS_DEFAULT, slot = '') {
   const dados = await coletarDados(userId, experts);
-  const dadosTxt = `## DADOS CONSOLIDADOS POR EXPERT\n\n` +
-    Object.entries(dados.experts).map(([exp, d]) => {
-      if (d.error) return `### ${exp}\nERRO: ${d.error}`;
-      return `### ${exp}\nDIÁRIO (ontem): ${JSON.stringify(d.diario_ontem)}\n` +
-             `SEMANAL (7d): ${JSON.stringify(d.semanal_7d)}\n` +
-             `MENSAL (30d): ${JSON.stringify(d.mensal_30d)}`;
-    }).join('\n\n');
+  const dadosTxt = Object.entries(dados.experts).map(([exp, d]) => {
+    if (d.error) return `### ${exp}\nERRO: ${d.error}`;
+    return `### ${exp}\nDIÁRIO (ontem): ${JSON.stringify(d.diario_ontem)}\n` +
+           `SEMANAL (7d): ${JSON.stringify(d.semanal_7d)}\n` +
+           `MENSAL (30d): ${JSON.stringify(d.mensal_30d)}`;
+  }).join('\n\n');
 
-  const userMsg = `Analise os dados abaixo e me retorne o JSON com 5 recomendações conforme o schema do system prompt.\n\n${dadosTxt}`;
-
-  const bridgeResp = await callBridge(userMsg, SYSTEM_PROMPT);
+  const userMsg = dadosTxt;
+  const systemPrompt = buildSystemPrompt(slot);
+  const bridgeResp = await callBridge(userMsg, systemPrompt);
   const parsed = extractJson(bridgeResp.text);
   if (!parsed || !Array.isArray(parsed.recomendacoes)) {
     throw new Error('Resposta do bridge não veio em JSON válido. text=' + (bridgeResp.text || '').slice(0, 400));

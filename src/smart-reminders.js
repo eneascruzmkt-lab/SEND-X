@@ -97,26 +97,34 @@ async function sendWhatsapp(toJid, text) {
 
 // ─── Processar lives terminadas ────────────────────────────────────────────
 
-const LIVE_PROMPT = `# Tarefa
-Sua tarefa é gerar uma mensagem WhatsApp que será enviada DIRETAMENTE para um expert (influenciador de iGaming) logo após a live dele terminar. A mensagem é PRA ELE, não pra um gestor.
+const LIVE_PROMPT = `# Contexto
+Esta tarefa gera uma mensagem WhatsApp enviada DIRETO para um expert (influenciador iGaming) logo após a live dele terminar. A mensagem é PRA ELE — não para um gestor.
 
-# Tom
-- Fale na 2ª pessoa, direto com o expert ("você arrebentou", "sua live", "anota essas ideias")
-- Tom motivacional, prático, energético — como um gerente de produto enviando uma análise pós-evento
-- Português brasileiro, informal mas profissional
-- Sem dizer "Aytalo", sem se referir ao operador, sem dizer "o expert" em 3ª pessoa
+# Tom obrigatório
+- 2ª pessoa direto com o expert ("você arrebentou", "sua live", "grava esse reel agora", "posta esse story")
+- Motivacional, prático, energético — como um gerente de mídia entregando o "guia pós-live"
+- Português brasileiro informal mas profissional
+- NÃO mencionar "Aytalo", "operador" ou "gestor"
+- NÃO se referir ao expert em 3ª pessoa
+- NUNCA fazer perguntas no output (ex: "quer que eu salve?", "deseja...")
+- NUNCA pedir confirmação de formato, NUNCA explicar o que vai fazer
 
 # Formato OBRIGATÓRIO da resposta
-Retorne APENAS um JSON puro (sem \`\`\`json, sem texto antes ou depois, sem comentários, sem perguntas, sem disclaimers):
+Apenas um JSON puro. Zero texto antes ou depois. Zero \`\`\`json. Zero comentários. Zero perguntas. Zero disclaimers.
 
 {
-  "highlights": ["frase curta de momento marcante 1 (com número se relevante)", "...", "..."],
+  "highlights": ["3 a 5 momentos marcantes da live (com número quando relevante)"],
   "stories_para_postar_agora": [
-    { "hook": "frase de abertura (max 80c)", "conteudo": "o que postar (max 200c)", "cta": "call-to-action" }
+    { "hook": "frase de abertura (max 80c)", "conteudo": "o que escrever/mostrar no story (max 200c)", "cta": "call-to-action curto" }
   ],
+  "story_de_bastidor": {
+    "tema": "ideia de story informal/bastidor pra gravar agora (selfie/voz pós-live)",
+    "fala_sugerida": "o que você fala/escreve no story",
+    "cta": "call-to-action"
+  },
   "reel_para_gravar": {
-    "tema": "tema do reel",
-    "hook_primeiros_3s": "frase pra fisgar nos 3s iniciais",
+    "tema": "tema do reel baseado no melhor momento da live",
+    "hook_primeiros_3s": "frase pra fisgar nos primeiros 3 segundos",
     "estrutura": ["abertura", "desenvolvimento", "fechamento+CTA"],
     "duracao_sugerida": "15s | 30s | 60s"
   },
@@ -125,12 +133,12 @@ Retorne APENAS um JSON puro (sem \`\`\`json, sem texto antes ou depois, sem come
 }
 
 # Regras
-- 3 a 5 highlights
-- 3 stories sugeridos
-- 1 reel sugerido
-- Foque em momentos virais: pico de participantes, dúvidas frequentes do chat, frases-chave
-- Use números concretos
-- NÃO escreva fora do JSON, NÃO faça perguntas, NÃO dispute o formato. Apenas devolva o JSON.`;
+- EXATAMENTE 3 stories no array stories_para_postar_agora
+- 1 story_de_bastidor adicional (gravado em selfie/voz, agora mesmo, ainda com energia da live)
+- 1 reel pra gravar ainda hoje
+- Foque em momentos virais: pico participantes, dúvidas frequentes do chat, frases-chave
+- Use números concretos da live
+- Responda APENAS o JSON acima — qualquer texto extra quebra o sistema`;
 
 async function gerarAnaliseLive(meetingId, userId = 1) {
   // 1) Detalhes da live + resumo

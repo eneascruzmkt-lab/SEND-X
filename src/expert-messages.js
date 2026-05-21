@@ -268,23 +268,24 @@ async function enviarMensagensExperts({ userId = 1, slot = 'manha', modo = 'test
   for (const expert of experts) {
     try {
       const dados = await coletarDadosExpert(expert, userId);
-      // Contexto enviado pro Claude varia por slot — não passa dados que não vai usar
-      let dadosTxt;
+      // Contexto enviado pro Claude varia por slot
+      let dadosObj;
       if (slot === 'manha') {
-        // Manhã: SÓ ontem (sem 7d/semanal/hoje)
-        dadosTxt = `Dados de ${expert} — ONTEM apenas:\n${JSON.stringify(dados.diario_ontem)}`;
+        dadosObj = { ontem: dados.diario_ontem };
       } else if (slot === 'tarde') {
-        // Tarde: parcial de hoje + ontem como referência de ritmo
-        dadosTxt = `Dados de ${expert}:\nHOJE até agora: ${JSON.stringify(dados.parcial_hoje)}\nONTEM (referência de ritmo): ${JSON.stringify(dados.diario_ontem)}`;
+        dadosObj = { hoje_ate_agora: dados.parcial_hoje, ontem_referencia: dados.diario_ontem };
       } else {
-        // Noite: dia completo (parcial_hoje no fechamento = o dia inteiro)
-        dadosTxt = `Dados de ${expert} — DIA HOJE:\n${JSON.stringify(dados.parcial_hoje)}`;
+        dadosObj = { dia_completo: dados.parcial_hoje };
       }
 
-      const sysPrompt = buildPromptExpert(slot, expert);
-      console.log(`[expert-msg] ${expert}/${slot} system_prompt: ${sysPrompt.length}c`);
-      console.log(`[expert-msg] ${expert}/${slot} user_msg: ${dadosTxt.length}c`);
-      const bridge = await callBridge(dadosTxt, sysPrompt);
+      // Coloca TUDO no user message (system prompt está sendo ignorado pelo SDK)
+      const userMsg = buildPromptExpert(slot, expert) +
+        `\n\n# DADOS DA SITUAÇÃO REAL DO ${expert} AGORA\n` +
+        '```json\n' + JSON.stringify(dadosObj, null, 2) + '\n```\n\n' +
+        `Escreva AGORA a mensagem WhatsApp pra ${expert} seguindo TODAS as regras acima. Não comece com "Aqui está", "Vou enviar", "Segue abaixo" — comece direto com a saudação.`;
+
+      console.log(`[expert-msg] ${expert}/${slot} user_msg: ${userMsg.length}c`);
+      const bridge = await callBridge(userMsg, '');
       console.log(`[expert-msg] ${expert}/${slot} resp: ${(bridge.text || '').length}c first200=${(bridge.text || '').slice(0, 200)}`);
       const texto = stripPerguntas(String(bridge.text || '').trim(), allowQuestion);
       if (!texto || texto.length < 60) {

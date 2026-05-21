@@ -42,7 +42,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 // Middleware global
-app.use(express.json());
+app.use(express.json({ limit: '15mb' })); // 15MB suporta imagens base64 do WhatsApp
 app.use(express.static(path.join(__dirname, 'public'))); // Frontend estático
 
 // Compartilha io e botManager com as rotas via app.set

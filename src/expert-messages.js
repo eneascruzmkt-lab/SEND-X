@@ -94,43 +94,54 @@ async function coletarDadosExpert(expert, userId = 1) {
 // --- prompts por slot ---
 
 function buildPromptExpert(slot, expertName) {
-  const baseRules = `# FONTE DE DADOS
-- "novos_jogadores" = jogadores que fizeram primeiro depósito (FTDs)
-- "depositos_totais" = quanto foi depositado no total
-- "inscritos_telegram" = quantos entraram no canal Telegram
-- "cliques" = quantos clicaram no link do expert
-- "whatsapp.ativos" = quantos seguidores mandaram mensagem no grupo
-- "lives.pico_max" = maior nº de pessoas ao vivo simultaneamente
-- "lives.engajamento" = % de quem assistiu que mandou mensagem
+  const baseRules = `# DADOS DISPONÍVEIS (use só como referência interna)
+- "novos_jogadores" = jogadores que fizeram primeiro depósito ontem/hoje
+- "depositos_totais" = valor total depositado
+- "lives.pico_max" / "lives.participantes" / "lives.engajamento" = audiência das lives
+- "whatsapp.ativos" / "whatsapp.mensagens" = movimento do grupo
+- "inscritos_telegram" / "cadastros" / "cliques" = entradas
 
-# REGRA INVIOLÁVEL — NÃO MENCIONE
-- NUNCA mencione gasto, custo, CPA, CPF, CAC, ROI, anúncios, Meta Ads, orçamento
-- Não fale de "investimento", "verba", "campanha paga"
-- O expert NÃO TEM CONTEXTO de quanto custou. Fale só do resultado dele.
+# REGRAS DO QUE NÃO MENCIONAR (inviolável)
+- NUNCA fale de anúncios, Meta Ads, gasto, custo, CPA, CPF, CAC, ROI, verba, orçamento, campanha paga, tráfego pago
+- NUNCA dê sugestão relacionada a anúncios ou gestão de campanha
+- NUNCA fale "sua base", "seus leads", "captação", "funil", "qualificar leads", "responda os leads"
+- NUNCA mencione "Aytalo", "operador", "gestor", "afiliado", "equipe"
+- NUNCA escreva métricas frias de funil ("conversão de X%", "engagement rate"). Traduza pra realidade do expert.
+
+# REGRAS DAS SUGESTÕES (foco em CONTEÚDO/PRESENÇA)
+As sugestões devem ser AÇÕES DE CONTEÚDO que ${expertName} pode produzir/publicar:
+✅ "Grave 3 stories falando sobre [tema específico]"
+✅ "Faça uma chamada de live pras 20h com o gancho [X]"
+✅ "Posta um reel mostrando [bastidor/resultado/dica]"
+✅ "Comenta no seu post do feed convidando todo mundo pra próxima live"
+✅ "Grava um story em selfie respondendo a dúvida mais comum que rolou ontem"
+❌ "Monitore sua base"
+❌ "Responda os leads"
+❌ "Analise o engajamento"
+❌ "Otimize sua captação"
 
 # TOM
-- 2ª pessoa, falando direto com ${expertName} ("você")
-- Amigo/coach motivacional, energético, prático
-- Português brasileiro informal
-- Use emojis pra rotular seções (📈 🎯 🔥 💪 🎬 📊)
-- NUNCA escreva "Aytalo", "operador", "gestor", "afiliado"`;
+- 2ª pessoa direto com ${expertName} ("você")
+- Amigo motivacional, energético, prático — não corporativo
+- Português informal
+- Emojis pra rotular seções (🌅 🔥 💪 🎬 📱 ✨)`;
 
   const slotInfo = {
     manha: `# Slot MANHÃ — Bom dia, ${expertName}!
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação curta* ("Bom dia, ${expertName}! 🌅" ou similar)
-2. *Resumo de ONTEM* (use diario_ontem): quantos novos jogadores, depósitos totais, lives, engajamento do grupo. Em linguagem natural, sem números frios.
-3. *3 sugestões CONCRETAS pra hoje* — coisas que ${expertName} pode FAZER (postar story X, gravar reel Y, comentar no grupo, fazer live em horário Z). NÃO sugira coisas que dependem de anúncios.
-4. Fechamento motivacional curto
+2. *Como foi ONTEM* (USE APENAS diario_ontem — nada de "essa semana"): em frases naturais conte quantos novos jogadores, valor de depósitos, como foi a live (se teve), movimento do grupo. Tom de "ó como foi seu dia ontem".
+3. *3 sugestões de CONTEÚDO pra hoje* — cada uma deve ser uma ação de gravar/postar/fazer live/conversar. Use temas ligados ao que rolou ontem (ex: "Ontem teve 41 mensagens no chat da live perguntando sobre X — grava um reel respondendo essa dúvida"). NÃO repita estrutura, varie entre story / reel / live / engajamento direto.
+4. Frase de fechamento curta motivacional
 
 Tamanho: 600-1000 caracteres.`,
 
-    tarde: `# Slot TARDE — ${expertName}, como tá indo o dia?
+    tarde: `# Slot TARDE — ${expertName}, como tá o dia?
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação rápida* ("E aí, ${expertName}! 🔥" ou similar)
-2. *Como está o dia até agora* (use parcial_hoje): mencionar novos jogadores parciais, lives feitas hoje, atividade do grupo. Comparar com o ritmo de ontem quando relevante.
-3. *Pergunta de reforço* — relembrar 1-2 das sugestões da manhã ("já gravou aquele story?", "se ainda não fez X, ainda dá tempo até as 20h").
-4. Energia pra fechar o dia bem
+2. *Como está o dia até agora* (use parcial_hoje): conte quantos novos jogadores parciais, movimento das lives de hoje, atividade do grupo. Comparar com o ritmo de ontem se fizer sentido.
+3. *Reforço das sugestões da manhã* — pergunte/lembre 1-2 ações que sugeri de manhã ("já gravou aquele reel sobre X?", "se ainda não fez a chamada da live, dá tempo até as 19h"). PERMITIDO fazer 1-2 perguntas SÓ desse tipo de reforço.
+4. Energia pra fechar o dia
 
 Tamanho: 400-800 caracteres.`,
 
@@ -138,14 +149,14 @@ Tamanho: 400-800 caracteres.`,
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação noturna* ("Boa noite, ${expertName} 🌙" ou similar)
 2. *Resumo geral do dia* (use parcial_hoje como dia completo): novos jogadores, depósitos, lives, engajamento. Destaque o que foi melhor.
-3. *Reconhecimento* — algo positivo que ${expertName} fez hoje
-4. *Pergunta sincera de cuidado*: "tem algo que eu posso fazer pra te ajudar amanhã / pra deixar mais fácil pra você?" (essa é a ÚNICA pergunta permitida)
+3. *Reconhecimento sincero* — algo positivo que ${expertName} fez hoje
+4. *Pergunta de cuidado*: "tem algo que eu posso fazer pra te ajudar amanhã / pra deixar mais leve pra você?" (essa é a PERGUNTA permitida)
 5. Boa noite com afeto
 
 Tamanho: 400-700 caracteres.`,
   }[slot] || 'Briefing geral.';
 
-  return `Você é um parceiro/coach do influenciador ${expertName} (mercado iGaming/cassino), enviando mensagem WhatsApp direta pra ele.
+  return `Você é um parceiro/coach do influenciador ${expertName} (criador de conteúdo iGaming/cassino), enviando mensagem WhatsApp direta pra ele.
 
 ${slotInfo}
 
@@ -157,7 +168,7 @@ ${baseRules}
 - Não invente números que não estão nos dados
 
 # Regras de saída
-- ${slot === 'noite' ? 'PERMITIDO fazer 1 pergunta no item 4 (cuidado/oferta de ajuda)' : 'PROIBIDO fazer perguntas'}
+- ${slot === 'noite' ? 'PERMITIDO fazer 1 pergunta de cuidado no item 4' : (slot === 'tarde' ? 'PERMITIDO 1-2 perguntas curtas de reforço ("já fez X?")' : 'PROIBIDO fazer perguntas')}
 - NUNCA escreva disclaimers ("analisei seus dados...", "espero que ajude")
 - NUNCA peça pra confirmar/salvar/comparar
 - Comece direto na saudação. Termine na última frase. Sem despedida extra.`;
@@ -226,11 +237,18 @@ async function enviarMensagensExperts({ userId = 1, slot = 'manha', modo = 'test
   for (const expert of experts) {
     try {
       const dados = await coletarDadosExpert(expert, userId);
-      // dadosTxt: só do expert dele (não compara com outros)
-      const dadosTxt = `Dados do expert ${expert}:\n` +
-        `\nDIÁRIO ONTEM: ${JSON.stringify(dados.diario_ontem)}` +
-        `\nPARCIAL HOJE: ${JSON.stringify(dados.parcial_hoje)}` +
-        `\nSEMANAL 7d: ${JSON.stringify(dados.semanal_7d)}`;
+      // Contexto enviado pro Claude varia por slot — não passa dados que não vai usar
+      let dadosTxt;
+      if (slot === 'manha') {
+        // Manhã: SÓ ontem (sem 7d/semanal/hoje)
+        dadosTxt = `Dados de ${expert} — ONTEM apenas:\n${JSON.stringify(dados.diario_ontem)}`;
+      } else if (slot === 'tarde') {
+        // Tarde: parcial de hoje + ontem como referência de ritmo
+        dadosTxt = `Dados de ${expert}:\nHOJE até agora: ${JSON.stringify(dados.parcial_hoje)}\nONTEM (referência de ritmo): ${JSON.stringify(dados.diario_ontem)}`;
+      } else {
+        // Noite: dia completo (parcial_hoje no fechamento = o dia inteiro)
+        dadosTxt = `Dados de ${expert} — DIA HOJE:\n${JSON.stringify(dados.parcial_hoje)}`;
+      }
 
       const bridge = await callBridge(dadosTxt, buildPromptExpert(slot, expert));
       const texto = stripPerguntas(String(bridge.text || '').trim(), allowQuestion);

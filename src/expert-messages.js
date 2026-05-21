@@ -53,16 +53,19 @@ async function getGrupoManagement(expertName) {
 
 function resumirParaExpert(f) {
   if (!f) return null;
-  // Só dados de CONTEÚDO/PRESENÇA. SEM cliques/cadastros/FTDs/depósitos
-  // (esses geram análise de funil e o expert não precisa disso).
   return {
     periodo: f.periodo,
+    resultado: {
+      cadastros: f.detalhes?.planilha?.cadastros || 0,
+      novos_jogadores_depositaram: f.detalhes?.planilha?.ftds || 0,
+      valor_total_depositado: f.detalhes?.planilha?.deposits || 0,
+      valor_primeiro_deposito: f.detalhes?.planilha?.ftd_amount || 0,
+    },
     lives: f.detalhes?.lives ? {
       quantas_lives: f.detalhes.lives.total,
       pico_pessoas_simultaneas: f.detalhes.lives.pico_max,
       total_pessoas_assistiram: f.detalhes.lives.participantes_unicos,
       mensagens_no_chat_da_live: f.detalhes.lives.mensagens,
-      // engajamento como string % é OK pq é da live (audiência do expert)
       engajamento_chat: f.detalhes.lives.engajamento,
     } : null,
     grupo_whatsapp: f.detalhes?.whatsapp ? {
@@ -90,21 +93,28 @@ async function coletarDadosExpert(expert, userId = 1) {
 
 function buildPromptExpert(slot, expertName) {
   const baseRules = `# CONTEXTO IMPORTANTE
-${expertName} é um criador de conteúdo. O TRABALHO DELE é só:
+${expertName} é um criador de conteúdo. O TRABALHO DELE é:
 1. Gravar stories e reels
 2. Fazer lives
 3. Manter o público engajado no grupo
 
-${expertName} NÃO É responsável por: anúncios, captação, conversão, cadastros, funil, depósitos, métricas técnicas. Não fale dessas coisas com ele.
+# DADOS QUE VOCÊ TEM
+- "resultado": cadastros (gente que se cadastrou), novos_jogadores_depositaram (FTDs - primeira vez depositando), valor_total_depositado, valor_primeiro_deposito
+- "lives": como foram as lives (quantas, pico, assistiram, mensagens no chat)
+- "grupo_whatsapp": movimento do grupo
 
-# DADOS QUE VOCÊ TEM (use só pra inspirar sugestões de conteúdo)
-- "lives": como foram as lives (quantas pessoas assistiram, quanto rolou no chat)
-- "grupo_whatsapp": quantas pessoas ESTÃO no grupo, quantas mandam mensagem, total de msgs
-
-Não há nenhum outro dado. Você NÃO sabe quantos novos cadastros, FTDs, cliques, depósitos. Não invente.
+Use TODOS esses números nos resumos (manhã/tarde/noite). Linguagem natural:
+- "novos_jogadores_depositaram" → "X pessoas novas depositaram pela primeira vez"
+- "valor_total_depositado" → "R$ Y em depósitos no total"
+- "cadastros" → "X pessoas se cadastraram"
 
 # PALAVRAS ABSOLUTAMENTE PROIBIDAS (banimento total)
-funil, tráfego, conversão, taxa, métrica, KPI, performance, anúncios, Meta Ads, ads, gasto, custo, verba, orçamento, campanha, aquisição, ativação, retenção, redeposit, redepósito, "base existente", "base ativa", "sua base", "seus leads", landing, otimizar, captação, qualificar, monitorar, analisar, diagnóstico, "fluxo de ativação", investigar, FTD, FTDs, jogadores novos, novos jogadores, cadastros, cadastrar (no sentido de captar), cliques, depósitos, depositaram, depositar, "novos depositantes", quebrado, "tá furando", "ainda não converteu", "ainda não veio".
+funil, tráfego, conversão, taxa, métrica, KPI, performance, anúncios, Meta Ads, ads, gasto, custo, verba, orçamento, campanha, aquisição, ativação, retenção, redeposit, redepósito, "base existente", "base ativa", "sua base", "leads já da base", "depósito veio da base", "valor veio dos antigos", landing, otimizar, captação, qualificar, monitorar, analisar, diagnóstico, "fluxo de ativação", investigar, quebrado, "tá furando", CAC, CPA, CPF, CTR.
+
+# REGRA SOBRE DEPÓSITOS (importante)
+- Se o valor depositado for alto, NÃO mencione que é "base já existente", "redepósito" ou "leads antigos"
+- Comente o valor como ÊXITO sem explicar de onde veio: "rolou R$ X em depósitos hoje, dia animado"
+- Se quiser conectar com cadastros/FTDs, faça de forma neutra: "X pessoas novas depositaram pela primeira vez, valor total R$Y"
 
 # REGRAS DAS SUGESTÕES (sempre 3, sempre AÇÃO DE CONTEÚDO)
 Toda sugestão DEVE ser uma frase imperativa começando com um verbo de gravação/publicação/interação:
@@ -132,7 +142,7 @@ Técnicas de engajamento pra sugerir (variar entre elas):
 # EXEMPLO DE MENSAGEM BOA
 "Bom dia, ${expertName}! 🌅
 
-Ontem sua live teve 41 pessoas no pico e rolou 78 mensagens no chat — sinal de que a galera tava ligada. O grupo também teve bastante movimento, 23 pessoas mandando mensagem.
+Ontem entraram 6 cadastros novos e 1 pessoa depositou pela primeira vez (R$ 50). Sua live teve pico de 41 pessoas, 44 assistiram no total e rolou 78 mensagens no chat (33% de engajamento, audiência ligada). No grupo de 338 membros teve bastante movimento — 23 pessoas mandando msg.
 
 Bora produzir hoje:
 - *Grava 1 reel* mostrando uma jogada sua de aviator parando em 5x e fala 'a paciência foi a chave'
@@ -142,8 +152,9 @@ Bora produzir hoje:
 Bora pra cima! 💪"
 
 # EXEMPLO DE MENSAGEM RUIM (NÃO faça)
-"⚠️ Zero aquisição nova ontem. Os 112 cliques não converteram. Vale investigar o funil. Sua base não tá ativando."
-"Ainda não veio gente nova depositando. Os cadastros estão fracos."
+"R$ 500 em depósitos ontem mas tudo vindo da base ativa, sem aquisição nova"
+"Os 112 cliques não converteram, funil furado"
+"Sua base não tá ativando, redepósito dominante"
 
 # TOM
 - 2ª pessoa direto com ${expertName} ("você", "tu")
@@ -156,39 +167,45 @@ Bora pra cima! 💪"
     manha: `# Slot MANHÃ — Bom dia, ${expertName}!
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação curta* ("Bom dia, ${expertName}! 🌅" ou similar)
-2. *Resumo COMPLETO de ONTEM com TODOS os números* (parágrafo de 2-3 frases):
-   - Lives: quantas teve, pico de pessoas simultâneas, total assistiu, mensagens no chat, engajamento
-   - Grupo: quantas pessoas mandaram msg, total de mensagens
-   Inclui TODOS os números mas em linguagem natural. Exemplo:
-   "Ontem sua live teve pico de 42 pessoas, 44 assistiram no total e rolaram 41 mensagens no chat (25% de engajamento, audiência ativa). No grupo de 338 membros foi silêncio total, ninguém mandou mensagem ontem — hora de provocar a galera."
+2. *Resumo COMPLETO de ONTEM com TODOS os números* (parágrafo de 3-4 frases):
+   - *Resultado*: X pessoas se cadastraram, Y depositaram pela primeira vez, R$ Z em depósitos no total
+   - *Lives*: quantas teve, pico, total assistiu, mensagens no chat, engajamento
+   - *Grupo*: quantas pessoas mandaram msg, total de mensagens
+   Linguagem natural. Exemplo:
+   "Ontem entraram 6 cadastros novos e 1 pessoa depositou pela primeira vez (R$ 50). A live teve pico de 42 pessoas, 44 assistiram e rolou 41 msgs no chat (25% de engajamento). No grupo de 338 membros foi silêncio, ninguém mandou mensagem — bora provocar a galera."
 3. *3 sugestões de CONTEÚDO pra hoje* — frases imperativas (Grava/Posta/Faz/Manda) com TEMA específico. Varia entre: story, reel, live, áudio no grupo, enquete. Temas do mundo do expert.
 4. Fechamento motivacional curto
 
-Tamanho: 900-1200 caracteres.`,
+Tamanho: 1000-1400 caracteres.`,
 
     tarde: `# Slot TARDE — ${expertName}, como tá indo?
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação rápida* ("E aí, ${expertName}! 🔥" ou similar)
-2. *Comparação HOJE até agora vs ONTEM dia inteiro com os números explícitos*:
-   - Lives: "Hoje você já fez X lives (ontem foi Y no dia todo), pico de Z (ontem foi W), A mensagens no chat (ontem B)"
-   - Grupo: "Já tem A pessoas mandando msg (ontem foram B), com C mensagens (ontem D)"
+2. *Comparação HOJE até agora vs ONTEM dia inteiro com TODOS os números*:
+   - Resultado: "Hoje já temos X cadastros (ontem Y), Z pessoas depositaram pela primeira vez (ontem W), R$ A em depósitos (ontem R$ B)"
+   - Lives: "X lives feitas (ontem Y), pico de Z (ontem W), A mensagens no chat (ontem B)"
+   - Grupo: "A pessoas ativas (ontem B), C mensagens (ontem D)"
    Em seguida, comenta o ritmo em linguagem natural ("já dobrou ontem", "tá morno, bora", "live bombando hoje").
 3. *Reforço de 1-2 sugestões da manhã* — pergunta direta: "já gravou aquele reel?", "rolou a live que ia chamar?"
 4. *1 sugestão extra de conteúdo pra fazer agora* — ação curta tipo "grava um story em selfie agora falando '${expertName} aqui, manda 🚀 quem vai colar na próxima live'"
 5. Energia pra fechar o dia
 
-Tamanho: 700-1000 caracteres.`,
+Tamanho: 900-1300 caracteres.`,
 
     noite: `# Slot NOITE — ${expertName}, fechando o dia
 ESTRUTURA OBRIGATÓRIA:
 1. *Saudação noturna* ("Boa noite, ${expertName} 🌙" ou similar)
-2. *Resumo numérico do DIA COMPLETO*: quantas lives, pico, total assistiu, mensagens no chat, engajamento, pessoas ativas no grupo e total de mensagens. Linguagem natural mas COM os números explícitos.
+2. *Resumo numérico do DIA COMPLETO* com TODOS os números:
+   - Resultado: X cadastros novos, Y pessoas depositaram pela primeira vez, R$ Z total em depósitos
+   - Lives: quantas, pico, total assistiu, mensagens chat, engajamento
+   - Grupo: pessoas ativas e total de mensagens
+   Linguagem natural mas COM os números explícitos.
 3. *Reconhecimento sincero* — destaca o melhor momento real do dia ("a live das X teve pico de Y, mandou muito bem")
 4. *Checagem das sugestões da manhã* — pergunta diretamente se as ações que sugeri pela manhã rolaram: "conseguiu gravar aquele reel? E a chamada da live, deu certo? Aquele áudio no grupo virou?" (1-2 perguntas, baseadas em sugestões plausíveis que teriam sido dadas pela manhã)
 5. *Pergunta de cuidado*: "Tem alguma coisa que tá faltando pra te deixar mais tranquilo amanhã? Equipamento, ideia de conteúdo, alguém pra te ajudar com edição? Pode falar."
 6. Boa noite com afeto
 
-Tamanho: 700-1000 caracteres.`,
+Tamanho: 900-1300 caracteres.`,
   }[slot] || 'Briefing geral.';
 
   return `Você é um parceiro/coach do influenciador ${expertName} (criador de conteúdo iGaming/cassino), enviando mensagem WhatsApp direta pra ele.

@@ -286,6 +286,75 @@ async function init() {
       UNIQUE(user_id, story_id)
     );
     CREATE INDEX IF NOT EXISTS idx_ig_stories_user_date ON instagram_stories(user_id, expert, timestamp DESC);
+
+    -- Posts (feed) — histórico completo
+    CREATE TABLE IF NOT EXISTS instagram_posts (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      expert          TEXT,
+      ig_user_id      TEXT NOT NULL,
+      post_id         TEXT NOT NULL,
+      caption         TEXT,
+      media_type      TEXT,
+      media_url       TEXT,
+      thumbnail_url   TEXT,
+      permalink       TEXT,
+      timestamp       TIMESTAMPTZ,
+      like_count      INTEGER,
+      comments_count  INTEGER,
+      reach           INTEGER,
+      impressions     INTEGER,
+      saved           INTEGER,
+      seen_at         TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, post_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ig_posts_user_date ON instagram_posts(user_id, expert, timestamp DESC);
+
+    -- Comentários dos posts
+    CREATE TABLE IF NOT EXISTS instagram_comments (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      expert          TEXT,
+      post_id         TEXT NOT NULL,
+      comment_id      TEXT NOT NULL,
+      autor_username  TEXT,
+      texto           TEXT,
+      like_count      INTEGER,
+      timestamp       TIMESTAMPTZ,
+      is_reply        BOOLEAN DEFAULT false,
+      parent_id       TEXT,
+      seen_at         TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, comment_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ig_comments_post ON instagram_comments(user_id, post_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_ig_comments_expert ON instagram_comments(user_id, expert, timestamp DESC);
+
+    -- DMs (conversas + mensagens)
+    CREATE TABLE IF NOT EXISTS instagram_dms (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      expert          TEXT,
+      conversation_id TEXT NOT NULL,
+      participants    JSONB,
+      last_msg_text   TEXT,
+      last_msg_at     TIMESTAMPTZ,
+      seen_at         TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, conversation_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ig_dms_user ON instagram_dms(user_id, expert, last_msg_at DESC);
+
+    CREATE TABLE IF NOT EXISTS instagram_dm_messages (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      conversation_id TEXT NOT NULL,
+      message_id      TEXT NOT NULL,
+      from_username   TEXT,
+      message_text    TEXT,
+      timestamp       TIMESTAMPTZ,
+      UNIQUE(user_id, message_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ig_dm_msgs_conv ON instagram_dm_messages(user_id, conversation_id, timestamp DESC);
   `);
   // Smart Reminders: lembretes inteligentes (pós-live, pós-disparo, etc.)
   await pool.query(`
@@ -975,6 +1044,134 @@ module.exports = {
       params
     );
     return r.rows;
+  },
+
+  async upsertInstagramPost(userId, post) {
+    await pool.query(
+      `INSERT INTO instagram_posts
+       (user_id, expert, ig_user_id, post_id, caption, media_type, media_url, thumbnail_url, permalink, timestamp, like_count, comments_count, reach, impressions, saved, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, NOW())
+       ON CONFLICT (user_id, post_id) DO UPDATE
+       SET caption=$5, like_count=$11, comments_count=$12, reach=$13, impressions=$14, saved=$15, updated_at=NOW()`,
+      [userId, post.expert, post.ig_user_id, post.post_id, post.caption,
+       post.media_type, post.media_url, post.thumbnail_url, post.permalink,
+       post.timestamp, post.like_count, post.comments_count,
+       post.reach, post.impressions, post.saved]
+    );
+  },
+
+  async listInstagramPosts(userId, { expert, fromDate, toDate, limit = 30 } = {}) {
+    const where = ['user_id=$1']; const params = [userId];
+    if (expert) { params.push(expert.toUpperCase()); where.push(`UPPER(expert)=$${params.length}`); }
+    if (fromDate) { params.push(fromDate); where.push(`timestamp >= $${params.length}`); }
+    if (toDate)   { params.push(toDate);   where.push(`timestamp <= $${params.length}`); }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT * FROM instagram_posts WHERE ${where.join(' AND ')} ORDER BY timestamp DESC LIMIT $${params.length}`,
+      params
+    );
+    return r.rows;
+  },
+
+  async upsertInstagramComment(userId, comment) {
+    await pool.query(
+      `INSERT INTO instagram_comments (user_id, expert, post_id, comment_id, autor_username, texto, like_count, timestamp, is_reply, parent_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (user_id, comment_id) DO UPDATE
+       SET texto=$6, like_count=$7`,
+      [userId, comment.expert, comment.post_id, comment.comment_id,
+       comment.autor_username, comment.texto, comment.like_count,
+       comment.timestamp, comment.is_reply || false, comment.parent_id || null]
+    );
+  },
+
+  async listInstagramComments(userId, { expert, postId, fromDate, toDate, limit = 100 } = {}) {
+    const where = ['user_id=$1']; const params = [userId];
+    if (expert) { params.push(expert.toUpperCase()); where.push(`UPPER(expert)=$${params.length}`); }
+    if (postId) { params.push(postId); where.push(`post_id=$${params.length}`); }
+    if (fromDate) { params.push(fromDate); where.push(`timestamp >= $${params.length}`); }
+    if (toDate)   { params.push(toDate);   where.push(`timestamp <= $${params.length}`); }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT * FROM instagram_comments WHERE ${where.join(' AND ')} ORDER BY timestamp DESC LIMIT $${params.length}`,
+      params
+    );
+    return r.rows;
+  },
+
+  async upsertInstagramDM(userId, dm) {
+    await pool.query(
+      `INSERT INTO instagram_dms (user_id, expert, conversation_id, participants, last_msg_text, last_msg_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id, conversation_id) DO UPDATE
+       SET last_msg_text=$5, last_msg_at=$6, participants=$4`,
+      [userId, dm.expert, dm.conversation_id, JSON.stringify(dm.participants || []),
+       dm.last_msg_text, dm.last_msg_at]
+    );
+  },
+
+  async upsertInstagramDMMessage(userId, msg) {
+    await pool.query(
+      `INSERT INTO instagram_dm_messages (user_id, conversation_id, message_id, from_username, message_text, timestamp)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id, message_id) DO NOTHING`,
+      [userId, msg.conversation_id, msg.message_id, msg.from_username, msg.message_text, msg.timestamp]
+    );
+  },
+
+  async listInstagramDMs(userId, { expert, limit = 20 } = {}) {
+    const where = ['user_id=$1']; const params = [userId];
+    if (expert) { params.push(expert.toUpperCase()); where.push(`UPPER(expert)=$${params.length}`); }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT * FROM instagram_dms WHERE ${where.join(' AND ')} ORDER BY last_msg_at DESC NULLS LAST LIMIT $${params.length}`,
+      params
+    );
+    return r.rows;
+  },
+
+  /** Resumo da atividade IG do expert no período (lê tudo do DB). */
+  async getInstagramAtividadeFromDB(userId, expert, fromDate, toDate) {
+    const upper = expert.toUpperCase();
+    const fromIso = (fromDate instanceof Date) ? fromDate.toISOString() : fromDate;
+    const toIso   = (toDate instanceof Date) ? toDate.toISOString() : toDate;
+    const stories = await pool.query(
+      `SELECT story_id, media_type, media_url, thumbnail_url, permalink, timestamp
+       FROM instagram_stories WHERE user_id=$1 AND UPPER(expert)=$2 AND timestamp BETWEEN $3 AND $4
+       ORDER BY timestamp DESC`,
+      [userId, upper, fromIso, toIso]
+    );
+    const posts = await pool.query(
+      `SELECT post_id, caption, media_type, permalink, thumbnail_url, timestamp, like_count, comments_count
+       FROM instagram_posts WHERE user_id=$1 AND UPPER(expert)=$2 AND timestamp BETWEEN $3 AND $4
+       ORDER BY timestamp DESC`,
+      [userId, upper, fromIso, toIso]
+    );
+    const totalComments = await pool.query(
+      `SELECT COUNT(*) AS total, COUNT(DISTINCT autor_username) AS autores_unicos
+       FROM instagram_comments WHERE user_id=$1 AND UPPER(expert)=$2 AND timestamp BETWEEN $3 AND $4`,
+      [userId, upper, fromIso, toIso]
+    );
+    const topComments = await pool.query(
+      `SELECT autor_username, texto, like_count, timestamp
+       FROM instagram_comments WHERE user_id=$1 AND UPPER(expert)=$2 AND timestamp BETWEEN $3 AND $4
+       ORDER BY like_count DESC NULLS LAST, timestamp DESC LIMIT 15`,
+      [userId, upper, fromIso, toIso]
+    );
+    const dms = await pool.query(
+      `SELECT conversation_id, last_msg_text, last_msg_at
+       FROM instagram_dms WHERE user_id=$1 AND UPPER(expert)=$2 AND last_msg_at BETWEEN $3 AND $4
+       ORDER BY last_msg_at DESC LIMIT 30`,
+      [userId, upper, fromIso, toIso]
+    );
+    return {
+      stories: stories.rows,
+      posts: posts.rows,
+      total_comments: Number(totalComments.rows[0]?.total || 0),
+      autores_unicos_comments: Number(totalComments.rows[0]?.autores_unicos || 0),
+      top_comments: topComments.rows,
+      dms_recentes: dms.rows,
+    };
   },
 
   // ── Smart Reminders ──────────────────────────────────

@@ -80,6 +80,27 @@ router.post('/instagram/snapshot-stories', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/** POST /api/instagram/snapshot-full — captura stories+posts+comentários+DMs */
+router.post('/instagram/snapshot-full', async (req, res) => {
+  try {
+    const results = await ig.fetchAllIgFullSnapshot(req.userId);
+    res.json({ ok: true, results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/instagram/db-atividade?expert=&periodo= — lê DO BANCO */
+router.get('/instagram/db-atividade', async (req, res) => {
+  try {
+    const periodo = req.query.periodo || '24h';
+    const now = new Date();
+    let from = new Date(now - 24*86400000);
+    if (periodo === '7d') from = new Date(now - 7*86400000);
+    if (periodo === '30d') from = new Date(now - 30*86400000);
+    const result = await db.getInstagramAtividadeFromDB(req.userId, req.query.expert, from, now);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /** GET /api/instagram/atividade?expert=&de=&ate= — stories+posts+comentários */
 router.get('/instagram/atividade', async (req, res) => {
   try {

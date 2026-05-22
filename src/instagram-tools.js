@@ -202,6 +202,102 @@ async function fetchAllStoriesSnapshots(userId = 1) {
   return results;
 }
 
+/**
+ * Snapshot diário COMPLETO do Instagram:
+ * - Stories ativos
+ * - Posts recentes (com insights)
+ * - Top comentários de cada post recente
+ * - DMs recentes
+ *
+ * Salva tudo no DB pra servir de contexto pro ecossistema.
+ */
+async function fetchAllIgFullSnapshot(userId = 1) {
+  const accounts = await db.listInstagramAccounts(userId);
+  const results = [];
+  for (const acc of accounts) {
+    const summary = { expert: acc.expert, stories: 0, posts: 0, comments: 0, dms: 0 };
+    try {
+      // 1) Stories
+      const stories = await fetchStoriesAtivos(acc.ig_user_id).catch(() => []);
+      for (const s of stories) {
+        await db.upsertInstagramStory(userId, {
+          expert: acc.expert, ig_user_id: acc.ig_user_id, story_id: s.id,
+          media_type: s.media_type, media_url: s.media_url,
+          thumbnail_url: s.thumbnail_url, permalink: s.permalink,
+          timestamp: s.timestamp,
+        });
+        summary.stories++;
+      }
+
+      // 2) Posts recentes (20 últimos)
+      const posts = await fetchRecentPosts(acc.ig_user_id, 20).catch(() => []);
+      for (const p of posts) {
+        const insights = await fetchPostInsights(p.id);
+        await db.upsertInstagramPost(userId, {
+          expert: acc.expert, ig_user_id: acc.ig_user_id, post_id: p.id,
+          caption: p.caption, media_type: p.media_type,
+          media_url: p.media_url, thumbnail_url: p.thumbnail_url,
+          permalink: p.permalink, timestamp: p.timestamp,
+          like_count: p.like_count, comments_count: p.comments_count,
+          reach: insights?.reach, impressions: insights?.impressions, saved: insights?.saved,
+        });
+        summary.posts++;
+
+        // 3) Top comentários do post (até 30)
+        const comments = await fetchComentarios(p.id, 30).catch(() => []);
+        for (const c of comments) {
+          await db.upsertInstagramComment(userId, {
+            expert: acc.expert, post_id: p.id, comment_id: c.id,
+            autor_username: c.username, texto: c.text,
+            like_count: c.like_count, timestamp: c.timestamp,
+            is_reply: false, parent_id: null,
+          });
+          summary.comments++;
+          // Replies (até 5 por comentário)
+          for (const r of (c.replies?.data || [])) {
+            await db.upsertInstagramComment(userId, {
+              expert: acc.expert, post_id: p.id, comment_id: r.id,
+              autor_username: r.username, texto: r.text,
+              like_count: 0, timestamp: r.timestamp,
+              is_reply: true, parent_id: c.id,
+            });
+            summary.comments++;
+          }
+        }
+      }
+
+      // 4) DMs recentes (até 20 conversas)
+      const dms = await fetchDMs(acc.ig_user_id, 20).catch(() => []);
+      for (const conv of dms) {
+        const lastMsg = conv.messages?.data?.[0];
+        await db.upsertInstagramDM(userId, {
+          expert: acc.expert,
+          conversation_id: conv.id,
+          participants: conv.participants?.data || [],
+          last_msg_text: lastMsg?.message,
+          last_msg_at: lastMsg?.created_time || conv.updated_time,
+        });
+        // Mensagens (até 5 últimas por conversa)
+        for (const m of (conv.messages?.data || [])) {
+          await db.upsertInstagramDMMessage(userId, {
+            conversation_id: conv.id,
+            message_id: m.id,
+            from_username: m.from?.username || m.from?.name || '?',
+            message_text: m.message,
+            timestamp: m.created_time,
+          });
+        }
+        summary.dms++;
+      }
+
+      results.push(summary);
+    } catch (e) {
+      results.push({ ...summary, error: e.message });
+    }
+  }
+  return results;
+}
+
 /** Atividade do dia: stories + posts + comentários + DMs em um payload. */
 async function getAtividadeDia(userId, expert, fromDate, toDate) {
   const acc = await db.getInstagramAccountByExpert(userId, expert);
@@ -486,6 +582,7 @@ module.exports = {
   fetchComentarios,
   fetchDMs,
   fetchAllStoriesSnapshots,
+  fetchAllIgFullSnapshot,
   getAtividadeDia,
   getInstagramMetrics,
   INSTAGRAM_TOOLS,

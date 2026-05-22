@@ -75,13 +75,21 @@ async function coletarDadosExpert(expert, userId = 1) {
   const { executeMonitorgrupoTool } = require('./monitorgrupo-tools');
   const ig = require('./instagram-tools');
 
-  const [ontem, hoje, gruposOntem, gruposHoje, igOntem, igHoje] = await Promise.all([
+  // Janelas pra atividade IG do DB
+  const now = new Date();
+  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0);
+  const startYesterday = new Date(startToday); startYesterday.setDate(startYesterday.getDate() - 1);
+  const endYesterday = new Date(startToday); endYesterday.setMilliseconds(-1);
+
+  const [ontem, hoje, gruposOntem, gruposHoje, igOntem, igHoje, igAtivOntem, igAtivHoje] = await Promise.all([
     executeFunilTool('get_funil_expert', { expert, periodo: 'ontem' }, userId).catch(() => null),
     executeFunilTool('get_funil_expert', { expert, periodo: 'hoje' }, userId).catch(() => null),
     executeMonitorgrupoTool('get_engajamento_por_grupo', { expert, periodo: 'ontem' }).catch(() => null),
     executeMonitorgrupoTool('get_engajamento_por_grupo', { expert, periodo: 'hoje' }).catch(() => null),
     ig.getInstagramMetrics(userId, expert, 'ontem').catch(() => null),
     ig.getInstagramMetrics(userId, expert, 'hoje').catch(() => null),
+    db.getInstagramAtividadeFromDB(userId, expert, startYesterday, endYesterday).catch(() => null),
+    db.getInstagramAtividadeFromDB(userId, expert, startToday, now).catch(() => null),
   ]);
 
   // Resumir grupos por slot (lista de cada grupo com suas métricas)
@@ -106,10 +114,39 @@ async function coletarDadosExpert(expert, userId = 1) {
       saldo: i.saldo_seguidores_periodo,
     };
   }
+  function resumirIgAtividade(a) {
+    if (!a) return null;
+    return {
+      stories_postados: a.stories?.length || 0,
+      posts_publicados: a.posts?.length || 0,
+      total_comentarios: a.total_comments || 0,
+      autores_unicos_comentaram: a.autores_unicos_comments || 0,
+      posts: (a.posts || []).slice(0, 5).map(p => ({
+        legenda: (p.caption || '').slice(0, 200),
+        likes: p.like_count, comentarios: p.comments_count,
+      })),
+      top_comentarios: (a.top_comments || []).slice(0, 8).map(c => ({
+        autor: c.autor_username, texto: (c.texto || '').slice(0, 200),
+      })),
+      dms_recentes: (a.dms_recentes || []).slice(0, 5).map(d => ({
+        ultima_msg: (d.last_msg_text || '').slice(0, 150),
+      })),
+    };
+  }
 
   return {
-    diario_ontem: { ...resumirParaExpert(ontem), grupos_whatsapp: resumirGrupos(gruposOntem), instagram: resumirIg(igOntem) },
-    parcial_hoje: { ...resumirParaExpert(hoje), grupos_whatsapp: resumirGrupos(gruposHoje), instagram: resumirIg(igHoje) },
+    diario_ontem: {
+      ...resumirParaExpert(ontem),
+      grupos_whatsapp: resumirGrupos(gruposOntem),
+      instagram: resumirIg(igOntem),
+      instagram_atividade: resumirIgAtividade(igAtivOntem),
+    },
+    parcial_hoje: {
+      ...resumirParaExpert(hoje),
+      grupos_whatsapp: resumirGrupos(gruposHoje),
+      instagram: resumirIg(igHoje),
+      instagram_atividade: resumirIgAtividade(igAtivHoje),
+    },
   };
 }
 

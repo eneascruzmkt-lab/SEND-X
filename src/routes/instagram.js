@@ -72,4 +72,51 @@ router.post('/instagram/snapshot', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/** POST /api/instagram/snapshot-stories — força captura de stories ativos */
+router.post('/instagram/snapshot-stories', async (req, res) => {
+  try {
+    const results = await ig.fetchAllStoriesSnapshots(req.userId);
+    res.json({ ok: true, results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/instagram/atividade?expert=&de=&ate= — stories+posts+comentários */
+router.get('/instagram/atividade', async (req, res) => {
+  try {
+    const hoje = new Date(); const yesterday = new Date(Date.now() - 24*86400000);
+    const result = await ig.getAtividadeDia(req.userId, req.query.expert,
+      req.query.de || yesterday.toISOString(),
+      req.query.ate || hoje.toISOString());
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/instagram/stories?expert= — stories ativos agora (24h) */
+router.get('/instagram/stories', async (req, res) => {
+  try {
+    const acc = await db.getInstagramAccountByExpert(req.userId, req.query.expert);
+    if (!acc) return res.status(404).json({ error: 'Expert não mapeado' });
+    const stories = await ig.fetchStoriesAtivos(acc.ig_user_id);
+    res.json({ expert: req.query.expert, ig_username: acc.ig_username, stories });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/instagram/comments/:media_id — comentários de um post */
+router.get('/instagram/comments/:media_id', async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 50;
+    res.json({ media_id: req.params.media_id, comentarios: await ig.fetchComentarios(req.params.media_id, limit) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/instagram/dms?expert= — DMs recentes */
+router.get('/instagram/dms', async (req, res) => {
+  try {
+    const acc = await db.getInstagramAccountByExpert(req.userId, req.query.expert);
+    if (!acc) return res.status(404).json({ error: 'Expert não mapeado' });
+    const dms = await ig.fetchDMs(acc.ig_user_id, Number(req.query.limit) || 20);
+    res.json({ expert: req.query.expert, dms });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

@@ -268,6 +268,24 @@ async function init() {
       ADD COLUMN IF NOT EXISTS new_follows INTEGER,
       ADD COLUMN IF NOT EXISTS unfollows INTEGER;
     CREATE INDEX IF NOT EXISTS idx_ig_snapshots_user_date ON instagram_daily_snapshots(user_id, ig_user_id, snapshot_date DESC);
+
+    -- Stories (somem em 24h, precisamos snapshot diário pra histórico)
+    CREATE TABLE IF NOT EXISTS instagram_stories (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      expert          TEXT,
+      ig_user_id      TEXT NOT NULL,
+      story_id        TEXT NOT NULL,
+      media_type      TEXT,
+      media_url       TEXT,
+      thumbnail_url   TEXT,
+      permalink       TEXT,
+      timestamp       TIMESTAMPTZ,
+      description     TEXT,
+      seen_at         TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, story_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ig_stories_user_date ON instagram_stories(user_id, expert, timestamp DESC);
   `);
   // Smart Reminders: lembretes inteligentes (pós-live, pós-disparo, etc.)
   await pool.query(`
@@ -930,6 +948,31 @@ module.exports = {
        WHERE user_id=$1 AND ig_user_id=$2 AND snapshot_date BETWEEN $3 AND $4
        ORDER BY snapshot_date ASC`,
       [userId, igUserId, fromDate, toDate]
+    );
+    return r.rows;
+  },
+
+  async upsertInstagramStory(userId, story) {
+    await pool.query(
+      `INSERT INTO instagram_stories (user_id, expert, ig_user_id, story_id, media_type, media_url, thumbnail_url, permalink, timestamp, description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (user_id, story_id) DO UPDATE
+       SET media_url=$6, thumbnail_url=$7, permalink=$8, description=COALESCE($10, instagram_stories.description)`,
+      [userId, story.expert, story.ig_user_id, story.story_id,
+       story.media_type, story.media_url, story.thumbnail_url,
+       story.permalink, story.timestamp, story.description]
+    );
+  },
+
+  async listInstagramStories(userId, { expert, fromDate, toDate, limit = 50 } = {}) {
+    const where = ['user_id=$1']; const params = [userId];
+    if (expert) { params.push(expert.toUpperCase()); where.push(`UPPER(expert)=$${params.length}`); }
+    if (fromDate) { params.push(fromDate); where.push(`timestamp >= $${params.length}`); }
+    if (toDate)   { params.push(toDate);   where.push(`timestamp <= $${params.length}`); }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT * FROM instagram_stories WHERE ${where.join(' AND ')} ORDER BY timestamp DESC LIMIT $${params.length}`,
+      params
     );
     return r.rows;
   },

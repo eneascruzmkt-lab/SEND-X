@@ -139,6 +139,124 @@ async function fetchPostInsights(mediaId) {
   } catch (e) { return null; }
 }
 
+/** Stories ATIVOS (últimas 24h) — somem após esse período. */
+async function fetchStoriesAtivos(igUserId) {
+  const data = await fbGet(`/${igUserId}/stories`, {
+    fields: 'id,media_type,media_url,thumbnail_url,permalink,timestamp',
+  });
+  return data.data || [];
+}
+
+/** Comentários de um post (até 100). */
+async function fetchComentarios(mediaId, limit = 50) {
+  try {
+    const data = await fbGet(`/${mediaId}/comments`, {
+      fields: 'id,text,username,timestamp,like_count,replies{id,text,username,timestamp}',
+      limit,
+    });
+    return data.data || [];
+  } catch (e) { return []; }
+}
+
+/** Conversas DM recentes (precisa instagram_manage_messages). */
+async function fetchDMs(igUserId, limit = 20) {
+  try {
+    // /me/conversations precisa do fb_page_id, não ig_user_id. Pegamos via account
+    const data = await fbGet(`/me/conversations`, {
+      platform: 'instagram',
+      fields: 'id,updated_time,participants,messages.limit(5){id,from,message,created_time}',
+      limit,
+    });
+    return data.data || [];
+  } catch (e) {
+    console.error('[ig] DMs falhou:', e.message);
+    return [];
+  }
+}
+
+/** Salva snapshot dos stories ativos no DB (eles somem em 24h). */
+async function fetchAllStoriesSnapshots(userId = 1) {
+  const accounts = await db.listInstagramAccounts(userId);
+  const results = [];
+  for (const acc of accounts) {
+    try {
+      const stories = await fetchStoriesAtivos(acc.ig_user_id);
+      for (const s of stories) {
+        await db.upsertInstagramStory(userId, {
+          expert: acc.expert,
+          ig_user_id: acc.ig_user_id,
+          story_id: s.id,
+          media_type: s.media_type,
+          media_url: s.media_url,
+          thumbnail_url: s.thumbnail_url,
+          permalink: s.permalink,
+          timestamp: s.timestamp,
+          description: null,
+        });
+      }
+      results.push({ expert: acc.expert, stories_capturados: stories.length });
+    } catch (e) {
+      results.push({ expert: acc.expert, error: e.message });
+    }
+  }
+  return results;
+}
+
+/** Atividade do dia: stories + posts + comentários + DMs em um payload. */
+async function getAtividadeDia(userId, expert, fromDate, toDate) {
+  const acc = await db.getInstagramAccountByExpert(userId, expert);
+  if (!acc) return { error: `Expert ${expert} não mapeado no Instagram` };
+
+  const igId = acc.ig_user_id;
+  // Stories (ativos agora — pega últimas 24h)
+  const stories = await fetchStoriesAtivos(igId).catch(() => []);
+  // Stories históricos do DB (snapshot)
+  const storiesHistorico = await db.listInstagramStories(userId, {
+    expert, fromDate, toDate, limit: 100,
+  });
+  // Posts recentes do feed
+  const posts = await fetchRecentPosts(igId, 15).catch(() => []);
+  // Filtra posts do período
+  const postsNoPeriodo = posts.filter(p => {
+    if (!fromDate || !toDate) return true;
+    const t = new Date(p.timestamp);
+    return t >= new Date(fromDate) && t <= new Date(toDate);
+  });
+  // Pra cada post recente, pega top comentários
+  const postsComComentarios = [];
+  for (const p of postsNoPeriodo.slice(0, 5)) {
+    const comentarios = await fetchComentarios(p.id, 20).catch(() => []);
+    postsComComentarios.push({
+      id: p.id,
+      caption: p.caption,
+      media_type: p.media_type,
+      permalink: p.permalink,
+      thumbnail_url: p.thumbnail_url || p.media_url,
+      timestamp: p.timestamp,
+      like_count: p.like_count,
+      comments_count: p.comments_count,
+      top_comentarios: comentarios.slice(0, 10).map(c => ({
+        autor: c.username, texto: c.text, likes: c.like_count, ts: c.timestamp,
+      })),
+    });
+  }
+
+  return {
+    expert,
+    ig_username: acc.ig_username,
+    profile_pic_url: acc.profile_pic_url,
+    stories_ativos_agora: stories.length,
+    stories_ativos: stories.map(s => ({
+      id: s.id, media_type: s.media_type, media_url: s.media_url,
+      thumbnail_url: s.thumbnail_url, permalink: s.permalink, timestamp: s.timestamp,
+    })),
+    stories_historico_periodo: storiesHistorico.length,
+    stories_historico: storiesHistorico,
+    posts: postsComComentarios,
+    posts_periodo_total: postsNoPeriodo.length,
+  };
+}
+
 /** Cron job: coleta snapshot diário de TODAS as accounts cadastradas pra um user. */
 async function fetchAllSnapshots(userId = 1, targetDate = null) {
   const date = targetDate || new Date().toISOString().slice(0, 10);
@@ -271,6 +389,44 @@ function resolvePeriodo(periodo, de, ate) {
 
 const INSTAGRAM_TOOLS = [
   {
+    name: 'get_instagram_atividade_dia',
+    description: 'Atividade COMPLETA do Instagram do expert: stories ativos agora (últimas 24h) + stories do histórico no período + posts + comentários top de cada post. Use pra entender o que o expert postou e qual a recepção. Cada story/post traz media_url ou thumbnail_url que pode ser baixada e analisada via vision.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        expert: { type: 'string' },
+        de: { type: 'string', description: 'ISO date (opcional, default hoje)' },
+        ate: { type: 'string', description: 'ISO date (opcional)' },
+      },
+      required: ['expert'],
+    },
+  },
+  {
+    name: 'get_instagram_stories_ativos',
+    description: 'Stories Instagram ATIVOS agora (últimas 24h) do expert. Cada item tem media_url (URL pública da imagem/vídeo) que pode ser analisada via vision.',
+    input_schema: { type: 'object', properties: { expert: { type: 'string' } }, required: ['expert'] },
+  },
+  {
+    name: 'get_instagram_comentarios',
+    description: 'Comentários de um post específico do Instagram (até 50). Mostra autor, texto, likes, timestamp e replies.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        media_id: { type: 'string', description: 'ID do post (pegar via get_instagram_atividade_dia ou listar_instagram_posts)' },
+      },
+      required: ['media_id'],
+    },
+  },
+  {
+    name: 'get_instagram_dms',
+    description: 'Conversações DM recentes do Instagram do expert. Lista conversas + últimas mensagens de cada.',
+    input_schema: {
+      type: 'object',
+      properties: { expert: { type: 'string' }, limit: { type: 'number' } },
+      required: ['expert'],
+    },
+  },
+  {
     name: 'get_instagram_metricas',
     description: 'Métricas do Instagram do expert: seguidores atual, novos seguidores no período, posts, reach, impressões. Usa snapshots diários salvos no DB + tempo real via Graph API.',
     input_schema: {
@@ -297,6 +453,26 @@ async function executeInstagramTool(name, input, userId = 1) {
   if (name === 'listar_instagram_contas') {
     return await db.listInstagramAccounts(userId);
   }
+  if (name === 'get_instagram_atividade_dia') {
+    const hoje = new Date(); const yesterday = new Date(Date.now() - 24*86400000);
+    return await getAtividadeDia(userId, input.expert,
+      input.de || yesterday.toISOString(),
+      input.ate || hoje.toISOString()
+    );
+  }
+  if (name === 'get_instagram_stories_ativos') {
+    const acc = await db.getInstagramAccountByExpert(userId, input.expert);
+    if (!acc) return { error: `Expert ${input.expert} não mapeado` };
+    return { expert: input.expert, ig_username: acc.ig_username, stories: await fetchStoriesAtivos(acc.ig_user_id) };
+  }
+  if (name === 'get_instagram_comentarios') {
+    return { media_id: input.media_id, comentarios: await fetchComentarios(input.media_id, 50) };
+  }
+  if (name === 'get_instagram_dms') {
+    const acc = await db.getInstagramAccountByExpert(userId, input.expert);
+    if (!acc) return { error: `Expert ${input.expert} não mapeado` };
+    return { expert: input.expert, dms: await fetchDMs(acc.ig_user_id, input.limit || 20) };
+  }
   throw new Error(`Instagram tool desconhecida: ${name}`);
 }
 
@@ -306,6 +482,11 @@ module.exports = {
   fetchAllSnapshots,
   fetchRecentPosts,
   fetchPostInsights,
+  fetchStoriesAtivos,
+  fetchComentarios,
+  fetchDMs,
+  fetchAllStoriesSnapshots,
+  getAtividadeDia,
   getInstagramMetrics,
   INSTAGRAM_TOOLS,
   executeInstagramTool,

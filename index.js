@@ -99,16 +99,26 @@ db.init().then(() => {
   cron.schedule('0 0 * * *',  () => runAdvisor('madrugada'),{ timezone: 'America/Sao_Paulo' });
   console.log('[cron-ai-advisor] agendado pra 08:00, 15:00 e 00:00 BRT');
 
-  // Cron Instagram snapshot diário às 07:00 BRT
+  // Cron Instagram snapshot diário às 07:00 BRT (métricas)
   const instagram = require('./src/instagram-tools');
   cron.schedule('0 7 * * *', async () => {
-    console.log('[cron-instagram] snapshot diário…');
+    console.log('[cron-instagram] snapshot métricas…');
     try {
       const r = await instagram.fetchAllSnapshots(1);
       console.log('[cron-instagram] ok:', JSON.stringify(r));
     } catch (e) { console.error('[cron-instagram]', e.message); }
   }, { timezone: 'America/Sao_Paulo' });
-  console.log('[cron-instagram] agendado pra 07:00 BRT diário');
+  console.log('[cron-instagram] métricas agendado pra 07:00 BRT diário');
+
+  // Cron Instagram stories: 4x ao dia (8h, 13h, 18h, 23h) pra capturar antes de expirar
+  cron.schedule('0 8,13,18,23 * * *', async () => {
+    console.log('[cron-ig-stories] capturando stories ativos…');
+    try {
+      const r = await instagram.fetchAllStoriesSnapshots(1);
+      console.log('[cron-ig-stories] ok:', JSON.stringify(r));
+    } catch (e) { console.error('[cron-ig-stories]', e.message); }
+  }, { timezone: 'America/Sao_Paulo' });
+  console.log('[cron-ig-stories] agendado pra 08/13/18/23 BRT (captura antes de stories expirarem)');
 
   // Smart Reminders: scanneia lives terminadas a cada 10min (TZ irrelevante na frequência)
   const smartReminders = require('./src/smart-reminders');

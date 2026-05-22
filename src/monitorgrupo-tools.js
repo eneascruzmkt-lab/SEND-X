@@ -83,6 +83,67 @@ async function get_grupos_expert({ expert }) {
   return { expert, total_grupos: r.rows.length, grupos: r.rows };
 }
 
+/**
+ * Métricas SEPARADAS por grupo de leads do expert. Retorna array com 1 item por grupo.
+ * Cada item: nome, total_membros, ativos, mensagens, novos_membros, saidas, saldo.
+ * Use quando expert tem múltiplos grupos com leads sobrepostos (ex: DANI).
+ */
+async function get_engajamento_por_grupo({ expert, periodo, de, ate }) {
+  const expertId = await getExpertId(expert);
+  if (!expertId) return { error: `Expert '${expert}' não encontrado` };
+
+  const db = pool();
+  const groupsRes = await db.query(`
+    SELECT eg.group_jid, g.name, g.member_count
+    FROM expert_groups eg JOIN groups g ON g.group_jid = eg.group_jid
+    WHERE eg.expert_id=$1 AND eg.role='leads'
+    ORDER BY g.member_count DESC NULLS LAST
+  `, [expertId]);
+
+  if (groupsRes.rows.length === 0) return { expert, total_grupos: 0, grupos: [] };
+
+  const { start, end, label } = resolvePeriodo(periodo, de, ate);
+  const grupos = [];
+
+  for (const g of groupsRes.rows) {
+    const msgsRes = await db.query(`
+      SELECT
+        COUNT(*) AS total_msgs,
+        COUNT(DISTINCT remote_jid) AS senders,
+        COUNT(*) FILTER (WHERE message_type IN ('image','video','document','audio','sticker')) AS media,
+        COUNT(*) FILTER (WHERE is_reply=true) AS replies
+      FROM messages WHERE group_jid=$1 AND timestamp BETWEEN $2 AND $3
+    `, [g.group_jid, start, end]);
+    const msgs = msgsRes.rows[0];
+
+    const churnRes = await db.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE is_active=true AND joined_at BETWEEN $2 AND $3) AS novos,
+        COUNT(*) FILTER (WHERE is_active=false AND updated_at BETWEEN $2 AND $3) AS saidas
+      FROM members WHERE group_jid=$1
+    `, [g.group_jid, start, end]);
+    const churn = churnRes.rows[0];
+
+    const ativos = Number(msgs.senders);
+    const total = Number(g.member_count) || 0;
+    grupos.push({
+      group_jid: g.group_jid,
+      nome: g.name,
+      total_membros: total,
+      ativos,
+      taxa_engajamento: total > 0 ? Math.round((ativos / total) * 1000) / 10 + '%' : '0%',
+      total_mensagens: Number(msgs.total_msgs),
+      mensagens_media: Number(msgs.media),
+      mensagens_replies: Number(msgs.replies),
+      novos_membros: Number(churn.novos),
+      saidas: Number(churn.saidas),
+      saldo: Number(churn.novos) - Number(churn.saidas),
+    });
+  }
+
+  return { expert, periodo: label, total_grupos: grupos.length, grupos };
+}
+
 async function get_engajamento_grupos({ expert, periodo, de, ate }) {
   const expertId = await getExpertId(expert);
   if (!expertId) return { error: `Expert '${expert}' não encontrado` };
@@ -208,6 +269,19 @@ const MONITORGRUPO_TOOLS = [
     },
   },
   {
+    name: 'get_engajamento_por_grupo',
+    description: 'Métricas SEPARADAS por cada grupo de leads do expert. Retorna lista onde cada item tem: nome, total membros, ativos, mensagens, novos_membros no período, saidas, saldo. Use quando o expert tem múltiplos grupos com leads sobrepostos (DANI tem vários).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        expert: { type: 'string' },
+        periodo: { type: 'string', enum: ['hoje','ontem','7d','14d','30d','1m','mtd','lastm','3m','custom'] },
+        de: { type: 'string' }, ate: { type: 'string' },
+      },
+      required: ['expert','periodo'],
+    },
+  },
+  {
     name: 'get_engajamento_grupos',
     description: 'Métricas de engajamento agregadas dos grupos de leads do expert: total mensagens, membros ativos, taxa engajamento, top engagers. Use pra avaliar qualidade da lista WhatsApp.',
     input_schema: {
@@ -251,6 +325,7 @@ const MONITORGRUPO_TOOLS = [
 const HANDLERS = {
   get_grupos_expert,
   get_engajamento_grupos,
+  get_engajamento_por_grupo,
   get_mensagens_grupos_expert,
   get_churn_grupos_expert,
 };

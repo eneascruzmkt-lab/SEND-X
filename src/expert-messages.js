@@ -121,8 +121,12 @@ async function coletarDadosExpert(expert, userId = 1) {
       posts_publicados: a.posts?.length || 0,
       total_comentarios: a.total_comments || 0,
       autores_unicos_comentaram: a.autores_unicos_comments || 0,
+      stories_conteudo: (a.stories || []).slice(0, 8).map(s => ({
+        descricao: s.description ? s.description.slice(0, 250) : null,
+      })).filter(s => s.descricao),
       posts: (a.posts || []).slice(0, 5).map(p => ({
         legenda: (p.caption || '').slice(0, 200),
+        descricao_visual: p.description ? p.description.slice(0, 250) : null,
         likes: p.like_count, comentarios: p.comments_count,
       })),
       top_comentarios: (a.top_comments || []).slice(0, 8).map(c => ({

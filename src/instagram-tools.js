@@ -572,6 +572,71 @@ async function executeInstagramTool(name, input, userId = 1) {
   throw new Error(`Instagram tool desconhecida: ${name}`);
 }
 
+/**
+ * Descreve uma imagem via bridge (Claude com vision nativo).
+ * Retorna 2-3 frases sobre o conteúdo da imagem.
+ */
+async function descreverMidiaIA(mediaUrl, mediaType = 'IMAGE', contextoExtra = '') {
+  if (!mediaUrl) return null;
+  // Vídeos: descrição via thumbnail (preview frame)
+  const url = (await db.getBridgeRegistry().catch(() => null))?.url || process.env.BRIDGE_URL;
+  const secret = process.env.BRIDGE_SECRET;
+  if (!url || !secret) return null;
+  try {
+    const resp = await fetch(`${url}/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify({
+        message:
+          'Descreva o conteúdo desta imagem do Instagram em 2-3 frases naturais em português brasileiro. ' +
+          'Foque em: o que aparece (pessoas, ambiente, ação), o tema/sentimento, e qualquer texto visível. ' +
+          'Seja específico e direto, sem disclaimers. Resposta APENAS com a descrição.' +
+          (contextoExtra ? '\n\nContexto: ' + contextoExtra : ''),
+        images: [mediaUrl],
+        mode: 'task',
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return (data.text || '').trim().slice(0, 600) || null;
+  } catch (e) {
+    console.error('[ig-describe] falhou:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Pega itens pendentes (sem description) e descreve em sequência.
+ * Limita a N itens por execução pra não estourar tempo.
+ */
+async function descreverPendentesIA(userId = 1, maxItens = 8) {
+  const { stories, posts } = await db.listInstagramItensSemDescription(userId, maxItens);
+  const results = { stories_descritos: 0, posts_descritos: 0, errors: [] };
+
+  for (const s of stories.slice(0, maxItens / 2)) {
+    const url = s.media_url || s.thumbnail_url;
+    if (!url) continue;
+    const desc = await descreverMidiaIA(url, s.media_type, `Story do expert ${s.expert}`);
+    if (desc) {
+      await db.updateInstagramStoryDescription(userId, s.id, desc);
+      results.stories_descritos++;
+      console.log(`[ig-describe] story ${s.id} (${s.expert}): ${desc.slice(0, 80)}…`);
+    }
+  }
+  for (const p of posts.slice(0, maxItens / 2)) {
+    const url = p.thumbnail_url || p.media_url;
+    if (!url) continue;
+    const ctx = `Post do expert ${p.expert}. Legenda: ${(p.caption || '').slice(0, 200)}`;
+    const desc = await descreverMidiaIA(url, p.media_type, ctx);
+    if (desc) {
+      await db.updateInstagramPostDescription(userId, p.id, desc);
+      results.posts_descritos++;
+      console.log(`[ig-describe] post ${p.id} (${p.expert}): ${desc.slice(0, 80)}…`);
+    }
+  }
+  return results;
+}
+
 module.exports = {
   discoverInstagramAccounts,
   fetchInstagramSnapshot,
@@ -585,6 +650,8 @@ module.exports = {
   fetchAllIgFullSnapshot,
   getAtividadeDia,
   getInstagramMetrics,
+  descreverMidiaIA,
+  descreverPendentesIA,
   INSTAGRAM_TOOLS,
   executeInstagramTool,
 };

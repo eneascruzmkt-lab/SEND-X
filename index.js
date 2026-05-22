@@ -121,6 +121,16 @@ db.init().then(() => {
   }, { timezone: 'America/Sao_Paulo' });
   console.log('[cron-ig-full] agendado pra 08/13/18/23 BRT (stories+posts+comments+dms)');
 
+  // Cron IG descrição IA: roda 15min depois do snapshot pra descrever conteúdo visual
+  cron.schedule('15 8,13,18,23 * * *', async () => {
+    console.log('[cron-ig-describe] descrevendo stories/posts via vision…');
+    try {
+      const r = await instagram.descreverPendentesIA(1, 10);
+      console.log('[cron-ig-describe] ok:', JSON.stringify(r));
+    } catch (e) { console.error('[cron-ig-describe]', e.message); }
+  }, { timezone: 'America/Sao_Paulo' });
+  console.log('[cron-ig-describe] agendado pra 08:15/13:15/18:15/23:15 BRT');
+
   // Smart Reminders: scanneia lives terminadas a cada 10min (TZ irrelevante na frequência)
   const smartReminders = require('./src/smart-reminders');
   cron.schedule('*/10 * * * *', async () => {

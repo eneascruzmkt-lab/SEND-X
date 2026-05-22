@@ -88,6 +88,15 @@ router.post('/instagram/snapshot-full', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/** POST /api/instagram/descrever-pendentes — força descrição IA */
+router.post('/instagram/descrever-pendentes', async (req, res) => {
+  try {
+    const max = Number(req.query.max) || 10;
+    const r = await ig.descreverPendentesIA(req.userId, max);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /** GET /api/instagram/db-atividade?expert=&periodo= — lê DO BANCO */
 router.get('/instagram/db-atividade', async (req, res) => {
   try {

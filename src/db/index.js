@@ -310,6 +310,7 @@ async function init() {
       UNIQUE(user_id, post_id)
     );
     CREATE INDEX IF NOT EXISTS idx_ig_posts_user_date ON instagram_posts(user_id, expert, timestamp DESC);
+    ALTER TABLE instagram_posts ADD COLUMN IF NOT EXISTS description TEXT;
 
     -- Comentários dos posts
     CREATE TABLE IF NOT EXISTS instagram_comments (
@@ -1060,6 +1061,38 @@ module.exports = {
     );
   },
 
+  async updateInstagramPostDescription(userId, postId, description) {
+    await pool.query(
+      `UPDATE instagram_posts SET description=$3 WHERE user_id=$1 AND post_id=$2`,
+      [userId, postId, description]
+    );
+  },
+
+  async updateInstagramStoryDescription(userId, storyId, description) {
+    await pool.query(
+      `UPDATE instagram_stories SET description=$3 WHERE user_id=$1 AND story_id=$2`,
+      [userId, storyId, description]
+    );
+  },
+
+  async listInstagramItensSemDescription(userId, limit = 10) {
+    const stories = await pool.query(
+      `SELECT 'story' AS kind, story_id AS id, expert, media_type, media_url, thumbnail_url, permalink, timestamp
+       FROM instagram_stories WHERE user_id=$1 AND description IS NULL
+         AND (media_url IS NOT NULL OR thumbnail_url IS NOT NULL)
+       ORDER BY timestamp DESC LIMIT $2`,
+      [userId, limit]
+    );
+    const posts = await pool.query(
+      `SELECT 'post' AS kind, post_id AS id, expert, media_type, media_url, thumbnail_url, permalink, timestamp, caption
+       FROM instagram_posts WHERE user_id=$1 AND description IS NULL
+         AND (media_url IS NOT NULL OR thumbnail_url IS NOT NULL)
+       ORDER BY timestamp DESC LIMIT $2`,
+      [userId, limit]
+    );
+    return { stories: stories.rows, posts: posts.rows };
+  },
+
   async listInstagramPosts(userId, { expert, fromDate, toDate, limit = 30 } = {}) {
     const where = ['user_id=$1']; const params = [userId];
     if (expert) { params.push(expert.toUpperCase()); where.push(`UPPER(expert)=$${params.length}`); }
@@ -1136,13 +1169,13 @@ module.exports = {
     const fromIso = (fromDate instanceof Date) ? fromDate.toISOString() : fromDate;
     const toIso   = (toDate instanceof Date) ? toDate.toISOString() : toDate;
     const stories = await pool.query(
-      `SELECT story_id, media_type, media_url, thumbnail_url, permalink, timestamp
+      `SELECT story_id, media_type, media_url, thumbnail_url, permalink, timestamp, description
        FROM instagram_stories WHERE user_id=$1 AND UPPER(expert)=$2 AND timestamp BETWEEN $3 AND $4
        ORDER BY timestamp DESC`,
       [userId, upper, fromIso, toIso]
     );
     const posts = await pool.query(
-      `SELECT post_id, caption, media_type, permalink, thumbnail_url, timestamp, like_count, comments_count
+      `SELECT post_id, caption, media_type, permalink, thumbnail_url, timestamp, like_count, comments_count, description
        FROM instagram_posts WHERE user_id=$1 AND UPPER(expert)=$2 AND timestamp BETWEEN $3 AND $4
        ORDER BY timestamp DESC`,
       [userId, upper, fromIso, toIso]

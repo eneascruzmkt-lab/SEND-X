@@ -121,14 +121,18 @@ async function coletarDadosExpert(expert, userId = 1) {
       posts_publicados: a.posts?.length || 0,
       total_comentarios: a.total_comments || 0,
       autores_unicos_comentaram: a.autores_unicos_comments || 0,
-      stories_conteudo: (a.stories || []).slice(0, 8).map(s => ({
-        descricao: s.description ? s.description.slice(0, 250) : null,
-      })).filter(s => s.descricao),
-      posts: (a.posts || []).slice(0, 5).map(p => ({
-        legenda: (p.caption || '').slice(0, 200),
-        descricao_visual: p.description ? p.description.slice(0, 250) : null,
-        likes: p.like_count, comentarios: p.comments_count,
-      })),
+      // Conteúdo CONTEXTUAL pra IA entender o que performou — não pra contar pro expert
+      _conteudo_postado_contexto_interno: {
+        stories: (a.stories || []).slice(0, 10).map(s => ({
+          descricao_ia: s.description ? s.description.slice(0, 300) : null,
+        })).filter(s => s.descricao_ia),
+        posts: (a.posts || []).slice(0, 8).map(p => ({
+          legenda: (p.caption || '').slice(0, 200),
+          descricao_visual_ia: p.description ? p.description.slice(0, 300) : null,
+          likes: p.like_count,
+          comentarios: p.comments_count,
+        })),
+      },
       top_comentarios: (a.top_comments || []).slice(0, 8).map(c => ({
         autor: c.autor_username, texto: (c.texto || '').slice(0, 200),
       })),
@@ -166,8 +170,18 @@ ${expertName} é um criador de conteúdo. O TRABALHO DELE é:
 # DADOS QUE VOCÊ TEM
 - "resultado": cadastros, novos_jogadores_depositaram (FTDs), valor_total_depositado, valor_primeiro_deposito
 - "lives": como foram (quantas, pico, assistiram, msgs chat)
-- "grupos_whatsapp": LISTA — UM ITEM POR GRUPO. Cada item tem nome, total_membros, ativos, mensagens, novos_membros, saidas, saldo. SEMPRE comente CADA GRUPO SEPARADAMENTE (alguns experts têm múltiplos grupos com leads sobrepostos).
-- "instagram": seguidores_atual, novos_seguidores, unfollows, saldo (entradas - saídas)
+- "grupos_whatsapp": LISTA — UM ITEM POR GRUPO. Cada item tem nome, total_membros, ativos, mensagens, novos_membros, saidas, saldo. SEMPRE comente CADA GRUPO SEPARADAMENTE.
+- "instagram": seguidores_atual, novos_seguidores, unfollows, saldo, total_comentarios
+- "instagram_atividade._conteudo_postado_contexto_interno": LISTA do que ele JÁ postou (stories + posts com descrição visual e engajamento). **USE SÓ COMO CONTEXTO INTERNO — NÃO LISTE pro expert, ele já sabe o que postou.**
+
+# REGRA INVIOLÁVEL sobre conteúdo já postado
+NUNCA escreva "Você postou:", "Destaques visuais:", "seus stories foram:" ou listar o que ele postou. Ele já sabe.
+USE a descrição visual + engajamento (likes/comentários) APENAS pra:
+- Identificar quais TEMAS performaram melhor (mais comentários/likes)
+- Sugerir NOVOS posts/stories/reels coerentes com o que está engajando
+- Exemplo bom: "Seu reel sobre alavancagem teve 25 comentários — grava outro nesse tema falando do X" (cita engajamento, sugere ação)
+- Exemplo bom: "A galera tá engajando muito com humor — grava um story zoando Y"
+- Exemplo RUIM: "Hoje você postou: story 1 sobre roleta, story 2 com selfie..."
 
 Linguagem natural:
 - "novos_jogadores_depositaram" → "X pessoas novas depositaram pela primeira vez"
@@ -175,7 +189,7 @@ Linguagem natural:
 - "cadastros" → "X pessoas se cadastraram"
 - "instagram.novos_seguidores" → "X pessoas novas te seguiram"
 - "instagram.unfollows" → "Y pessoas deixaram de te seguir"
-- "instagram.saldo" → "saldo de Z seguidores" (positivo=ganho líquido)
+- "instagram.saldo" → "saldo de Z seguidores"
 - grupos_whatsapp: SEMPRE mencione cada grupo pelo NOME e seu movimento separado.
 
 # PALAVRAS ABSOLUTAMENTE PROIBIDAS (banimento total)

@@ -583,6 +583,22 @@ async function descreverMidiaIA(mediaUrl, mediaType = 'IMAGE', contextoExtra = '
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) return null;
   try {
+    // Vídeos têm URL com .mp4 — Claude vision não lê vídeo, mas o thumbnail dá.
+    // Tenta baixar a imagem e mandar como base64 (mais robusto que URL pública).
+    let imagePayload = { url: mediaUrl };
+    try {
+      const imgResp = await fetch(mediaUrl);
+      if (imgResp.ok) {
+        const ct = imgResp.headers.get('content-type') || 'image/jpeg';
+        // Só processa se for imagem (não vídeo)
+        if (ct.startsWith('image/')) {
+          const buf = await imgResp.arrayBuffer();
+          const b64 = Buffer.from(buf).toString('base64');
+          imagePayload = { data_base64: b64, mime_type: ct };
+        }
+      }
+    } catch (e) { /* fica com url */ }
+
     const resp = await fetch(`${url}/chat`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
@@ -592,7 +608,7 @@ async function descreverMidiaIA(mediaUrl, mediaType = 'IMAGE', contextoExtra = '
           'Foque em: o que aparece (pessoas, ambiente, ação), o tema/sentimento, e qualquer texto visível. ' +
           'Seja específico e direto, sem disclaimers. Resposta APENAS com a descrição.' +
           (contextoExtra ? '\n\nContexto: ' + contextoExtra : ''),
-        images: [mediaUrl],
+        images: [imagePayload],
         mode: 'task',
       }),
     });

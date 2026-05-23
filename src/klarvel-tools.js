@@ -211,6 +211,41 @@ async function get_mensagens_live({ meeting_id, limit = 100 }) {
   };
 }
 
+/**
+ * Transcrição completa de áudio da live (chunks de Whisper concatenados).
+ * Retorna texto corrido + segmentos com timestamps.
+ */
+async function get_transcricao_live({ meeting_id, limit = 500 }) {
+  if (!meeting_id) throw new Error('meeting_id obrigatório');
+  const db = pool();
+  const r = await db.query(
+    `SELECT timestamp, data FROM events
+     WHERE meeting_id=$1 AND event='transcriptChunk'
+     ORDER BY timestamp ASC LIMIT $2`,
+    [meeting_id, limit]
+  );
+  const chunks = r.rows.map(x => ({
+    ts: x.timestamp,
+    idx: x.data?.idx,
+    text: x.data?.text || '',
+    duration: x.data?.duration,
+    segments: x.data?.segments || [],
+  }));
+  const fullText = chunks.map(c => c.text).filter(Boolean).join(' ');
+  const totalDurationS = chunks.reduce((a, c) => a + (Number(c.duration) || 0), 0);
+  return {
+    meeting_id,
+    total_chunks: chunks.length,
+    duracao_total_segundos: Math.round(totalDurationS),
+    duracao_total_minutos: Math.round(totalDurationS / 60),
+    texto_completo: fullText,
+    palavras_aprox: fullText ? fullText.split(/\s+/).length : 0,
+    chunks: chunks.map(c => ({
+      ts: c.ts, idx: c.idx, text: c.text, duration: c.duration,
+    })),
+  };
+}
+
 async function listar_lives({ expert, periodo, de, ate, limit = 30 }) {
   const userId = expertToUserId(expert);
   const { start, end, label } = resolvePeriodo(periodo, de, ate);
@@ -354,6 +389,18 @@ const KLARVEL_TOOLS = [
       required: ['meeting_id'],
     },
   },
+  {
+    name: 'get_transcricao_live',
+    description: 'Transcrição completa de ÁUDIO da live (Whisper). Retorna texto corrido + chunks com timestamps. Use pra entender o que o expert FALOU (não só o chat). Funciona em lives onde o bot capturou áudio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        meeting_id: { type: 'string' },
+        limit: { type: 'number', description: 'max chunks (default 500)' },
+      },
+      required: ['meeting_id'],
+    },
+  },
 ];
 
 KLARVEL_TOOLS.push({
@@ -375,6 +422,7 @@ const HANDLERS = {
   listar_lives,
   get_live_detalhes,
   get_mensagens_live,
+  get_transcricao_live,
   gerar_relatorio_lives,
 };
 

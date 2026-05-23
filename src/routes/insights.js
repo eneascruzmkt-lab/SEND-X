@@ -325,7 +325,14 @@ router.post('/insights', async (req, res) => {
     send({ type: 'session', id: session.id, backend: 'bridge' });
 
     const ac = new AbortController();
-    req.on('close', () => ac.abort());
+    // Express 5: req.on('close') dispara em qualquer fechamento (mesmo sucesso).
+    // Usa res.on('close') checando writableEnded pra abortar SÓ em disconnect prematuro.
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        console.log('[insights] response closed prematurely, aborting');
+        ac.abort();
+      }
+    });
 
     let assistantText = '';
 

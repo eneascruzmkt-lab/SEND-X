@@ -105,24 +105,56 @@ async function getFtdsExpert({ expert, user_id = 1, limit = 50 }) {
   const mapping = await db.listApostatudoMap(user_id);
   const expertMap = mapping.filter(m => m.expert.toUpperCase() === expert.toUpperCase());
   if (expertMap.length === 0) {
-    return { error: `Expert '${expert}' não tem afiliado Apostatudo mapeado. Use mapear_apostatudo primeiro.` };
+    return { error: `Expert '${expert}' não tem afiliado Apostatudo mapeado. Use mapear_apostatudo_expert primeiro.` };
   }
   const affIds = new Set(expertMap.map(m => m.affiliate_id).filter(Boolean));
-  const affLinks = new Set(expertMap.map(m => m.aff_link).filter(Boolean));
 
-  // Pega todos FTDs e filtra os que pertencem ao expert
-  const all = await apo(`/admin/ftds?limit=500`);
-  const ftds = (all.data || []).filter(f =>
-    (f.recommended_by && affIds.has(f.recommended_by))
-  ).slice(0, limit);
+  // Coleta FTDs por afiliado: percorre cada mapeamento e busca leads
+  const ftdsMap = new Map(); // player_id → ftd info (dedup)
 
-  // Volume + média
-  const volumeCents = ftds.reduce((a, f) => a + (Number(f.ftd_amount_cents) || 0), 0);
+  // Via aff_link (busca leads do link e filtra quem tem ftd_value_cents)
+  for (const m of expertMap) {
+    if (m.aff_link) {
+      try {
+        const r = await apo(`/admin/affiliates-by-link/leads?aff_link=${encodeURIComponent(m.aff_link)}&limit=500`);
+        for (const lead of r.data || []) {
+          if (lead.ftd_value_cents && !ftdsMap.has(lead.id)) {
+            ftdsMap.set(lead.id, {
+              player_id: lead.id, email: lead.email, name: lead.name,
+              ftd_at_str: lead.ftd_date,
+              ftd_amount_cents: lead.ftd_value_cents,
+              recommended_by: lead.recommended_by,
+              affiliation_code: lead.reg_affiliation_code,
+            });
+          }
+        }
+      } catch (e) { /* skip */ }
+    }
+  }
+
+  // Via affiliate_id (busca FTDs globais e filtra)
+  if (affIds.size > 0) {
+    try {
+      const all = await apo(`/admin/ftds?limit=500`);
+      for (const f of all.data || []) {
+        if (f.recommended_by && affIds.has(f.recommended_by) && !ftdsMap.has(f.player_id)) {
+          ftdsMap.set(f.player_id, f);
+        }
+      }
+    } catch (e) { /* skip */ }
+  }
+
+  const allFtds = [...ftdsMap.values()].sort((a, b) =>
+    new Date(b.ftd_at_str || 0) - new Date(a.ftd_at_str || 0)
+  );
+  const ftds = allFtds.slice(0, limit);
+  const volumeCents = allFtds.reduce((a, f) => a + (Number(f.ftd_amount_cents) || 0), 0);
+
   return {
     expert,
-    total_ftds: ftds.length,
+    total_ftds: allFtds.length,
     volume_brl: brlFromCents(volumeCents),
-    ticket_medio_brl: ftds.length ? brlFromCents(volumeCents / ftds.length) : '0',
+    ticket_medio_brl: allFtds.length ? brlFromCents(volumeCents / allFtds.length) : '0',
     ftds: ftds.map(f => ({
       apostatudo_user_id: f.player_id,
       email: f.email,

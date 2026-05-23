@@ -661,6 +661,9 @@ router.use(attachmentsRoutes);
 const aiAdvisorRoutes = require('./ai-advisor');
 router.use(aiAdvisorRoutes);
 
+const quizStatsRoutes = require('./quiz-stats');
+router.use(quizStatsRoutes);
+
 const smartRemindersRoutes = require('./smart-reminders');
 router.use(smartRemindersRoutes);
 

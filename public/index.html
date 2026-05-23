@@ -228,6 +228,10 @@ tailwind.config = {
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2a4 4 0 00-3 6.7c.6.7 1 1.5 1 2.3v.5h4v-.5c0-.8.4-1.6 1-2.3A4 4 0 0010 2z" fill="currentColor"/><path d="M7 14h6M8 16.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> AI Advisor
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">NEW</span>
       </button>
+      <button class="nav-item" data-tab="quiz" onclick="showPanel('quiz')">
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M10 2a4 4 0 00-4 4c0 1.5.8 2.8 2 3.5V11a2 2 0 002 2 2 2 0 002-2v-1.5c1.2-.7 2-2 2-3.5a4 4 0 00-4-4zm-1 14h2v2H9v-2z" fill="currentColor"/></svg> Quiz Juh
+        <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">NEW</span>
+      </button>
       <button class="nav-item" data-tab="instagram" onclick="showPanel('instagram')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="5" r="0.9" fill="currentColor"/></svg> Instagram
         <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">NEW</span>
@@ -394,6 +398,31 @@ tailwind.config = {
         </div>
 
         <div id="advisorList" class="space-y-3"></div>
+      </div>
+
+      <!-- Quiz Juh (funil + atribuição Apostatudo) -->
+      <div class="panel" id="panel-quiz">
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div class="flex gap-1 flex-wrap" id="quizPeriodButtons">
+            <button onclick="switchQuizPeriodo('24h')" class="quiz-periodo-btn filter-btn" data-qperiodo="24h">24h</button>
+            <button onclick="switchQuizPeriodo('7d')" class="quiz-periodo-btn filter-btn active" data-qperiodo="7d">7 dias</button>
+            <button onclick="switchQuizPeriodo('30d')" class="quiz-periodo-btn filter-btn" data-qperiodo="30d">30 dias</button>
+            <button onclick="switchQuizPeriodo('all')" class="quiz-periodo-btn filter-btn" data-qperiodo="all">Tudo</button>
+          </div>
+          <a href="https://quiz-juh-production.up.railway.app" target="_blank" class="ml-auto text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-pink-400 hover:border-pink-500/50 transition-all">🔗 Abrir quiz</a>
+          <button onclick="loadQuizStats()" class="text-xs px-3 py-1.5 rounded-md border border-border/60 text-gray-400 hover:text-green-400 hover:border-green-500/50">↻</button>
+        </div>
+        <div id="quizFunil" class="space-y-2 mb-4"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-pink-400 uppercase tracking-wide mb-2">📉 Drop-off por pergunta</div>
+            <div id="quizDropoff" class="text-sm text-gray-300 space-y-1"></div>
+          </div>
+          <div class="bg-surface/60 border border-border/40 rounded-xl p-4">
+            <div class="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">✅❌ Respostas por pergunta</div>
+            <div id="quizRespostas" class="text-sm text-gray-300 space-y-1"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Instagram (métricas via Graph API + snapshots diários) -->
@@ -1002,7 +1031,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', instagram: 'Instagram', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', quiz: 'Quiz Juh', instagram: 'Instagram', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -3508,6 +3537,63 @@ function showPanel(name) {
   if (name === 'ecossistema') initEcossistemaPanel();
   if (name === 'advisor') initAdvisorPanel();
   if (name === 'instagram') initInstagramPanel();
+  if (name === 'quiz') initQuizPanel();
+}
+
+// ── Quiz Juh ─────────────────────────────────────
+let quizPeriodo = '7d';
+function switchQuizPeriodo(p) {
+  quizPeriodo = p;
+  document.querySelectorAll('.quiz-periodo-btn').forEach(b => b.classList.toggle('active', b.dataset.qperiodo === p));
+  loadQuizStats();
+}
+function initQuizPanel() { loadQuizStats(); }
+async function loadQuizStats() {
+  const fun = document.getElementById('quizFunil');
+  const drop = document.getElementById('quizDropoff');
+  const resp = document.getElementById('quizRespostas');
+  fun.innerHTML = '<div class="text-center text-xs text-gray-500 py-8">Carregando…</div>';
+  drop.innerHTML = ''; resp.innerHTML = '';
+  try {
+    const d = await api('/quiz/stats?periodo=' + quizPeriodo + '&campaign=quiz-juh');
+    const colors = ['blue','purple','pink','green','amber'];
+    fun.innerHTML = (d.funil || []).map((e, i) => `
+      <div class="flex items-center gap-3 bg-surface/60 border border-border/40 rounded-xl p-3">
+        <div class="w-44 text-sm text-gray-300 shrink-0">${i+1}. ${e.etapa}</div>
+        <div class="flex-1 bg-[#0c0f0c] rounded-md overflow-hidden h-8 relative">
+          <div class="h-full bg-${colors[i]}-500/40" style="width:${Math.max(e.taxa_pct, 2)}%"></div>
+          <div class="absolute inset-0 flex items-center px-3 text-sm font-semibold">${e.valor.toLocaleString('pt-BR')} <span class="ml-2 text-xs text-gray-400">${e.taxa_pct}%</span></div>
+        </div>
+      </div>`).join('') + `
+      <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        <div class="bg-surface/60 border border-border/40 rounded-lg p-3"><div class="text-gray-500">Visit → Fim</div><div class="text-lg font-semibold text-blue-400">${d.conversoes.visit_to_finish_pct}%</div></div>
+        <div class="bg-surface/60 border border-border/40 rounded-lg p-3"><div class="text-gray-500">Fim → CTA</div><div class="text-lg font-semibold text-purple-400">${d.conversoes.finish_to_cta_pct}%</div></div>
+        <div class="bg-surface/60 border border-border/40 rounded-lg p-3"><div class="text-gray-500">CTA → Cadastro</div><div class="text-lg font-semibold text-pink-400">${d.conversoes.cta_to_register_pct}%</div></div>
+        <div class="bg-surface/60 border border-border/40 rounded-lg p-3"><div class="text-gray-500">Cadastro → FTD</div><div class="text-lg font-semibold text-green-400">${d.conversoes.register_to_ftd_pct}%</div></div>
+      </div>
+      <div class="mt-3 bg-surface/60 border border-border/40 rounded-lg p-3 text-sm">
+        💰 <strong>R$ ${d.ftd.volume_brl}</strong> em FTDs · ${d.ftd.quantidade} primeiros depósitos · ticket médio R$ ${d.ftd.ticket_medio_brl}
+      </div>`;
+
+    drop.innerHTML = (d.drop_off_por_pergunta || []).map(r => {
+      const label = r.ate_pergunta === 0 ? 'Não respondeu nada' : `Parou após P${r.ate_pergunta}`;
+      return `<div class="flex justify-between"><span>${label}</span><span class="text-white font-medium">${r.pessoas}</span></div>`;
+    }).join('') || '<div class="text-gray-500">Sem dados ainda</div>';
+
+    // Agrupa respostas por question_idx
+    const byQ = {};
+    for (const r of (d.respostas_por_pergunta || [])) {
+      if (!byQ[r.question_idx]) byQ[r.question_idx] = { certas: 0, erradas: 0 };
+      byQ[r.question_idx].certas += r.certas;
+      byQ[r.question_idx].erradas += r.erradas;
+    }
+    resp.innerHTML = Object.entries(byQ).map(([q, v]) => `
+      <div class="flex justify-between"><span>P${Number(q)+1}</span><span><span class="text-green-400">✓ ${v.certas}</span> · <span class="text-red-400">✗ ${v.erradas}</span></span></div>
+    `).join('') || '<div class="text-gray-500">Sem respostas ainda</div>';
+
+  } catch (e) {
+    fun.innerHTML = '<div class="text-center text-xs text-red-400 py-8">' + (e.message || 'erro') + '</div>';
+  }
 }
 
 // ── Instagram ────────────────────────────────────

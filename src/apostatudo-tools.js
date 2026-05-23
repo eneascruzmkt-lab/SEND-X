@@ -112,24 +112,32 @@ async function getFtdsExpert({ expert, user_id = 1, limit = 50 }) {
   // Coleta FTDs por afiliado: percorre cada mapeamento e busca leads
   const ftdsMap = new Map(); // player_id → ftd info (dedup)
 
-  // Via aff_link (busca leads do link e filtra quem tem ftd_value_cents)
-  for (const m of expertMap) {
-    if (m.aff_link) {
-      try {
-        const r = await apo(`/admin/affiliates-by-link/leads?aff_link=${encodeURIComponent(m.aff_link)}&limit=500`);
-        for (const lead of r.data || []) {
-          if (lead.ftd_value_cents && !ftdsMap.has(lead.id)) {
-            ftdsMap.set(lead.id, {
-              player_id: lead.id, email: lead.email, name: lead.name,
-              ftd_at_str: lead.ftd_date,
-              ftd_amount_cents: lead.ftd_value_cents,
-              recommended_by: lead.recommended_by,
-              affiliation_code: lead.reg_affiliation_code,
-            });
+  // Pega TODAS as variantes do aff_link base (incluindo ?utm_source=...)
+  const linksBase = expertMap.map(m => (m.aff_link || '').split('?')[0]).filter(Boolean);
+  if (linksBase.length > 0) {
+    try {
+      const todasVariantes = await apo(`/admin/affiliates-by-link`);
+      const variantesDoExpert = (todasVariantes.data || []).filter(v =>
+        linksBase.some(base => (v.aff_link || '').startsWith(base))
+      );
+      // Pra cada variante, busca leads e filtra quem tem ftd_value_cents
+      for (const v of variantesDoExpert) {
+        try {
+          const r = await apo(`/admin/affiliates-by-link/leads?aff_link=${encodeURIComponent(v.aff_link)}&limit=500`);
+          for (const lead of r.data || []) {
+            if (lead.ftd_value_cents && !ftdsMap.has(lead.id)) {
+              ftdsMap.set(lead.id, {
+                player_id: lead.id, email: lead.email, name: lead.name,
+                ftd_at_str: lead.ftd_date,
+                ftd_amount_cents: lead.ftd_value_cents,
+                recommended_by: lead.recommended_by,
+                affiliation_code: lead.reg_affiliation_code,
+              });
+            }
           }
-        }
-      } catch (e) { /* skip */ }
-    }
+        } catch (e) { /* skip variante */ }
+      }
+    } catch (e) { /* skip */ }
   }
 
   // Via affiliate_id (busca FTDs globais e filtra)
@@ -242,12 +250,22 @@ async function getTopLeadsExpert({ expert, user_id = 1, limit = 20 }) {
         leads.push(...(r.data || []));
       } catch (e) { /* skip */ }
     }
-    if (m.aff_link) {
-      try {
-        const r = await apo(`/admin/affiliates-by-link/leads?aff_link=${encodeURIComponent(m.aff_link)}&limit=500`);
-        leads.push(...(r.data || []));
-      } catch (e) { /* skip */ }
-    }
+  }
+  // Pra aff_link: pega todas as variantes do link base e itera
+  const linksBase = expertMap.map(m => (m.aff_link || '').split('?')[0]).filter(Boolean);
+  if (linksBase.length > 0) {
+    try {
+      const todasVariantes = await apo(`/admin/affiliates-by-link`);
+      const variantesDoExpert = (todasVariantes.data || []).filter(v =>
+        linksBase.some(base => (v.aff_link || '').startsWith(base))
+      );
+      for (const v of variantesDoExpert) {
+        try {
+          const r = await apo(`/admin/affiliates-by-link/leads?aff_link=${encodeURIComponent(v.aff_link)}&limit=500`);
+          leads.push(...(r.data || []));
+        } catch (e) { /* skip */ }
+      }
+    } catch (e) { /* skip */ }
   }
   // Dedup por id
   const dedup = new Map();

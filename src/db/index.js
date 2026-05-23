@@ -378,6 +378,41 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_reminders_user_created ON smart_reminders(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_reminders_status ON smart_reminders(status, created_at);
   `);
+  // Apostatudo Admin API: mapeamento expert↔afiliado + eventos webhook
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS apostatudo_expert_map (
+      id            SERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id),
+      expert        TEXT NOT NULL,
+      affiliate_id  TEXT,
+      aff_link      TEXT,
+      utm_source    TEXT,
+      label         TEXT,
+      is_active     BOOLEAN NOT NULL DEFAULT true,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, affiliate_id, aff_link)
+    );
+    CREATE INDEX IF NOT EXISTS idx_apo_map_expert ON apostatudo_expert_map(user_id, UPPER(expert));
+
+    CREATE TABLE IF NOT EXISTS apostatudo_events (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      event_type      TEXT NOT NULL,
+      apostatudo_user_id  BIGINT,
+      expert          TEXT,
+      affiliate_id    TEXT,
+      aff_link        TEXT,
+      utm_source      TEXT,
+      amount_cents    INTEGER,
+      raw_payload     JSONB NOT NULL,
+      delivery_id     TEXT,
+      received_at     TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, delivery_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_apo_events_type_expert ON apostatudo_events(user_id, event_type, expert, received_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_apo_events_apostatudo_user ON apostatudo_events(apostatudo_user_id);
+  `);
+
   // AI Advisor: recomendações geradas + tracking de outcome
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ai_recommendations (
@@ -958,6 +993,63 @@ module.exports = {
 
   async updateAttachmentMessageId(id, messageId) {
     await pool.query('UPDATE chat_attachments SET message_id=$2 WHERE id=$1', [id, messageId]);
+  },
+
+  // ── Apostatudo ─────────────────────────────────────
+  async listApostatudoMap(userId) {
+    const r = await pool.query(
+      `SELECT * FROM apostatudo_expert_map WHERE user_id=$1 AND is_active=true ORDER BY expert, label`,
+      [userId]
+    );
+    return r.rows;
+  },
+
+  async upsertApostatudoMap(userId, m) {
+    const r = await pool.query(
+      `INSERT INTO apostatudo_expert_map (user_id, expert, affiliate_id, aff_link, utm_source, label)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id, affiliate_id, aff_link) DO UPDATE
+       SET expert=$2, utm_source=$5, label=$6, is_active=true
+       RETURNING *`,
+      [userId, m.expert.toUpperCase(), m.affiliate_id || null, m.aff_link || null,
+       m.utm_source || null, m.label || null]
+    );
+    return r.rows[0];
+  },
+
+  async getApostatudoMapByAffiliate(userId, affiliateId, affLink) {
+    const r = await pool.query(
+      `SELECT * FROM apostatudo_expert_map WHERE user_id=$1 AND is_active=true
+         AND (affiliate_id=$2 OR aff_link=$3) LIMIT 1`,
+      [userId, affiliateId || null, affLink || null]
+    );
+    return r.rows[0] || null;
+  },
+
+  async insertApostatudoEvent(userId, ev) {
+    await pool.query(
+      `INSERT INTO apostatudo_events
+       (user_id, event_type, apostatudo_user_id, expert, affiliate_id, aff_link, utm_source, amount_cents, raw_payload, delivery_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (user_id, delivery_id) DO NOTHING`,
+      [userId, ev.event_type, ev.apostatudo_user_id, ev.expert,
+       ev.affiliate_id, ev.aff_link, ev.utm_source, ev.amount_cents,
+       JSON.stringify(ev.raw_payload || {}), ev.delivery_id]
+    );
+  },
+
+  async listApostatudoEvents(userId, { expert, eventType, fromDate, toDate, limit = 200 } = {}) {
+    const where = ['user_id=$1']; const params = [userId];
+    if (expert)    { params.push(expert.toUpperCase()); where.push(`UPPER(expert)=$${params.length}`); }
+    if (eventType) { params.push(eventType); where.push(`event_type=$${params.length}`); }
+    if (fromDate)  { params.push(fromDate); where.push(`received_at >= $${params.length}`); }
+    if (toDate)    { params.push(toDate); where.push(`received_at <= $${params.length}`); }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT * FROM apostatudo_events WHERE ${where.join(' AND ')} ORDER BY received_at DESC LIMIT $${params.length}`,
+      params
+    );
+    return r.rows;
   },
 
   // ── Instagram ──────────────────────────────────────

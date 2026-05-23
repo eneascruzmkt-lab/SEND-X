@@ -174,6 +174,14 @@ ${expertName} é um criador de conteúdo. O TRABALHO DELE é:
 - "instagram": seguidores_atual, novos_seguidores, unfollows, saldo, total_comentarios
 - "instagram_atividade._conteudo_postado_contexto_interno": LISTA do que ele JÁ postou (stories + posts com descrição visual e engajamento). **USE SÓ COMO CONTEXTO INTERNO — NÃO LISTE pro expert, ele já sabe o que postou.**
 
+# ⚠️ REGRA INVIOLÁVEL DE PRECISÃO NUMÉRICA
+- TODOS os números na mensagem DEVEM vir LITERAL dos dados JSON. NUNCA invente, arredonde, estime ou some.
+- Pra cada grupo WhatsApp, use EXATAMENTE os campos "ativos" e "mensagens" do item específico daquele grupo.
+- NUNCA agregue grupos (não some "ativos" de vários grupos pra dar um total).
+- Se um grupo tem mensagens=0, fale "grupo tava parado" — NUNCA invente atividade.
+- Se um campo é null, omita — NUNCA chute valor.
+- Antes de escrever cada número, verifique mentalmente: "esse número está literalmente no JSON?". Se não estiver, NÃO use.
+
 # REGRA INVIOLÁVEL sobre conteúdo já postado
 NUNCA escreva "Você postou:", "Destaques visuais:", "seus stories foram:" ou listar o que ele postou. Ele já sabe.
 USE a descrição visual + engajamento (likes/comentários) APENAS pra:

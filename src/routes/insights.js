@@ -253,6 +253,85 @@ async function callBridge({ message, additionalSystem, history, images, signal }
   return resp.json();
 }
 
+// Stream SSE: consome /chat/stream do bridge e dispara callbacks por evento.
+// Retorna {text, session_id, tools_used, duration_ms} no final.
+async function callBridgeStream({ message, additionalSystem, history, images, signal, onText, onToolUse, onToolResult, onSessionInit }) {
+  const url = await getBridgeUrl();
+  const secret = process.env.BRIDGE_SECRET;
+  if (!url || !secret) throw new Error('BRIDGE_URL/SECRET não configurados no servidor');
+
+  const resp = await fetch(`${url}/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${secret}`,
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      'ngrok-skip-browser-warning': '1',
+    },
+    body: JSON.stringify({ message, additional_system: additionalSystem, history, images }),
+    signal,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Bridge HTTP ${resp.status}: ${text.slice(0, 300)}`);
+  }
+  if (!resp.body) throw new Error('Bridge SSE sem body');
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let assembled = '';
+  let sessionId = null;
+  const toolsUsed = [];
+  let durationMs = 0;
+  let bridgeError = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE parsing: eventos separados por \n\n, dados em linhas "data: "
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const rawEvent = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+
+      // Comments (`: ...`) são heartbeats — ignora
+      const dataLines = rawEvent.split('\n').filter(l => l.startsWith('data: '));
+      if (dataLines.length === 0) continue;
+      const dataStr = dataLines.map(l => l.slice(6)).join('\n');
+      let evt;
+      try { evt = JSON.parse(dataStr); } catch { continue; }
+
+      if (evt.type === 'session_init') {
+        onSessionInit?.(evt);
+      } else if (evt.type === 'text') {
+        assembled += evt.text;
+        onText?.(evt.text);
+      } else if (evt.type === 'tool_use') {
+        toolsUsed.push({ name: evt.name, input: evt.input });
+        onToolUse?.(evt);
+      } else if (evt.type === 'tool_result') {
+        onToolResult?.(evt);
+      } else if (evt.type === 'done') {
+        sessionId = evt.session_id || sessionId;
+        durationMs = evt.duration_ms || 0;
+      } else if (evt.type === 'error') {
+        bridgeError = new Error(evt.error || 'Bridge error');
+        bridgeError.partialText = assembled;
+        bridgeError.durationMs = evt.duration_ms || 0;
+        bridgeError.toolsUsed = toolsUsed;
+      }
+    }
+  }
+
+  if (bridgeError) throw bridgeError;
+
+  return { text: assembled, session_id: sessionId, tools_used: toolsUsed, duration_ms: durationMs };
+}
+
 async function bridgeIsHealthy() {
   const url = await getBridgeUrl();
   if (!url) return false;
@@ -317,16 +396,21 @@ router.post('/insights', async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    const send = (obj) => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
     send({ type: 'session', id: session.id, backend: 'bridge' });
 
     const ac = new AbortController();
-    // Express 5: req.on('close') dispara em qualquer fechamento (mesmo sucesso).
-    // Usa res.on('close') checando writableEnded pra abortar SÓ em disconnect prematuro.
+    // Timeout duro de 30min — safety net pra caso o bridge trave de vez.
+    const hardTimeout = setTimeout(() => {
+      console.log('[insights] hard timeout 30min, aborting');
+      ac.abort();
+    }, 30 * 60 * 1000);
+    // Disconnect prematuro do front aborta o request pro bridge
     res.on('close', () => {
       if (!res.writableEnded) {
         console.log('[insights] response closed prematurely, aborting');
@@ -335,6 +419,8 @@ router.post('/insights', async (req, res) => {
     });
 
     let assistantText = '';
+    let bridgeErrored = false;
+    let bridgeErrorMsg = '';
 
     try {
       // Texto dos arquivos vai como contexto adicional. Imagens vão como URL no prompt
@@ -353,30 +439,51 @@ router.post('/insights', async (req, res) => {
           images.map(im => `- ${im.filename}: ${im.url}`).join('\n');
       }
 
-      const result = await callBridge({
+      const result = await callBridgeStream({
         message: (message || '') + imagesPrompt,
         additionalSystem: factsContext + contextoTela + attachmentContext,
         history: recentMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         images,
         signal: ac.signal,
+        onText: (chunk) => send({ type: 'text', text: chunk }),
+        onToolUse: (evt) => send({ type: 'tool_use', name: evt.name, input: evt.input }),
+        onToolResult: (evt) => send({ type: 'tool_result', tool_use_id: evt.tool_use_id, is_error: evt.is_error, summary: evt.summary }),
       });
       assistantText = result.text || '';
-      // Stream simulado pra UX
-      for (let i = 0; i < assistantText.length; i += 50) {
-        send({ type: 'text', text: assistantText.slice(i, i + 50) });
-      }
     } catch (err) {
       console.error('[insights] bridge erro:', err.message);
-      send({ type: 'error', error: err.message });
-      res.end();
-      return;
+      bridgeErrored = true;
+      bridgeErrorMsg = err.message;
+      // Resgata texto parcial se o bridge mandou via SSE antes de erroar
+      if (err.partialText) assistantText = err.partialText;
+    } finally {
+      clearTimeout(hardTimeout);
     }
 
-    const cleanText = assistantText.replace(FACT_LINE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
-    const assistantMsg = await db.addChatMessage(session.id, 'assistant', cleanText, { backend: 'bridge' });
-    await extractAndPersistFacts(req.userId, assistantMsg.id, assistantText);
+    // Persiste mensagem do assistente SEMPRE que tiver algum texto — mesmo em erro.
+    // Marca com flag de erro pra UI poder destacar.
+    const cleanText = (assistantText || '').replace(FACT_LINE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (cleanText) {
+      try {
+        const assistantMsg = await db.addChatMessage(
+          session.id,
+          'assistant',
+          cleanText + (bridgeErrored ? `\n\n_[interrompido: ${bridgeErrorMsg}]_` : ''),
+          { backend: 'bridge', errored: bridgeErrored }
+        );
+        if (!bridgeErrored) {
+          await extractAndPersistFacts(req.userId, assistantMsg.id, assistantText);
+        }
+      } catch (dbErr) {
+        console.error('[insights] persist parcial falhou:', dbErr.message);
+      }
+    }
 
-    send({ type: 'done', session_id: session.id, backend: 'bridge' });
+    if (bridgeErrored) {
+      send({ type: 'error', error: bridgeErrorMsg, partial_saved: !!cleanText });
+    } else {
+      send({ type: 'done', session_id: session.id, backend: 'bridge' });
+    }
     res.end();
   } catch (err) {
     console.error('[insights] error:', err);

@@ -3448,7 +3448,7 @@ async function sendInsightsMessage() {
             toolStatus = '🔍 ' + label + args + '...';
             render();
           } else if (data.type === 'tool_result') {
-            toolStatus = data.ok ? '' : '⚠️ erro em ' + data.name;
+            toolStatus = data.is_error ? ('⚠️ erro em tool') : '';
             render();
           } else if (data.type === 'error') {
             bubble.innerHTML += '<br><span class="text-red-400">' + data.error + '</span>';

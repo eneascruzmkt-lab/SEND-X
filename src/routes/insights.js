@@ -422,16 +422,20 @@ router.post('/insights', async (req, res) => {
 
     const ac = new AbortController();
     let clientDisconnected = false;
-    // Timeout duro de 30min — safety net pra caso o bridge trave de vez.
-    const hardTimeout = setTimeout(() => {
-      console.log('[insights] hard timeout 30min, aborting');
+    // Safety net longo (6h) — não vai abortar trabalho real, só pega
+    // processo realmente travado/zumbi. Override via env (SEM hardtimeout
+    // se TIMEOUT_MS=0).
+    const TIMEOUT_MS = Number.isFinite(Number(process.env.INSIGHTS_TIMEOUT_MS))
+      ? Number(process.env.INSIGHTS_TIMEOUT_MS)
+      : 6 * 60 * 60 * 1000;
+    const hardTimeout = TIMEOUT_MS > 0 ? setTimeout(() => {
+      console.log(`[insights] safety timeout ${TIMEOUT_MS}ms, aborting`);
       ac.abort();
-    }, 30 * 60 * 1000);
-    // Cliente desconectou (mobile foi pra background, fechou aba, etc):
-    // NÃO abortamos o bridge. O processamento continua em background e a
-    // resposta completa é persistida no DB. Quando o cliente reconecta
-    // (visibilitychange no front), ele puxa do histórico.
-    // Isso evita o "erro de WebSocket" no celular quando user sai da tela.
+    }, TIMEOUT_MS) : null;
+    // Cliente desconectou (mobile foi pra background, trocou de device, etc):
+    // NÃO abortamos. O bridge segue trabalhando, resposta é persistida no DB.
+    // Quando o cliente reconecta (qualquer dispositivo da mesma conta),
+    // loadChatHistory() pega a sessão mais recente automaticamente.
     res.on('close', () => {
       if (!res.writableEnded) {
         clientDisconnected = true;
@@ -484,7 +488,7 @@ router.post('/insights', async (req, res) => {
       // Resgata texto parcial se o bridge mandou via SSE antes de erroar
       if (err.partialText) assistantText = err.partialText;
     } finally {
-      clearTimeout(hardTimeout);
+      if (hardTimeout) clearTimeout(hardTimeout);
     }
 
     // Persiste mensagem do assistente SEMPRE que tiver algum texto — mesmo em erro.

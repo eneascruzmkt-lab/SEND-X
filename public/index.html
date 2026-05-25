@@ -3420,10 +3420,10 @@ async function sendInsightsMessage() {
 
   const bubble = addChatMessage('assistant', '<div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:300ms"></span></div>');
 
-  // Timeout duro 20min — evita ficar pendurado se network/back travar
-  const hardTimeout = setTimeout(() => {
-    if (insightsAbortController) insightsAbortController.abort('hard-timeout 20min');
-  }, 20 * 60 * 1000);
+  // Sem timeout no front — backend continua até completar mesmo se aba sair.
+  // Stream local pode cair se network/aba dormir, mas resposta volta via
+  // loadChatHistory() ao retomar visibility (visibilitychange listener acima).
+  const hardTimeout = null;
 
   try {
     const resp = await fetch('/api/insights', {
@@ -3527,7 +3527,7 @@ async function sendInsightsMessage() {
     }
   }
 
-  clearTimeout(hardTimeout);
+  if (hardTimeout) clearTimeout(hardTimeout);
   insightsAbortController = null;
   insightsStreaming = false;
   sendBtn.disabled = false;

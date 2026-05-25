@@ -221,9 +221,75 @@ FUNIL_TOOLS.push({
   },
 });
 
+FUNIL_TOOLS.push({
+  name: 'get_expert_360',
+  description: 'Visão 360 de um expert: funil + Instagram (atividade do dia) + lives + WhatsApp (engajamento grupos) + disparos + concorrentes (se mapeados). Use quando o operador pedir "como tá X hoje?" ou "resumo da DANI". Substitui chamar 5+ tools separadas.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      expert: { type: 'string', description: 'DANI, DEIVID, JUH, NUCLEAR' },
+      periodo: { type: 'string', enum: ['hoje','ontem','7d','14d','30d','1m','mtd','lastm','3m','custom'], description: 'default: hoje' },
+      de: { type: 'string' }, ate: { type: 'string' },
+    },
+    required: ['expert'],
+  },
+});
+
+// Helper de safe-await que retorna null em erro (pra não bloquear o 360 inteiro)
+async function tryGet(label, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[expert-360] ${label} falhou:`, err.message);
+    return { __error: err.message };
+  }
+}
+
+async function get_expert_360({ expert, periodo = 'hoje', de, ate, user_id = 1 }) {
+  if (!expert) throw new Error('expert obrigatório');
+
+  // Tenta cada fonte em paralelo — uma falha não derruba as outras.
+  const { executeInstagramTool } = require('./instagram-tools');
+  const { executeApostatudoTool } = require('./apostatudo-tools');
+
+  const [funil, instagram, lives, mensagensWa, disparos, postbacks, apostatudoStats] = await Promise.all([
+    tryGet('funil',           () => get_funil_expert({ expert, periodo, de, ate, user_id })),
+    tryGet('instagram',       () => executeInstagramTool('get_instagram_atividade_dia', { expert }, user_id)),
+    tryGet('lives',           () => executeKlarvelTool('get_lives_resumo', { expert, periodo, de, ate })),
+    tryGet('whatsapp_grupos', () => executeMonitorgrupoTool('get_engajamento_grupos', { expert, periodo, de, ate })),
+    tryGet('disparos',        () => executeInsightTool('get_disparos_status', { par: expert, periodo, de, ate }, user_id)),
+    tryGet('postbacks_utm',   () => executeInsightTool('get_postbacks_por_utm', { expert, periodo, de, ate }, user_id)),
+    tryGet('apostatudo',      () => executeApostatudoTool('get_apostatudo_metricas_expert', { expert, periodo, de, ate }, user_id)),
+  ]);
+
+  // Insights automáticos rápidos
+  const insights = [];
+  if (funil?.ftds === 0 && funil?.gasto > 0) insights.push(`Gastou R$ ${funil.gasto?.toFixed?.(2)} hoje e zero FTDs.`);
+  if (funil?.cac_ftd > 200) insights.push(`Custo por FTD R$ ${funil.cac_ftd?.toFixed?.(0)} — acima do healthy (R$ 80-150).`);
+  if (instagram?.posts_hoje === 0 && instagram?.stories_hoje === 0) insights.push('Sem post nem story hoje no Instagram.');
+  if (lives?.total_lives === 0 && new Date().getHours() >= 14) insights.push('Sem live registrada hoje (já passou das 14h).');
+  if (disparos?.erro > 0) insights.push(`${disparos.erro} disparos com erro hoje — checar SendPulse.`);
+  if (mensagensWa?.mensagens_total === 0) insights.push('Grupos WhatsApp silenciosos hoje (zero mensagens).');
+
+  return {
+    expert,
+    periodo,
+    gerado_em: new Date().toISOString(),
+    funil,
+    instagram,
+    lives,
+    whatsapp_grupos: mensagensWa,
+    disparos,
+    postbacks_utm: postbacks,
+    apostatudo: apostatudoStats,
+    insights,
+  };
+}
+
 async function executeFunilTool(name, input, userId = 1) {
   if (name === 'get_funil_expert') return await get_funil_expert({ ...input, user_id: userId });
   if (name === 'get_comparativo_funil') return await get_comparativo_funil(input, userId);
+  if (name === 'get_expert_360') return await get_expert_360({ ...input, user_id: userId });
   throw new Error(`Funil tool desconhecida: ${name}`);
 }
 

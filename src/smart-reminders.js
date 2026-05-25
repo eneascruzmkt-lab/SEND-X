@@ -319,6 +319,8 @@ async function processarLivesTerminadas(userId = 1, minutesBack = 60) {
     const r = await klarvelPool().query(`
       SELECT id, user_id, stopped_at FROM meetings
       WHERE status='stopped' AND stopped_at IS NOT NULL
+        AND joined_at IS NOT NULL
+        AND EXTRACT(EPOCH FROM (stopped_at - joined_at)) >= 60
         AND stopped_at >= NOW() - ($1 || ' minutes')::interval
       ORDER BY stopped_at DESC LIMIT 20
     `, [String(minutesBack)]);

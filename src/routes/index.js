@@ -267,6 +267,11 @@ router.use(imgGenRoutesPub);
 const apoWebhookRoutes = require('./apostatudo-webhook');
 router.use(apoWebhookRoutes);
 
+// Download público assinado de attachments (vídeo/áudio pro bridge baixar via HMAC)
+// — montado ANTES do middleware auth, valida via token HMAC com BRIDGE_SECRET
+const { publicRouter: attachmentsPublicRouter } = require('./attachments');
+router.use(attachmentsPublicRouter);
+
 // ══════════════════════════════════════════════════════════
 //  TODAS AS ROTAS ABAIXO REQUEREM AUTENTICAÇÃO (Bearer JWT)
 // ══════════════════════════════════════════════════════════

@@ -3,6 +3,7 @@ const pdfParse = require('pdf-parse');
 const db = require('../db');
 const { executeTool } = require('../insights-tools');
 const { executeResearchTool, RESEARCH_TOOLS } = require('../research-tools');
+const { signAttachmentId } = require('./attachments');
 
 const router = Router();
 
@@ -10,10 +11,11 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://send-x-productio
 
 async function processAttachments(attachmentIds = [], sessionId, messageId) {
   if (!Array.isArray(attachmentIds) || attachmentIds.length === 0) {
-    return { images: [], textBlocks: [], summary: '' };
+    return { images: [], textBlocks: [], mediaRefs: [], summary: '' };
   }
   const images = [];
   const textBlocks = [];
+  const mediaRefs = []; // vídeos/áudios — vão como URL pro bridge (pode usar higgis / fetch_url)
   for (const id of attachmentIds) {
     try {
       const att = await db.getAttachment(Number(id));
@@ -29,6 +31,20 @@ async function processAttachments(attachmentIds = [], sessionId, messageId) {
           mime_type: att.mime_type,
           data_base64: att.data.toString('base64'),
           url: `${PUBLIC_BASE_URL}/api/attachments/${att.id}`,
+        });
+      } else if (att.mime_type.startsWith('video/') || att.mime_type.startsWith('audio/')) {
+        // Vídeo/áudio é grande demais pra base64 + Claude não tem vision pra vídeo.
+        // Vai como URL pública (rota /api/attachments/:id serve sem auth, ver attachments.js)
+        // pro bridge baixar e processar via higgis (virality_predictor / media_upload) ou ffmpeg.
+        // URL assinada (HMAC + expires 24h) — bridge baixa sem precisar de JWT
+        const token = signAttachmentId(att.id);
+        mediaRefs.push({
+          id: att.id,
+          filename: att.filename,
+          mime_type: att.mime_type,
+          size_bytes: att.data.length,
+          kind: att.mime_type.startsWith('video/') ? 'video' : 'audio',
+          url: `${PUBLIC_BASE_URL}/api/attachments/dl/${att.id}?token=${encodeURIComponent(token)}`,
         });
       } else if (att.mime_type === 'application/pdf') {
         try {
@@ -56,8 +72,8 @@ async function processAttachments(attachmentIds = [], sessionId, messageId) {
       console.error('[insights] attachment err:', e.message);
     }
   }
-  const summary = `Anexos: ${images.length} imagem(ns), ${textBlocks.length} arquivo(s) texto`;
-  return { images, textBlocks, summary };
+  const summary = `Anexos: ${images.length} imagem(ns), ${mediaRefs.length} mídia(s), ${textBlocks.length} arquivo(s) texto`;
+  return { images, textBlocks, mediaRefs, summary };
 }
 
 const MAX_HISTORY = 20;
@@ -387,9 +403,9 @@ router.post('/insights', async (req, res) => {
 
     // Processa anexos antes de salvar mensagem (precisamos do messageId pra associar)
     const userMsg = await db.addChatMessage(session.id, 'user', message || '(arquivo anexado)');
-    const { images, textBlocks } = await processAttachments(attachment_ids || [], session.id, userMsg.id);
+    const { images, textBlocks, mediaRefs } = await processAttachments(attachment_ids || [], session.id, userMsg.id);
     // Liga os attachments ao session_id também
-    for (const att of [...images, ...textBlocks]) {
+    for (const att of [...images, ...textBlocks, ...mediaRefs]) {
       if (att.id) {
         try { await db.query('UPDATE chat_attachments SET session_id=$1, message_id=$2 WHERE id=$3', [session.id, userMsg.id, att.id]); } catch {}
       }
@@ -438,9 +454,15 @@ router.post('/insights', async (req, res) => {
         imagesPrompt = '\n\n[Imagens anexadas pelo operador nesta mensagem — use mcp__bridge__fetch_url ou Read para analisar se precisar:]\n' +
           images.map(im => `- ${im.filename}: ${im.url}`).join('\n');
       }
+      let mediaPrompt = '';
+      if (mediaRefs.length > 0) {
+        const fmtSize = (n) => n > 1024*1024 ? `${(n/1024/1024).toFixed(1)}MB` : `${Math.round(n/1024)}KB`;
+        mediaPrompt = '\n\n[Mídia (vídeo/áudio) anexada pelo operador — baixe via WebFetch/curl da URL pública abaixo. Pra vídeo: use mcp__claude_ai_higgis__media_upload + virality_predictor pra análise, ou ffmpeg pra extrair frames/áudio:]\n' +
+          mediaRefs.map(m => `- ${m.kind.toUpperCase()} ${m.filename} (${m.mime_type}, ${fmtSize(m.size_bytes)}): ${m.url}`).join('\n');
+      }
 
       const result = await callBridgeStream({
-        message: (message || '') + imagesPrompt,
+        message: (message || '') + imagesPrompt + mediaPrompt,
         additionalSystem: factsContext + contextoTela + attachmentContext,
         history: recentMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         images,

@@ -357,11 +357,11 @@ tailwind.config = {
             <div class="relative flex items-end bg-[#1a1d1a] border border-border-light/60 rounded-2xl px-4 py-2.5 focus-within:border-green-500/50 focus-within:ring-2 focus-within:ring-green-500/10 transition-all shadow-lg shadow-black/20">
               <button onclick="document.getElementById('insightsFileInput').click()"
                 class="mr-2 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-green-400 hover:bg-green-500/10 transition-all flex-shrink-0"
-                title="Anexar arquivo (imagem, PDF, txt, csv)">
+                title="Anexar arquivo (imagem, vídeo, áudio, PDF, txt, csv) — máx 150MB">
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               </button>
-              <input id="insightsFileInput" type="file" multiple accept="image/*,application/pdf,text/*,.csv,.json,.md" style="display:none" onchange="handleInsightsFileSelect(event)" />
-              <textarea id="insightsInput" rows="1" placeholder="Pergunte ou anexe arquivo..."
+              <input id="insightsFileInput" type="file" multiple accept="image/*,video/*,audio/*,application/pdf,text/*,.csv,.json,.md,.mp4,.mov,.webm,.mkv,.avi,.mp3,.m4a,.ogg,.wav" style="display:none" onchange="handleInsightsFileSelect(event)" />
+              <textarea id="insightsInput" rows="1" placeholder="Pergunte, anexe arquivo ou vídeo..."
                 class="flex-1 bg-transparent text-[15px] text-white resize-none focus:outline-none max-h-48 leading-relaxed py-1"
                 onkeydown="handleInsightsKey(event)" oninput="autoGrowTextarea(this)" onpaste="handleInsightsPaste(event)"></textarea>
               <button id="insightsSendBtn" onclick="sendInsightsMessage()"
@@ -3341,12 +3341,26 @@ function renderInsightsAttachmentPreview() {
     return;
   }
   el.style.display = 'flex';
+  const fmtSize = (n) => !n ? '' : n > 1024*1024 ? `${(n/1024/1024).toFixed(1)}MB` : `${Math.round(n/1024)}KB`;
   el.innerHTML = insightsPendingAttachments.map((a, i) => {
     const isImg = a.mime_type.startsWith('image/');
+    const isVid = a.mime_type.startsWith('video/');
+    const isAud = a.mime_type.startsWith('audio/');
+    let icon;
+    if (isImg) {
+      icon = `<img src="${a.url}?token=${encodeURIComponent(authToken)}" class="w-7 h-7 rounded object-cover" />`;
+    } else if (isVid) {
+      icon = `<svg class="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`;
+    } else if (isAud) {
+      icon = `<svg class="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+    } else {
+      icon = `<svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    }
+    const sizeTag = a.size_bytes ? `<span class="text-[10px] text-gray-500 ml-1">${fmtSize(a.size_bytes)}</span>` : '';
     return `<div class="flex items-center gap-1.5 bg-[#1a1d1a] border border-border-light/60 rounded-lg px-2 py-1 text-xs">
-      ${isImg ? `<img src="${a.url}?token=${encodeURIComponent(authToken)}" class="w-7 h-7 rounded object-cover" />` :
-      `<svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`}
+      ${icon}
       <span class="text-gray-300 max-w-[140px] truncate">${a.filename}</span>
+      ${sizeTag}
       <button onclick="removeInsightsAttachment(${i})" class="text-gray-500 hover:text-red-400 ml-1" title="Remover">&times;</button>
     </div>`;
   }).join('');

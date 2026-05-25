@@ -421,16 +421,21 @@ router.post('/insights', async (req, res) => {
     send({ type: 'session', id: session.id, backend: 'bridge' });
 
     const ac = new AbortController();
+    let clientDisconnected = false;
     // Timeout duro de 30min — safety net pra caso o bridge trave de vez.
     const hardTimeout = setTimeout(() => {
       console.log('[insights] hard timeout 30min, aborting');
       ac.abort();
     }, 30 * 60 * 1000);
-    // Disconnect prematuro do front aborta o request pro bridge
+    // Cliente desconectou (mobile foi pra background, fechou aba, etc):
+    // NÃO abortamos o bridge. O processamento continua em background e a
+    // resposta completa é persistida no DB. Quando o cliente reconecta
+    // (visibilitychange no front), ele puxa do histórico.
+    // Isso evita o "erro de WebSocket" no celular quando user sai da tela.
     res.on('close', () => {
       if (!res.writableEnded) {
-        console.log('[insights] response closed prematurely, aborting');
-        ac.abort();
+        clientDisconnected = true;
+        console.log(`[insights] cliente desconectou — session=${session.id}, processamento continua em background`);
       }
     });
 

@@ -3040,6 +3040,28 @@ let insightsHistory = [];
 let insightsStreaming = false;
 let currentSessionId = null;
 let insightsAbortController = null; // pra cancelar stream em curso
+let insightsStreamingStartTs = 0;   // timestamp pra detectar se stream travou em background
+
+// Mobile: quando user sai da tela e volta, conexão SSE pode ter caído.
+// Backend continua processando em background e salva resposta no DB.
+// Aqui detectamos retorno e sincronizamos via loadChatHistory().
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!insightsStreaming) return;
+  const elapsed = Date.now() - insightsStreamingStartTs;
+  if (elapsed < 5000) return; // ainda muito recente, deixa o stream tentar
+  console.log('[insights] visibilitychange resync: aba voltou com streaming pendente há', Math.round(elapsed/1000), 's');
+  if (insightsAbortController) {
+    try { insightsAbortController.abort('visibility-resync'); } catch {}
+  }
+  setTimeout(async () => {
+    insightsStreaming = false;
+    const sendBtn = document.getElementById('insightsSendBtn');
+    if (sendBtn) sendBtn.disabled = false;
+    hideInsightsCancelButton();
+    await loadChatHistory();
+  }, 1500);
+});
 
 async function loadChatHistory() {
   // SE há um stream rodando agora, NUNCA reescrever o DOM — perderia a resposta em curso.
@@ -3390,6 +3412,7 @@ async function sendInsightsMessage() {
   addChatMessage('user', formatMarkdown(message));
 
   insightsStreaming = true;
+  insightsStreamingStartTs = Date.now();
   insightsAbortController = new AbortController();
   const sendBtn = document.getElementById('insightsSendBtn');
   sendBtn.disabled = true;

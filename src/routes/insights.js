@@ -499,6 +499,19 @@ router.post('/insights', async (req, res) => {
       } catch (dbErr) {
         console.error('[insights] persist parcial falhou:', dbErr.message);
       }
+    } else if (bridgeErrored) {
+      // Aborto antes de qualquer texto chegar: marca placeholder pra UI saber
+      // que a mensagem do user não teve resposta (sem ficar órfã no histórico).
+      try {
+        await db.addChatMessage(
+          session.id,
+          'assistant',
+          `_[interrompido antes da resposta: ${bridgeErrorMsg || 'sem detalhes'}]_`,
+          { backend: 'bridge', errored: true, empty: true }
+        );
+      } catch (dbErr) {
+        console.error('[insights] persist placeholder erro:', dbErr.message);
+      }
     }
 
     if (bridgeErrored) {

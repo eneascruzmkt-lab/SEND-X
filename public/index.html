@@ -3039,8 +3039,11 @@ let insightsPeriodo = '7d';
 let insightsHistory = [];
 let insightsStreaming = false;
 let currentSessionId = null;
+let insightsAbortController = null; // pra cancelar stream em curso
 
 async function loadChatHistory() {
+  // SE há um stream rodando agora, NUNCA reescrever o DOM — perderia a resposta em curso.
+  if (insightsStreaming) return;
   try {
     const sessions = await api('/insights/sessions');
     if (!sessions || sessions.length === 0) return;
@@ -3086,6 +3089,12 @@ async function startNewChatSession() {
 }
 
 async function initInsightsPanel() {
+  // Reset estado SE não há stream rolando (importante quando user troca de aba e volta)
+  if (!insightsStreaming) {
+    const sendBtn = document.getElementById('insightsSendBtn');
+    if (sendBtn) sendBtn.disabled = false;
+    hideInsightsCancelButton();
+  }
   // Load tabs dynamically
   try {
     const tabs = await api('/relatorio/tabs');
@@ -3381,10 +3390,17 @@ async function sendInsightsMessage() {
   addChatMessage('user', formatMarkdown(message));
 
   insightsStreaming = true;
+  insightsAbortController = new AbortController();
   const sendBtn = document.getElementById('insightsSendBtn');
   sendBtn.disabled = true;
+  showInsightsCancelButton();
 
   const bubble = addChatMessage('assistant', '<div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-green-400/60 rounded-full animate-bounce" style="animation-delay:300ms"></span></div>');
+
+  // Timeout duro 20min — evita ficar pendurado se network/back travar
+  const hardTimeout = setTimeout(() => {
+    if (insightsAbortController) insightsAbortController.abort('hard-timeout 20min');
+  }, 20 * 60 * 1000);
 
   try {
     const resp = await fetch('/api/insights', {
@@ -3401,6 +3417,7 @@ async function sendInsightsMessage() {
         session_id: currentSessionId,
         attachment_ids: insightsPendingAttachments.map(a => a.id),
       }),
+      signal: insightsAbortController.signal,
     });
     const attachedHere = insightsPendingAttachments.slice();
     insightsPendingAttachments = [];
@@ -3480,11 +3497,39 @@ async function sendInsightsMessage() {
     if (insightsHistory.length > 20) insightsHistory = insightsHistory.slice(-20);
 
   } catch (err) {
-    bubble.innerHTML = '<span class="text-red-400">Erro de conexão. Tente novamente.</span>';
+    if (err.name === 'AbortError') {
+      bubble.innerHTML += '<br><span class="text-amber-400 text-xs">⏹ Cancelado.</span>';
+    } else {
+      bubble.innerHTML = '<span class="text-red-400">Erro de conexão. Tente novamente.</span>';
+    }
   }
 
+  clearTimeout(hardTimeout);
+  insightsAbortController = null;
   insightsStreaming = false;
   sendBtn.disabled = false;
+  hideInsightsCancelButton();
+}
+
+function showInsightsCancelButton() {
+  let btn = document.getElementById('insightsCancelBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'insightsCancelBtn';
+    btn.className = 'fixed bottom-24 right-6 z-50 bg-red-500/90 hover:bg-red-600 text-white text-xs font-semibold py-2 px-4 rounded-full shadow-lg';
+    btn.textContent = '⏹ Cancelar';
+    btn.onclick = () => {
+      if (insightsAbortController) insightsAbortController.abort('user-cancel');
+    };
+    document.body.appendChild(btn);
+  } else {
+    btn.style.display = 'block';
+  }
+}
+
+function hideInsightsCancelButton() {
+  const btn = document.getElementById('insightsCancelBtn');
+  if (btn) btn.style.display = 'none';
 }
 
 async function loadInsightsUsage() {

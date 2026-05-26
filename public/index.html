@@ -3042,41 +3042,105 @@ let currentSessionId = null;
 let insightsAbortController = null; // pra cancelar stream em curso
 let insightsStreamingStartTs = 0;   // timestamp pra detectar se stream travou em background
 
-// Mobile: quando user sai da tela e volta, conexão SSE pode ter caído.
-// Backend continua processando em background e salva resposta no DB.
-// Aqui detectamos retorno e sincronizamos via loadChatHistory().
-let insightsResyncing = false; // distingue abort do visibility do abort do user
+// Mobile/desktop: quando user sai da tela e volta, conexão SSE pode ter
+// caído. Backend continua processando — quando volta, polla o DB até a
+// resposta chegar (pode levar minutos). Não recarrega o chat — só
+// preenche a bolha vazia quando a resposta aparecer.
+let insightsResyncing = false;
+let insightsPollTimer = null;
+
+function stopInsightsPolling() {
+  if (insightsPollTimer) {
+    clearInterval(insightsPollTimer);
+    insightsPollTimer = null;
+  }
+}
+
+// Polla /insights/messages/:sessionId esperando uma mensagem 'assistant'
+// posterior à última mensagem 'user' do histórico local. Quando chegar,
+// preenche a bolha pendente (lastBubble) e para. Timeout: 20min.
+function startInsightsPollingForReply(lastBubble) {
+  stopInsightsPolling();
+  const startedAt = Date.now();
+  const MAX_MS = 20 * 60 * 1000;
+  const POLL_INTERVAL = 3000;
+
+  const tick = async () => {
+    if (Date.now() - startedAt > MAX_MS) {
+      stopInsightsPolling();
+      if (lastBubble) lastBubble.innerHTML = '<div class="text-amber-400 text-sm">⚠️ Sem resposta após 20min. Recarregue.</div>';
+      return;
+    }
+    try {
+      if (!currentSessionId) return;
+      const msgs = await api('/insights/messages/' + currentSessionId);
+      if (!msgs || msgs.length === 0) return;
+      // Pega último timestamp de mensagem do user na conversa local
+      const lastUserInHistory = [...insightsHistory].reverse().find(m => m.role === 'user');
+      const lastUserContent = lastUserInHistory?.content;
+      // Procura uma resposta do assistente que esteja DEPOIS da última msg do user
+      let foundAssistantAfterUser = false;
+      let lastUserSeen = false;
+      let assistantContent = null;
+      for (const m of msgs) {
+        if (m.role === 'user' && lastUserContent && m.content === lastUserContent) {
+          lastUserSeen = true;
+          continue;
+        }
+        if (lastUserSeen && m.role === 'assistant') {
+          foundAssistantAfterUser = true;
+          assistantContent = m.content;
+        }
+      }
+      if (foundAssistantAfterUser && assistantContent) {
+        if (lastBubble) {
+          lastBubble.innerHTML = formatMarkdown(assistantContent);
+        }
+        insightsHistory.push({ role: 'assistant', content: assistantContent });
+        if (insightsHistory.length > 20) insightsHistory = insightsHistory.slice(-20);
+        stopInsightsPolling();
+        loadInsightsUsage?.();
+      }
+    } catch (e) {
+      console.warn('[insights] poll falhou:', e.message);
+    }
+  };
+
+  insightsPollTimer = setInterval(tick, POLL_INTERVAL);
+  tick(); // primeira tentativa imediata
+}
 
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return;
   if (!insightsStreaming) return;
   const elapsed = Date.now() - insightsStreamingStartTs;
-  if (elapsed < 5000) return; // ainda muito recente, deixa o stream tentar
-  console.log('[insights] visibilitychange resync: aba voltou com streaming pendente há', Math.round(elapsed/1000), 's');
+  if (elapsed < 5000) return;
+  console.log('[insights] visibility resync: streaming pendente há', Math.round(elapsed/1000), 's — abortando stream local e ativando polling');
 
   insightsResyncing = true;
-  // Mostra feedback visual amigável (não "Cancelado")
-  const bubbles = document.querySelectorAll('#insightsChat .assistant-bubble:last-child, #insightsChat [data-role="assistant"]:last-child');
-  const lastBubble = bubbles[bubbles.length - 1];
+
+  // Pega a bolha atual do assistente pra preencher quando chegar resposta
+  const chatEl = document.getElementById('insightsChat');
+  const allBubbles = chatEl?.querySelectorAll('.insights-response') || [];
+  const lastBubble = allBubbles[allBubbles.length - 1];
   if (lastBubble) {
-    lastBubble.innerHTML = '<div class="text-[11px] text-gray-500 italic">🔄 reconectando…</div>';
+    lastBubble.innerHTML = '<div class="text-[11px] text-gray-500 italic">💭 processando em segundo plano…</div>';
   }
 
   if (insightsAbortController) {
     try { insightsAbortController.abort('visibility-resync'); } catch {}
   }
-  setTimeout(async () => {
-    insightsStreaming = false;
-    const sendBtn = document.getElementById('insightsSendBtn');
-    if (sendBtn) sendBtn.disabled = false;
-    hideInsightsCancelButton();
-    try {
-      await loadChatHistory();
-    } catch (e) {
-      console.warn('[insights] loadChatHistory após resync falhou:', e.message);
-    }
-    insightsResyncing = false;
-  }, 2000);
+
+  // Reset UI de streaming local
+  insightsStreaming = false;
+  const sendBtn = document.getElementById('insightsSendBtn');
+  if (sendBtn) sendBtn.disabled = false;
+  hideInsightsCancelButton();
+
+  // Polla DB até a resposta chegar
+  startInsightsPollingForReply(lastBubble);
+
+  insightsResyncing = false;
 });
 
 async function loadChatHistory() {

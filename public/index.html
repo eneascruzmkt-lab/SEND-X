@@ -3045,12 +3045,23 @@ let insightsStreamingStartTs = 0;   // timestamp pra detectar se stream travou e
 // Mobile: quando user sai da tela e volta, conexão SSE pode ter caído.
 // Backend continua processando em background e salva resposta no DB.
 // Aqui detectamos retorno e sincronizamos via loadChatHistory().
+let insightsResyncing = false; // distingue abort do visibility do abort do user
+
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return;
   if (!insightsStreaming) return;
   const elapsed = Date.now() - insightsStreamingStartTs;
   if (elapsed < 5000) return; // ainda muito recente, deixa o stream tentar
   console.log('[insights] visibilitychange resync: aba voltou com streaming pendente há', Math.round(elapsed/1000), 's');
+
+  insightsResyncing = true;
+  // Mostra feedback visual amigável (não "Cancelado")
+  const bubbles = document.querySelectorAll('#insightsChat .assistant-bubble:last-child, #insightsChat [data-role="assistant"]:last-child');
+  const lastBubble = bubbles[bubbles.length - 1];
+  if (lastBubble) {
+    lastBubble.innerHTML = '<div class="text-[11px] text-gray-500 italic">🔄 reconectando…</div>';
+  }
+
   if (insightsAbortController) {
     try { insightsAbortController.abort('visibility-resync'); } catch {}
   }
@@ -3059,8 +3070,13 @@ document.addEventListener('visibilitychange', async () => {
     const sendBtn = document.getElementById('insightsSendBtn');
     if (sendBtn) sendBtn.disabled = false;
     hideInsightsCancelButton();
-    await loadChatHistory();
-  }, 1500);
+    try {
+      await loadChatHistory();
+    } catch (e) {
+      console.warn('[insights] loadChatHistory após resync falhou:', e.message);
+    }
+    insightsResyncing = false;
+  }, 2000);
 });
 
 async function loadChatHistory() {
@@ -3533,7 +3549,13 @@ async function sendInsightsMessage() {
 
   } catch (err) {
     if (err.name === 'AbortError') {
-      bubble.innerHTML += '<br><span class="text-amber-400 text-xs">⏹ Cancelado.</span>';
+      if (insightsResyncing) {
+        // Foi o visibility resync — NÃO mostra erro, o loadChatHistory vai
+        // sincronizar do DB e mostrar a resposta real.
+        bubble.innerHTML = '<div class="text-[11px] text-gray-500 italic">🔄 sincronizando…</div>';
+      } else {
+        bubble.innerHTML += '<br><span class="text-amber-400 text-xs">⏹ Cancelado.</span>';
+      }
     } else {
       bubble.innerHTML = '<div class="text-red-400 text-sm">⚠️ Erro de conexão: ' + (err.message || 'tente novamente') + '</div>';
     }

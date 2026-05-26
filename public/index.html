@@ -3458,8 +3458,11 @@ async function sendInsightsMessage() {
     const decoder = new TextDecoder();
     let fullText = '';
     let toolStatus = '';
-    bubble.innerHTML = '';
     let buf = '';
+    let receivedFirstEvent = false;
+    // NÃO limpa bubble.innerHTML aqui — mantém os 3 pontinhos verdes
+    // até chegar primeiro evento real. Senão, se backend cair sem mandar
+    // nada, a bolha fica vazia (visualmente parece travada).
 
     const TOOL_LABELS = {
       get_metricas_expert: 'consultando métricas',
@@ -3471,10 +3474,12 @@ async function sendInsightsMessage() {
     };
 
     const render = () => {
+      receivedFirstEvent = true;
       const toolHtml = toolStatus
         ? '<div class="text-[11px] text-gray-500 mb-1.5 italic">' + toolStatus + '</div>'
         : '';
-      bubble.innerHTML = toolHtml + (fullText ? formatMarkdown(fullText) : '');
+      const content = fullText ? formatMarkdown(fullText) : '<div class="text-[11px] text-gray-500 italic">aguardando resposta…</div>';
+      bubble.innerHTML = toolHtml + content;
       document.getElementById('insightsChat').scrollTop = document.getElementById('insightsChat').scrollHeight;
     };
 
@@ -3505,7 +3510,8 @@ async function sendInsightsMessage() {
             toolStatus = data.is_error ? ('⚠️ erro em tool') : '';
             render();
           } else if (data.type === 'error') {
-            bubble.innerHTML += '<br><span class="text-red-400">' + data.error + '</span>';
+            // Substitui (não acumula) — mostra erro claro mesmo se nada veio antes
+            bubble.innerHTML = '<div class="text-red-400 text-sm">⚠️ ' + (data.error || 'erro desconhecido') + '</div>';
           } else if (data.type === 'done') {
             toolStatus = '';
             render();
@@ -3513,6 +3519,12 @@ async function sendInsightsMessage() {
           }
         } catch (e) { /* skip malformed lines */ }
       }
+    }
+
+    // Se stream fechou sem mandar nada (backend caiu silenciosamente?),
+    // mostra mensagem clara em vez de deixar bolha em branco eternamente.
+    if (!receivedFirstEvent) {
+      bubble.innerHTML = '<div class="text-amber-400 text-sm">⚠️ A resposta foi interrompida. O assistente pode ter continuado processando em segundo plano — recarregue o chat em alguns segundos.</div>';
     }
 
     insightsHistory.push({ role: 'user', content: message });
@@ -3523,7 +3535,7 @@ async function sendInsightsMessage() {
     if (err.name === 'AbortError') {
       bubble.innerHTML += '<br><span class="text-amber-400 text-xs">⏹ Cancelado.</span>';
     } else {
-      bubble.innerHTML = '<span class="text-red-400">Erro de conexão. Tente novamente.</span>';
+      bubble.innerHTML = '<div class="text-red-400 text-sm">⚠️ Erro de conexão: ' + (err.message || 'tente novamente') + '</div>';
     }
   }
 

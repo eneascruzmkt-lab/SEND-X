@@ -272,6 +272,10 @@ router.use(apoWebhookRoutes);
 const { publicRouter: attachmentsPublicRouter } = require('./attachments');
 router.use(attachmentsPublicRouter);
 
+// Profile do Chromium do bot Meet (auth via Bearer BRIDGE_SECRET)
+const botProfileRoutes = require('./bot-profile');
+router.use(botProfileRoutes);
+
 // ══════════════════════════════════════════════════════════
 //  TODAS AS ROTAS ABAIXO REQUEREM AUTENTICAÇÃO (Bearer JWT)
 // ══════════════════════════════════════════════════════════

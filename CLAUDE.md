@@ -179,6 +179,15 @@ Carregadas dinamicamente do SEND-X `/api/tools/list` no startup. Atualmente ~37 
 
 **Research:** `analisar_concorrente_instagram`, `meta_ads_library_search`, `web_search`, `fetch_url`
 
+### ⚠️ Tools que NÃO existem no bridge
+As MCPs externas que aparecem no Claude Code local do operador **NÃO estão wired no bridge**:
+- `mcp__claude_ai_Meta_MCP__*` — NÃO disponível. Pra Meta Ads: use `mcp__bridge__get_metricas_expert` (gasto agregado da planilha) ou `mcp__bridge__meta_ads_library_search` (Ad Library pública, sem dados de conta).
+- `mcp__claude_ai_higgis__*` — NÃO disponível. Imagem/vídeo gerado é só via Claude Code local.
+- `mcp__claude_ai_Gmail__*`, `mcp__claude_ai_Google_Drive__*`, `mcp__claude_ai_Google_Calendar__*` — NÃO disponíveis.
+- `mcp__plugin_vercel_vercel__*` — NÃO disponível.
+
+Se a pergunta exige um desses MCPs, **avise o operador em vez de tentar chamar** — chamar gera 30s de timeout e perde a conexão.
+
 ### Fonte de verdade dos números
 - Postbacks Apostatudo = **tempo real** (incluem hoje)
 - Planilha = começa em ontem

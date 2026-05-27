@@ -271,7 +271,7 @@ async function callBridge({ message, additionalSystem, history, images, signal }
 
 // Stream SSE: consome /chat/stream do bridge e dispara callbacks por evento.
 // Retorna {text, session_id, tools_used, duration_ms} no final.
-async function callBridgeStream({ message, additionalSystem, history, images, signal, onText, onToolUse, onToolResult, onSessionInit }) {
+async function callBridgeStream({ message, additionalSystem, history, images, resumeId, signal, onText, onToolUse, onToolResult, onSessionInit }) {
   const url = await getBridgeUrl();
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) throw new Error('BRIDGE_URL/SECRET não configurados no servidor');
@@ -284,7 +284,7 @@ async function callBridgeStream({ message, additionalSystem, history, images, si
       'Accept': 'text/event-stream',
       'ngrok-skip-browser-warning': '1',
     },
-    body: JSON.stringify({ message, additional_system: additionalSystem, history, images }),
+    body: JSON.stringify({ message, additional_system: additionalSystem, history, images, resume_id: resumeId || undefined }),
     signal,
   });
 
@@ -475,12 +475,21 @@ router.post('/insights', async (req, res) => {
         additionalSystem: factsContext + contextoTela + attachmentContext,
         history: recentMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         images,
+        // Resume: se a session já trocou mensagens antes, passa o session_id
+        // Claude pra SDK reconstruir a conversa do disco. Bridge faz fallback
+        // automático sem resume se a sessão expirou.
+        resumeId: session.bridge_session_id || null,
         signal: ac.signal,
         onText: (chunk) => send({ type: 'text', text: chunk }),
         onToolUse: (evt) => send({ type: 'tool_use', name: evt.name, input: evt.input }),
         onToolResult: (evt) => send({ type: 'tool_result', tool_use_id: evt.tool_use_id, is_error: evt.is_error, summary: evt.summary }),
       });
       assistantText = result.text || '';
+      // Atualiza bridge_session_id com o session_id devolvido pela SDK.
+      // Pode ser o mesmo (resume bem-sucedido) ou novo (sessão criada).
+      if (result.session_id && result.session_id !== session.bridge_session_id) {
+        try { await db.updateChatSessionBridgeId(session.id, result.session_id); } catch (e) { console.error('[insights] update bridge_session_id falhou:', e.message); }
+      }
     } catch (err) {
       console.error('[insights] bridge erro:', err.message);
       bridgeErrored = true;

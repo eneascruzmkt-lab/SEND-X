@@ -142,3 +142,74 @@
 - Antes de qualquer ação destrutiva (drop, delete, force push, railway delete) — confirmar com o user
 - Nunca commitar `.env`, `.gsa.b64` ou qualquer chave em texto puro
 - Antes de mudar produção (push em `main`) avisar o user da mudança e aguardar ok
+
+---
+
+## Contexto do bridge (chat do SEND-X)
+
+Quando esta sessão é iniciada pelo **bridge do SEND-X** (chat web), o cwd é `/workspace/SEND X` e os outros repos do ecossistema estão clonados em `/workspace/`:
+- `/workspace/SEND X` — produto SEND-X (este repo)
+- `/workspace/quiz-juh-aviator`, `/workspace/quiz-dani-roleta`, `/workspace/daniroleta`
+- `/workspace/sendx-mcp` — servidor MCP HTTP do SEND-X
+- `/workspace/monitorgrupo-v2`, `/workspace/meet-attendance-bot`, `/workspace/meet-attendance-dashboard`, `/workspace/whisper-server`
+- `/workspace/claude-bridge-railway` — o próprio bridge
+- `/workspace/poker-pilot-app`, `/workspace/autoplay`, `/workspace/zapcomplete`, `/workspace/fantasmateste`, `/workspace/pixel-agents`
+
+### Operador
+- Aytalo (user_id=1, eneascruz.mkt@gmail.com)
+- **Experts ativos** (com Meta Ads + Apostatudo):
+  - DANI → roleta — bot `@danidaroletabot` — ad_account `act_1269299810441288`
+  - DEIVID/MALVADEZA → aviator — bot `@malvadezaaviator_bot` — ad_account `act_280380748192681`
+  - JUH → aviator — ad_account `act_974936103565001`
+  - NUCLEAR → bot `@nucleartraderbot`
+- **Casa de apostas**: APOSTATUDO (postback webhook)
+
+### Tools MCP do bridge (`mcp__bridge__*`)
+Carregadas dinamicamente do SEND-X `/api/tools/list` no startup. Atualmente ~37 tools:
+
+**Métricas/funil:** `get_dashboard_overview`, `get_metricas_expert`, `get_metricas_diario`, `get_postbacks_por_utm`, `get_telegram_growth`, `get_disparos_status`, `get_funil_expert`, `get_comparativo_funil`, `get_expert_360`
+
+**Apostatudo:** `get_apostatudo_resumo_geral`, `get_apostatudo_metricas_expert`, `get_apostatudo_ftds_expert`, `get_apostatudo_top_leads_expert`, `get_apostatudo_atividade_lead`, `get_apostatudo_mapeamento`, `listar_afiliados_apostatudo_descoberta`, `mapear_apostatudo_expert`
+
+**Instagram dos experts:** `listar_instagram_contas`, `get_instagram_atividade_dia`, `get_instagram_stories_ativos`, `get_instagram_comentarios`, `get_instagram_dms`, `get_instagram_metricas`
+
+**WhatsApp (monitorgrupo):** `get_grupos_expert`, `get_engajamento_por_grupo`, `get_engajamento_grupos`, `get_mensagens_grupos_expert`, `get_churn_grupos_expert`
+
+**Lives Klarvel:** `get_lives_resumo`, `listar_lives`, `get_live_detalhes`, `get_mensagens_live`, `get_transcricao_live`, `gerar_relatorio_lives`
+
+**Research:** `analisar_concorrente_instagram`, `meta_ads_library_search`, `web_search`, `fetch_url`
+
+### Fonte de verdade dos números
+- Postbacks Apostatudo = **tempo real** (incluem hoje)
+- Planilha = começa em ontem
+- Gasto Meta = atualiza ~09h BRT
+- USE APENAS números retornados pelas tools — NUNCA invente
+
+### Padrão de cores nos quizzes (mockup WhatsApp celular)
+- Header: `#008069` (verde WhatsApp)
+- Bolha "me": `#d9fdd3` (verde claro) · Bolha "other": `#ffffff`
+- CTA principal: `#00a884` — **NUNCA** gradient vinho/rosa/laranja
+- Avatar pode ter gradient da marca (só se foto não carregar)
+
+### Branches dos repos
+- `eneascruzmkt-lab/SEND-X` → `main` (auto-deploy ✓)
+- `aytalo/sendx-mcp` → `main` (auto-deploy ✓)
+- `aytalo/quiz-juh-aviator` → `main` (auto-deploy ✓)
+- **`aytalo/quiz-dani-roleta` → `master`** (auto-deploy ✓ — atenção: é master, não main)
+- `aytalo/claude-bridge-railway` → `main` (auto-deploy ✓)
+- `aytalo/meet-attendance-bot` → `main` (auto-deploy ✓)
+- `aytalo/monitorgrupo-v2` → `main` (deploy manual: `railway up --service monitorgrupo --ci`)
+
+### Regras de execução no chat
+**Faça direto (sem perguntar):** análise, leitura, pesquisa, copy, Edit/Write local, commit local sem push, tools de leitura, `gh`/`railway` read-only.
+
+**Peça confirmação antes:** `git push` (deploy prod), `railway up`/`redeploy`/`down`/`delete`, `rm -rf`, `DROP/TRUNCATE/DELETE FROM` sem WHERE, `git reset --hard`/`push --force`, criar/apagar schedule SendPulse, mudar env var prod, operações que custam dinheiro (Apify/RapidAPI/Higgsfield).
+
+**Quando entregar página/quiz/site:** confirme com `curl` o que tá REALMENTE servido (não confunda local vs prod). NUNCA fique em loop `until curl ...` esperando deploy — responde imediatamente "deploy disparado, em ~2min tá no ar".
+
+### Aprendizado entre sessões
+Quando aprender algo relevante, termine a resposta com:
+```
+MEMORIZE: tipo|chave|valor
+```
+Tipos: `user`, `project`, `feedback`, `decision`. Persistido em `chat_facts` do SEND-X.

@@ -154,6 +154,7 @@ const { MONITORGRUPO_TOOLS, executeMonitorgrupoTool } = require('../monitorgrupo
 const { FUNIL_TOOLS, executeFunilTool } = require('../funil-tools');
 const { INSTAGRAM_TOOLS, executeInstagramTool } = require('../instagram-tools');
 const { APOSTATUDO_TOOLS, executeApostatudoTool } = require('../apostatudo-tools');
+const { META_ADS_TOOLS, executeMetaAdsTool } = require('../meta-ads-tools');
 
 function bridgeAuth(req, res, next) {
   const expected = process.env.BRIDGE_SECRET;
@@ -210,7 +211,7 @@ router.get('/ecossistema/comparar', auth, async (req, res) => {
 
 router.get('/tools/list', bridgeAuth, (_req, res) => {
   res.json({
-    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS, ...INSTAGRAM_TOOLS, ...APOSTATUDO_TOOLS],
+    tools: [...TOOLS, ...RESEARCH_TOOLS, ...KLARVEL_TOOLS, ...MONITORGRUPO_TOOLS, ...FUNIL_TOOLS, ...INSTAGRAM_TOOLS, ...APOSTATUDO_TOOLS, ...META_ADS_TOOLS],
   });
 });
 
@@ -244,6 +245,8 @@ router.post('/tools/execute', bridgeAuth, async (req, res) => {
       result = await executeInstagramTool(name, input || {}, userId);
     } else if (APOSTATUDO_TOOLS.some(t => t.name === name)) {
       result = await executeApostatudoTool(name, input || {}, userId);
+    } else if (META_ADS_TOOLS.some(t => t.name === name)) {
+      result = await executeMetaAdsTool(name, input || {}, userId);
     } else {
       result = await executeTool(name, input || {}, userId);
     }

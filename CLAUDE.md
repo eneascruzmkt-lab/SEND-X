@@ -179,9 +179,11 @@ Carregadas dinamicamente do SEND-X `/api/tools/list` no startup. Atualmente ~37 
 
 **Research:** `analisar_concorrente_instagram`, `meta_ads_library_search`, `web_search`, `fetch_url`
 
+**Meta Ads detalhado (Graph API):** `get_meta_ads_campaigns`, `get_meta_ads_adsets`, `get_meta_ads_ads`, `get_meta_ads_creative` — gasto/CPM/CTR/leads por campaign/adset/ad de DANI/DEIVID/JUH usando FB_ACCESS_TOKEN + ad_accounts mapeados. Use pra responder "qual campanha tá performando", "melhor adset", "criativo escala", "qual copy desse ad".
+
 ### ⚠️ Tools que NÃO existem no bridge
-As MCPs externas que aparecem no Claude Code local do operador **NÃO estão wired no bridge**:
-- `mcp__claude_ai_Meta_MCP__*` — NÃO disponível. Pra Meta Ads: use `mcp__bridge__get_metricas_expert` (gasto agregado da planilha) ou `mcp__bridge__meta_ads_library_search` (Ad Library pública, sem dados de conta).
+Algumas MCPs do Claude Code local do operador **NÃO estão wired no bridge**:
+- `mcp__claude_ai_Meta_MCP__*` — NÃO disponível. Use as `mcp__bridge__get_meta_ads_*` acima.
 - `mcp__claude_ai_higgis__*` — NÃO disponível. Imagem/vídeo gerado é só via Claude Code local.
 - `mcp__claude_ai_Gmail__*`, `mcp__claude_ai_Google_Drive__*`, `mcp__claude_ai_Google_Calendar__*` — NÃO disponíveis.
 - `mcp__plugin_vercel_vercel__*` — NÃO disponível.

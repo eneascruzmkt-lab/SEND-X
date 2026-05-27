@@ -328,6 +328,170 @@ async function getMetaAdsAds({ expert, adset_id, campaign_id, periodo = '7d', de
   return { expert, periodo: label, ad_account: act, adset_id: adset_id || null, campaign_id: campaign_id || null, total: rows.length, ads: rows };
 }
 
+// ── WRITES (Fase C — criação) ───────────────────────────────────────────────
+// Todas as criações:
+//  - exigem confirm:true no input. Sem isso, retornam preview.
+//  - criam status=PAUSED por default (operador ativa via Ads Manager depois).
+//  - logam stderr antes de executar.
+
+function buildPreview(action, payload, note) {
+  return {
+    _preview: true,
+    action,
+    payload,
+    note: note || 'Chamar novamente com confirm:true pra aplicar. Tudo será criado PAUSED.',
+  };
+}
+
+async function graphPost(path, body) {
+  const url = new URL(`${GRAPH_API}${path}`);
+  url.searchParams.set('access_token', token());
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(body || {})) {
+    if (v === undefined || v === null) continue;
+    params.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  }
+  const resp = await fetch(url.toString(), {
+    method: 'POST',
+    body: params,
+    signal: AbortSignal.timeout(25_000),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    let detail = text;
+    try { detail = JSON.stringify(JSON.parse(text).error || text); } catch {}
+    throw new Error(`Graph API ${resp.status} (POST ${path}): ${detail.slice(0, 400)}`);
+  }
+  return JSON.parse(text);
+}
+
+async function createMetaAdsCampaign({ expert, name, objective, status = 'PAUSED', daily_budget_brl, lifetime_budget_brl, special_ad_categories = [], confirm = false }, userId) {
+  if (!name) throw new Error('name obrigatório');
+  if (!objective) throw new Error('objective obrigatório (ex: OUTCOME_TRAFFIC, OUTCOME_SALES, OUTCOME_ENGAGEMENT, OUTCOME_AWARENESS, OUTCOME_LEADS, OUTCOME_APP_PROMOTION)');
+  const act = await adAccountForExpert(expert, userId);
+
+  const body = {
+    name,
+    objective,
+    status,
+    special_ad_categories: special_ad_categories.length > 0 ? special_ad_categories : [],
+  };
+  if (daily_budget_brl) body.daily_budget = Math.round(Number(daily_budget_brl) * 100);
+  if (lifetime_budget_brl) body.lifetime_budget = Math.round(Number(lifetime_budget_brl) * 100);
+
+  if (!confirm) return buildPreview('CREATE campaign', { ad_account: act, ...body });
+
+  console.error(`[meta-ads-write] CREATE campaign expert=${expert} name="${name}" objective=${objective}`);
+  const r = await graphPost(`/${act}/campaigns`, body);
+  return { ok: true, action: 'CREATE campaign', campaign_id: r.id, ad_account: act, name, status, objective };
+}
+
+async function createMetaAdsAdset({ campaign_id, name, daily_budget_brl, lifetime_budget_brl, optimization_goal, billing_event = 'IMPRESSIONS', bid_strategy = 'LOWEST_COST_WITHOUT_CAP', bid_amount_cents, targeting, start_time, end_time, status = 'PAUSED', confirm = false }, _userId) {
+  if (!campaign_id) throw new Error('campaign_id obrigatório (use create_meta_ads_campaign primeiro)');
+  if (!name) throw new Error('name obrigatório');
+  if (!optimization_goal) throw new Error('optimization_goal obrigatório (ex: LINK_CLICKS, LANDING_PAGE_VIEWS, OFFSITE_CONVERSIONS, REACH, IMPRESSIONS, MESSAGES)');
+  if (!targeting || typeof targeting !== 'object') throw new Error('targeting obrigatório (objeto JSON — ex: {"age_min":18,"age_max":65,"genders":[1,2],"geo_locations":{"countries":["BR"]}})');
+  if (!daily_budget_brl && !lifetime_budget_brl) throw new Error('precisa de daily_budget_brl OU lifetime_budget_brl');
+
+  // Resolve ad_account a partir do campaign_id
+  const campInfo = await graphGet(`/${campaign_id}`, { fields: 'account_id,name' });
+  const act = `act_${campInfo.account_id}`;
+
+  const body = {
+    campaign_id,
+    name,
+    optimization_goal,
+    billing_event,
+    bid_strategy,
+    targeting,
+    status,
+  };
+  if (daily_budget_brl) body.daily_budget = Math.round(Number(daily_budget_brl) * 100);
+  if (lifetime_budget_brl) body.lifetime_budget = Math.round(Number(lifetime_budget_brl) * 100);
+  if (bid_amount_cents) body.bid_amount = Math.round(Number(bid_amount_cents));
+  if (start_time) body.start_time = start_time;
+  if (end_time) body.end_time = end_time;
+
+  if (!confirm) return buildPreview('CREATE adset', { ad_account: act, campaign_name: campInfo.name, ...body });
+
+  console.error(`[meta-ads-write] CREATE adset campaign=${campaign_id} name="${name}" budget=${daily_budget_brl || lifetime_budget_brl}`);
+  const r = await graphPost(`/${act}/adsets`, body);
+  return { ok: true, action: 'CREATE adset', adset_id: r.id, campaign_id, ad_account: act, name, status };
+}
+
+async function createMetaAdsAd({ adset_id, name, creative_id, status = 'PAUSED', tracking_specs, confirm = false }, _userId) {
+  if (!adset_id) throw new Error('adset_id obrigatório');
+  if (!name) throw new Error('name obrigatório');
+  if (!creative_id) throw new Error('creative_id obrigatório (use create_meta_ads_creative_from_post ou duplicate_meta_ads_ad)');
+
+  // Resolve ad_account a partir do adset
+  const adsetInfo = await graphGet(`/${adset_id}`, { fields: 'account_id,campaign_id,name' });
+  const act = `act_${adsetInfo.account_id}`;
+
+  const body = {
+    adset_id,
+    name,
+    creative: { creative_id },
+    status,
+  };
+  if (tracking_specs) body.tracking_specs = tracking_specs;
+
+  if (!confirm) return buildPreview('CREATE ad', { ad_account: act, adset_name: adsetInfo.name, ...body });
+
+  console.error(`[meta-ads-write] CREATE ad adset=${adset_id} creative=${creative_id} name="${name}"`);
+  const r = await graphPost(`/${act}/ads`, body);
+  return { ok: true, action: 'CREATE ad', ad_id: r.id, adset_id, ad_account: act, name, status };
+}
+
+async function duplicateMetaAdsAd({ source_ad_id, target_adset_id, new_name, status = 'PAUSED', confirm = false }, _userId) {
+  if (!source_ad_id) throw new Error('source_ad_id obrigatório');
+  if (!new_name) throw new Error('new_name obrigatório');
+
+  // Lê o ad original (creative + adset original)
+  const src = await graphGet(`/${source_ad_id}`, { fields: 'name,adset_id,account_id,creative{id}' });
+  const act = `act_${src.account_id}`;
+  const adset = target_adset_id || src.adset_id;
+  const creativeId = src.creative?.id;
+  if (!creativeId) throw new Error(`Ad ${source_ad_id} sem creative válido`);
+
+  const body = {
+    adset_id: adset,
+    name: new_name,
+    creative: { creative_id: creativeId },
+    status,
+  };
+
+  if (!confirm) return buildPreview('DUPLICATE ad', {
+    source_ad_id, source_name: src.name, target_adset_id: adset,
+    creative_id: creativeId, new_name, status,
+  });
+
+  console.error(`[meta-ads-write] DUPLICATE ad source=${source_ad_id} target_adset=${adset} new_name="${new_name}"`);
+  const r = await graphPost(`/${act}/ads`, body);
+  return { ok: true, action: 'DUPLICATE ad', ad_id: r.id, source_ad_id, adset_id: adset, ad_account: act, name: new_name, status };
+}
+
+async function createMetaAdsCreativeFromPost({ expert, page_id, post_id, name, instagram_actor_id, confirm = false }, userId) {
+  if (!page_id) throw new Error('page_id obrigatório (FB Page ou IG account id que publicou o post)');
+  if (!post_id) throw new Error('post_id obrigatório (formato: pageid_postid ou só postid)');
+  const act = await adAccountForExpert(expert, userId);
+
+  // object_story_id = "pageid_postid" — formato esperado pela Graph
+  const objectStoryId = post_id.includes('_') ? post_id : `${page_id}_${post_id}`;
+
+  const body = {
+    name: name || `creative-from-${objectStoryId.slice(0, 24)}`,
+    object_story_id: objectStoryId,
+  };
+  if (instagram_actor_id) body.instagram_actor_id = instagram_actor_id;
+
+  if (!confirm) return buildPreview('CREATE creative from post', { ad_account: act, object_story_id: objectStoryId, ...body });
+
+  console.error(`[meta-ads-write] CREATE creative_from_post expert=${expert} post=${objectStoryId}`);
+  const r = await graphPost(`/${act}/adcreatives`, body);
+  return { ok: true, action: 'CREATE creative', creative_id: r.id, ad_account: act, object_story_id: objectStoryId };
+}
+
 async function getMetaAdsCreative({ ad_id }) {
   if (!ad_id) throw new Error('ad_id obrigatório');
   const ad = await graphGet(`/${ad_id}`, {
@@ -417,6 +581,95 @@ const META_ADS_TOOLS = [
       required: ['ad_id'],
     },
   },
+  // ── WRITES (criação — sempre PAUSED por default) ──────────────────────────
+  {
+    name: 'create_meta_ads_campaign',
+    description: 'Cria uma nova campanha Meta Ads (começa PAUSED por segurança — operador ativa depois). Sem confirm:true retorna PREVIEW da mudança. Com confirm:true cria de verdade. Use objective válido (OUTCOME_SALES, OUTCOME_TRAFFIC, OUTCOME_ENGAGEMENT, OUTCOME_LEADS, OUTCOME_AWARENESS, OUTCOME_APP_PROMOTION).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        expert: { type: 'string', description: 'DANI, DEIVID ou JUH' },
+        name: { type: 'string' },
+        objective: { type: 'string', description: 'OUTCOME_SALES | OUTCOME_TRAFFIC | OUTCOME_ENGAGEMENT | OUTCOME_LEADS | OUTCOME_AWARENESS | OUTCOME_APP_PROMOTION' },
+        status: { type: 'string', enum: ['PAUSED','ACTIVE'], description: 'Default PAUSED' },
+        daily_budget_brl: { type: 'number', description: 'Em reais (ex: 50.00)' },
+        lifetime_budget_brl: { type: 'number', description: 'Em reais. Usa daily OU lifetime, não os dois.' },
+        special_ad_categories: { type: 'array', items: { type: 'string' }, description: 'Default vazio. Não usar pra iGaming.' },
+        confirm: { type: 'boolean', description: 'False (default) = retorna preview. True = aplica.' },
+      },
+      required: ['expert','name','objective'],
+    },
+  },
+  {
+    name: 'create_meta_ads_adset',
+    description: 'Cria um adset dentro de uma campanha existente (PAUSED). targeting é um objeto JSON arbitrário no formato Graph API. Sem confirm:true retorna preview.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        campaign_id: { type: 'string' },
+        name: { type: 'string' },
+        daily_budget_brl: { type: 'number' },
+        lifetime_budget_brl: { type: 'number' },
+        optimization_goal: { type: 'string', description: 'LINK_CLICKS | LANDING_PAGE_VIEWS | OFFSITE_CONVERSIONS | REACH | IMPRESSIONS | MESSAGES | etc' },
+        billing_event: { type: 'string', enum: ['IMPRESSIONS','LINK_CLICKS','PAGE_LIKES','POST_ENGAGEMENT','VIDEO_VIEWS','APP_INSTALLS'], description: 'Default IMPRESSIONS' },
+        bid_strategy: { type: 'string', enum: ['LOWEST_COST_WITHOUT_CAP','LOWEST_COST_WITH_BID_CAP','COST_CAP'], description: 'Default LOWEST_COST_WITHOUT_CAP' },
+        bid_amount_cents: { type: 'number', description: 'Em centavos, só se bid_strategy não for WITHOUT_CAP' },
+        targeting: { type: 'object', description: 'Objeto JSON conforme Graph API. Mínimo: {"age_min":18,"age_max":65,"genders":[1,2],"geo_locations":{"countries":["BR"]}}' },
+        start_time: { type: 'string', description: 'ISO 8601 (opcional)' },
+        end_time: { type: 'string', description: 'ISO 8601 (opcional)' },
+        status: { type: 'string', enum: ['PAUSED','ACTIVE'], description: 'Default PAUSED' },
+        confirm: { type: 'boolean' },
+      },
+      required: ['campaign_id','name','optimization_goal','targeting'],
+    },
+  },
+  {
+    name: 'create_meta_ads_ad',
+    description: 'Cria um anúncio (ad) dentro de um adset, usando creative_id existente. Sem confirm:true retorna preview.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        adset_id: { type: 'string' },
+        name: { type: 'string' },
+        creative_id: { type: 'string', description: 'ID de um creative existente. Use create_meta_ads_creative_from_post pra criar a partir de um post IG/FB existente.' },
+        status: { type: 'string', enum: ['PAUSED','ACTIVE'], description: 'Default PAUSED' },
+        tracking_specs: { type: 'array', description: 'Opcional: tracking specs no formato Graph API' },
+        confirm: { type: 'boolean' },
+      },
+      required: ['adset_id','name','creative_id'],
+    },
+  },
+  {
+    name: 'duplicate_meta_ads_ad',
+    description: 'Duplica um ad existente (copia o creative pra um novo ad). Útil pra escalar criativo bom pra outro adset/audiência. Sem confirm:true retorna preview.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        source_ad_id: { type: 'string', description: 'ID do ad de origem (vem de get_meta_ads_ads)' },
+        target_adset_id: { type: 'string', description: 'Adset destino. Omite pra duplicar no mesmo adset.' },
+        new_name: { type: 'string' },
+        status: { type: 'string', enum: ['PAUSED','ACTIVE'], description: 'Default PAUSED' },
+        confirm: { type: 'boolean' },
+      },
+      required: ['source_ad_id','new_name'],
+    },
+  },
+  {
+    name: 'create_meta_ads_creative_from_post',
+    description: 'Cria um creative reutilizando um post existente do Instagram/Facebook (object_story_id). Mais fácil que criar do zero com upload de imagem. Sem confirm:true retorna preview.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        expert: { type: 'string', description: 'DANI, DEIVID ou JUH' },
+        page_id: { type: 'string', description: 'FB Page ID ou IG account ID que publicou o post' },
+        post_id: { type: 'string', description: 'ID do post. Pode ser só o ID ou já no formato pageid_postid.' },
+        instagram_actor_id: { type: 'string', description: 'IG account ID se for IG post' },
+        name: { type: 'string', description: 'Opcional, default auto-gerado' },
+        confirm: { type: 'boolean' },
+      },
+      required: ['page_id','post_id'],
+    },
+  },
 ];
 
 const HANDLERS = {
@@ -424,6 +677,11 @@ const HANDLERS = {
   get_meta_ads_adsets: getMetaAdsAdsets,
   get_meta_ads_ads: getMetaAdsAds,
   get_meta_ads_creative: getMetaAdsCreative,
+  create_meta_ads_campaign: createMetaAdsCampaign,
+  create_meta_ads_adset: createMetaAdsAdset,
+  create_meta_ads_ad: createMetaAdsAd,
+  duplicate_meta_ads_ad: duplicateMetaAdsAd,
+  create_meta_ads_creative_from_post: createMetaAdsCreativeFromPost,
 };
 
 async function executeMetaAdsTool(name, input, userId) {

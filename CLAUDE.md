@@ -181,6 +181,20 @@ Carregadas dinamicamente do SEND-X `/api/tools/list` no startup. Atualmente ~37 
 
 **Meta Ads detalhado (Graph API):** `get_meta_ads_campaigns`, `get_meta_ads_adsets`, `get_meta_ads_ads`, `get_meta_ads_creative` — gasto/CPM/CTR/leads por campaign/adset/ad de DANI/DEIVID/JUH usando FB_ACCESS_TOKEN + ad_accounts mapeados. Use pra responder "qual campanha tá performando", "melhor adset", "criativo escala", "qual copy desse ad".
 
+**Meta Ads — CRIAÇÃO (writes):** `create_meta_ads_campaign`, `create_meta_ads_adset`, `create_meta_ads_ad`, `duplicate_meta_ads_ad`, `create_meta_ads_creative_from_post`.
+
+**Regras OBRIGATÓRIAS pra writes em Meta Ads:**
+1. **Sempre chame com `confirm: false` primeiro** (default) — retorna `_preview: true` com o payload que SERIA enviado. Mostre o preview pro operador.
+2. Espere o operador confirmar com "sim/topa/aplica". SÓ ENTÃO chame de novo com `confirm: true`.
+3. **Tudo é criado PAUSED por default.** Não tente criar ACTIVE — operador ativa via Ads Manager depois de revisar.
+4. **Fluxo padrão pra criar campanha do zero**:
+   a. `create_meta_ads_campaign` (recebe `campaign_id`)
+   b. `create_meta_ads_creative_from_post` se reutilizar post IG/FB, OU pede pro operador subir o creative no Ads Manager primeiro
+   c. `create_meta_ads_adset` (precisa de `campaign_id` + `targeting` JSON + budget + optimization_goal)
+   d. `create_meta_ads_ad` (precisa de `adset_id` + `creative_id`)
+5. **Pra escalar um criativo bom**: `duplicate_meta_ads_ad(source_ad_id, target_adset_id, new_name)` — copia o creative pra um novo ad em outro adset.
+6. Se o operador pedir pra mexer em orçamento ou pausar/ativar ad existente, **avise que ainda não tem essas tools** (fases A+B não implementadas). Por enquanto Ads Manager direto.
+
 ### ⚠️ Tools que NÃO existem no bridge
 Algumas MCPs do Claude Code local do operador **NÃO estão wired no bridge**:
 - `mcp__claude_ai_Meta_MCP__*` — NÃO disponível. Use as `mcp__bridge__get_meta_ads_*` acima.

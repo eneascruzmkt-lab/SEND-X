@@ -16,6 +16,29 @@ const { executeTool } = require('./insights-tools');
 
 const EXPERTS_DEFAULT = ['DANI', 'DEIVID', 'JUH'];
 
+// Comissão (revshare) do operador sobre o Net P&L de cada expert.
+// ⚠️ USO ESTRITAMENTE INTERNO — só entra no briefing matinal do operador
+// (AI Advisor → AI_ADVISOR_PHONE). NUNCA pode aparecer nas mensagens dos
+// experts. expert-messages.js NÃO importa isto e não deve importar.
+const OPERATOR_PROFIT_SHARES = { JUH: 0.10, DEIVID: 0.30, DANI: 0.05 };
+
+// Calcula o lucro do operador (share × net_pl de ONTEM) por expert + total.
+// Computado em JS (não no LLM) pra garantir aritmética correta.
+function calcularLucroOperador(dados) {
+  const linhas = [];
+  let total = 0;
+  for (const [expert, d] of Object.entries(dados.experts || {})) {
+    if (d.error || !d.diario_ontem) continue;
+    const share = OPERATOR_PROFIT_SHARES[expert.toUpperCase()];
+    if (share === undefined) continue;
+    const netpl = Number(d.diario_ontem.net_pl || 0);
+    const lucro = Math.round(netpl * share * 100) / 100;
+    total += lucro;
+    linhas.push({ expert, net_pl: netpl, share, lucro });
+  }
+  return { linhas, total: Math.round(total * 100) / 100 };
+}
+
 function buildSystemPrompt(slot) {
   const slotInfo = {
     manha: `# Slot: MANHÃ (08:00 BRT)
@@ -307,9 +330,10 @@ Você está enviando o briefing matinal pelo WhatsApp para o operador (Aytalo).
 
 CONTEÚDO OBRIGATÓRIO:
 1. *Fechamento de ONTEM* (use ftds, gasto_meta, net_pl, ftd_amount, deposits_amount, roi)
-2. *3 ações pra HOJE* (concretas, com expert/quantidade/horário se possível)
-3. *Sugestões de conteúdo pra HOJE* (1 story por expert ativo + 1 reel pro expert que mais precisa)
-4. *Alerta* se P&L ontem foi negativo ou houver problema crítico`,
+2. *💰 Seu lucro de ONTEM* — use o bloco "LUCRO DO OPERADOR (INTERNO)" que já vem CALCULADO nos dados. Mostre o lucro por expert (ex: "JUH: R$ X") e o *TOTAL*. NÃO recalcule, use os números prontos. Essa info é CONFIDENCIAL do operador — ela já está nos dados só porque é o briefing interno dele.
+3. *3 ações pra HOJE* (concretas, com expert/quantidade/horário se possível)
+4. *Sugestões de conteúdo pra HOJE* (1 story por expert ativo + 1 reel pro expert que mais precisa)
+5. *Alerta* se P&L ontem foi negativo ou houver problema crítico`,
     tarde: `# Slot TARDE (15:00 BRT) — CHECK-IN
 1. *Performance até agora vs ontem* (mesma hora aproximada)
 2. *2 ajustes pra final do dia* (pausar/escalar adsets)
@@ -366,10 +390,21 @@ function stripPerguntas(text) {
 
 async function gerarRelatorioWhatsapp(userId = 1, slot = 'manha', experts = EXPERTS_DEFAULT) {
   const dados = await coletarDados(userId, experts);
-  const dadosTxt = Object.entries(dados.experts).map(([exp, d]) => {
+  let dadosTxt = Object.entries(dados.experts).map(([exp, d]) => {
     if (d.error) return `## ${exp}\nERRO: ${d.error}`;
     return `## ${exp}\nDIÁRIO ONTEM: ${JSON.stringify(d.diario_ontem)}\nSEMANAL 7d: ${JSON.stringify(d.semanal_7d)}\nMENSAL 30d: ${JSON.stringify(d.mensal_30d)}`;
   }).join('\n\n');
+
+  // Lucro do operador — SÓ no briefing matinal (interno). Calculado em JS.
+  if (slot === 'manha') {
+    const lucro = calcularLucroOperador(dados);
+    if (lucro.linhas.length > 0) {
+      const det = lucro.linhas.map(l =>
+        `- ${l.expert}: ${(l.share * 100).toFixed(0)}% de R$ ${l.net_pl.toFixed(2)} (net P&L ontem) = R$ ${l.lucro.toFixed(2)}`
+      ).join('\n');
+      dadosTxt += `\n\n## LUCRO DO OPERADOR (INTERNO) — JÁ CALCULADO, NÃO RECALCULE\n${det}\nTOTAL: R$ ${lucro.total.toFixed(2)}`;
+    }
+  }
 
   const bridgeResp = await callBridge(dadosTxt, buildRelatorioPrompt(slot));
   return stripPerguntas(String(bridgeResp.text || '').trim());
@@ -401,4 +436,5 @@ async function enviarRelatorioWhatsapp(userId = 1, slot = 'manha') {
 module.exports = {
   gerarRecomendacoes, medirOutcomesAtrasados, notificarTop3, coletarDados,
   gerarRelatorioWhatsapp, enviarRelatorioWhatsapp,
+  calcularLucroOperador, OPERATOR_PROFIT_SHARES,
 };

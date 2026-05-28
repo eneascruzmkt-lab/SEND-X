@@ -328,18 +328,12 @@ function buildRelatorioPrompt(slot) {
     manha: `# Slot MANHÃ (08:00 BRT) — BRIEFING DO DIA
 Você está enviando o briefing matinal pelo WhatsApp para o operador (Aytalo).
 
-⚠️ REGRA INVIOLÁVEL DE AGREGAÇÃO:
-- Os resultados de cada expert (DANI, DEIVID, JUH) são OPERAÇÕES SEPARADAS, com ad accounts e financeiros distintos.
-- NUNCA some FTDs, gasto, Net P&L, depósitos entre experts.
-- NUNCA crie linha "Total" / "Consolidado" / "Geral" de métricas operacionais.
-- A ÚNICA soma permitida é o *TOTAL do lucro do operador* (item 2 abaixo), porque ali é a comissão dele.
-
 CONTEÚDO OBRIGATÓRIO (nessa ordem):
-1. *Fechamento de ONTEM — por expert* — uma linha por expert ativo com: FTDs, Gasto Meta, Net P&L, ROI. NADA de linha consolidada.
-2. *💰 Seu lucro de ONTEM* — use o bloco "LUCRO DO OPERADOR (INTERNO)" que já vem CALCULADO nos dados. Mostre o lucro por expert (ex: "JUH: R$ X") e o *TOTAL* (só esse total é permitido, pois é a comissão do operador). NÃO recalcule, use os números prontos. Essa info é CONFIDENCIAL do operador — ela já está nos dados só porque é o briefing interno dele.
+1. *Fechamento de ONTEM* (use ftds, gasto_meta, net_pl, ftd_amount, deposits_amount, roi)
+2. *💰 Seu lucro de ONTEM* — use o bloco "LUCRO DO OPERADOR (INTERNO)" que já vem CALCULADO nos dados. Mostre o lucro por expert (ex: "JUH: R$ X") e o *TOTAL*. NÃO recalcule, use os números prontos. Essa info é CONFIDENCIAL do operador — ela já está nos dados só porque é o briefing interno dele.
 3. *3 ações pra HOJE* (concretas, com expert/quantidade/horário se possível)
 4. *Sugestões de conteúdo pra HOJE* (1 story por expert ativo + 1 reel pro expert que mais precisa)
-5. *Alerta* se P&L de algum expert ontem foi negativo ou houver problema crítico`,
+5. *Alerta* se P&L ontem foi negativo ou houver problema crítico`,
     tarde: `# Slot TARDE (15:00 BRT) — CHECK-IN
 1. *Performance até agora vs ontem* (mesma hora aproximada)
 2. *2 ajustes pra final do dia* (pausar/escalar adsets)
@@ -359,7 +353,6 @@ ${slotInfo}
 - NÃO mencione "postback", "FTDs reais", "FTDs reais vs planilha", divergências de fonte
 - Net P&L já considera FTDs e depósitos da planilha — confie nele
 - ftd_amount e deposits_amount complementam o valor monetário
-- *Cada expert é uma operação financeira separada* — não há totais consolidados de FTDs/gasto/P&L entre experts. Só o lucro do operador é somado (comissão dele).
 
 # Formato — WhatsApp
 - Markdown que renderiza no WhatsApp (*negrito*, _itálico_)

@@ -279,6 +279,19 @@ router.use(attachmentsPublicRouter);
 const botProfileRoutes = require('./bot-profile');
 router.use(botProfileRoutes);
 
+// Callback durável do bridge (auth via Bearer BRIDGE_SECRET, server-to-server).
+// Montado ANTES do middleware JWT — o bridge não tem JWT, só o BRIDGE_SECRET.
+const insightsModule = require('./insights');
+router.post('/insights/bridge-result', bridgeAuth, async (req, res) => {
+  try {
+    const result = await insightsModule.persistBridgeResult(req.body || {});
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[bridge-result]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════
 //  TODAS AS ROTAS ABAIXO REQUEREM AUTENTICAÇÃO (Bearer JWT)
 // ══════════════════════════════════════════════════════════

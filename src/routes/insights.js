@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const { randomUUID } = require('crypto');
 const pdfParse = require('pdf-parse');
 const db = require('../db');
 const { executeTool } = require('../insights-tools');
@@ -271,7 +272,7 @@ async function callBridge({ message, additionalSystem, history, images, signal }
 
 // Stream SSE: consome /chat/stream do bridge e dispara callbacks por evento.
 // Retorna {text, session_id, tools_used, duration_ms} no final.
-async function callBridgeStream({ message, additionalSystem, history, images, resumeId, signal, onText, onToolUse, onToolResult, onSessionInit }) {
+async function callBridgeStream({ message, additionalSystem, history, images, resumeId, callback, signal, onText, onToolUse, onToolResult, onSessionInit }) {
   const url = await getBridgeUrl();
   const secret = process.env.BRIDGE_SECRET;
   if (!url || !secret) throw new Error('BRIDGE_URL/SECRET não configurados no servidor');
@@ -284,7 +285,7 @@ async function callBridgeStream({ message, additionalSystem, history, images, re
       'Accept': 'text/event-stream',
       'ngrok-skip-browser-warning': '1',
     },
-    body: JSON.stringify({ message, additional_system: additionalSystem, history, images, resume_id: resumeId || undefined }),
+    body: JSON.stringify({ message, additional_system: additionalSystem, history, images, resume_id: resumeId || undefined, callback: callback || undefined }),
     signal,
   });
 
@@ -392,6 +393,11 @@ router.post('/insights', async (req, res) => {
       session = await db.getOrCreateChatSession(req.userId, { backend: 'bridge' });
     }
 
+    // ID único deste turno. O bridge devolve junto no callback durável, e a
+    // gente acha a mensagem certa pra atualizar (sem duplicar) mesmo que o
+    // streaming tenha caído no meio.
+    const bridgeRequestId = randomUUID();
+
     const facts = await db.getChatFacts(req.userId);
     const recentMessages = await db.getChatMessages(session.id, MAX_HISTORY);
 
@@ -479,6 +485,14 @@ router.post('/insights', async (req, res) => {
         // Claude pra SDK reconstruir a conversa do disco. Bridge faz fallback
         // automático sem resume se a sessão expirou.
         resumeId: session.bridge_session_id || null,
+        // Callback durável: quando o bridge terminar, ele POSTa o resultado
+        // aqui — independente do streaming. Se a conexão SSE cair, o resultado
+        // não se perde: o bridge entrega via callback e o polling do front pega.
+        callback: {
+          url: `${PUBLIC_BASE_URL}/api/insights/bridge-result`,
+          request_id: bridgeRequestId,
+          chat_session_id: session.id,
+        },
         signal: ac.signal,
         onText: (chunk) => send({ type: 'text', text: chunk }),
         onToolUse: (evt) => send({ type: 'tool_use', name: evt.name, input: evt.input }),
@@ -503,30 +517,29 @@ router.post('/insights', async (req, res) => {
     // Persiste mensagem do assistente SEMPRE que tiver algum texto — mesmo em erro.
     // Marca com flag de erro pra UI poder destacar.
     const cleanText = (assistantText || '').replace(FACT_LINE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+    // Persiste via helper idempotente (mesmo caminho do callback durável) pra
+    // não duplicar se o callback do bridge chegar quase junto.
     if (cleanText) {
       try {
-        const assistantMsg = await db.addChatMessage(
-          session.id,
-          'assistant',
-          cleanText + (bridgeErrored ? `\n\n_[interrompido: ${bridgeErrorMsg}]_` : ''),
-          { backend: 'bridge', errored: bridgeErrored }
-        );
-        if (!bridgeErrored) {
-          await extractAndPersistFacts(req.userId, assistantMsg.id, assistantText);
-        }
+        await upsertAssistantByRequestId({
+          sessionId: session.id, userId: req.userId, requestId: bridgeRequestId,
+          content: cleanText + (bridgeErrored ? `\n\n_[interrompido: ${bridgeErrorMsg}]_` : ''),
+          errored: bridgeErrored, empty: false,
+          extractFactsFrom: bridgeErrored ? null : assistantText,
+        });
       } catch (dbErr) {
         console.error('[insights] persist parcial falhou:', dbErr.message);
       }
     } else if (bridgeErrored) {
-      // Aborto antes de qualquer texto chegar: marca placeholder pra UI saber
-      // que a mensagem do user não teve resposta (sem ficar órfã no histórico).
+      // Aborto antes de qualquer texto: placeholder pra UI não ficar órfã.
+      // O callback durável do bridge SOBRESCREVE este placeholder com a
+      // resposta real (por bridge_request_id) se o trabalho concluiu.
       try {
-        await db.addChatMessage(
-          session.id,
-          'assistant',
-          `_[interrompido antes da resposta: ${bridgeErrorMsg || 'sem detalhes'}]_`,
-          { backend: 'bridge', errored: true, empty: true }
-        );
+        await upsertAssistantByRequestId({
+          sessionId: session.id, userId: req.userId, requestId: bridgeRequestId,
+          content: `_[interrompido antes da resposta: ${bridgeErrorMsg || 'sem detalhes'}]_`,
+          errored: true, empty: true, extractFactsFrom: null,
+        });
       } catch (dbErr) {
         console.error('[insights] persist placeholder erro:', dbErr.message);
       }
@@ -600,4 +613,62 @@ router.post('/insights/sessions', async (req, res) => {
   }
 });
 
+// Upsert idempotente da mensagem do assistente por bridge_request_id.
+// Usado pelos DOIS caminhos (streaming e callback durável) — convergem na
+// mesma linha, então não duplica mesmo que cheguem quase juntos.
+// Regra: insere se não existe; se existe placeholder e o novo é real,
+// sobrescreve; senão ignora (dedup).
+async function upsertAssistantByRequestId({ sessionId, userId, requestId, content, errored, empty, extractFactsFrom }) {
+  const meta = { backend: 'bridge', errored: !!errored, empty: !!empty, bridge_request_id: requestId };
+  let existing = null;
+  if (requestId) {
+    const rows = await db.query(
+      `SELECT * FROM chat_messages WHERE session_id=$1 AND metadata->>'bridge_request_id'=$2 ORDER BY created_at DESC LIMIT 1`,
+      [sessionId, requestId]
+    );
+    existing = rows[0] || null;
+  }
+
+  if (existing) {
+    const md = existing.metadata || {};
+    const existingIsPlaceholder = md.errored || md.empty
+      || /^_\[interrompido/.test(existing.content || '') || (existing.content || '').length < 40;
+    const newIsReal = content && content.length >= 40 && !empty;
+    if (newIsReal && existingIsPlaceholder) {
+      await db.query(`UPDATE chat_messages SET content=$2, metadata=$3 WHERE id=$1`,
+        [existing.id, content, JSON.stringify(meta)]);
+      if (extractFactsFrom) await extractAndPersistFacts(userId, existing.id, extractFactsFrom);
+      return { updated: true, message_id: existing.id };
+    }
+    return { deduped: true, message_id: existing.id };
+  }
+
+  if (!content) return { skipped: 'sem conteúdo' };
+  const msg = await db.addChatMessage(sessionId, 'assistant', content, meta);
+  if (extractFactsFrom) await extractAndPersistFacts(userId, msg.id, extractFactsFrom);
+  return { inserted: true, message_id: msg.id };
+}
+
+// ─── Callback durável: bridge entrega resultado final aqui ──────────────────
+// Chamado server-to-server pelo bridge quando a task termina, INDEPENDENTE do
+// streaming SSE. Garante que o resultado não se perca se a conexão cair no meio.
+async function persistBridgeResult({ request_id, chat_session_id, text, claude_session_id, status }) {
+  if (!chat_session_id) throw new Error('chat_session_id obrigatório');
+  const sessRows = await db.query('SELECT * FROM chat_sessions WHERE id=$1', [chat_session_id]);
+  const session = sessRows[0];
+  if (!session) throw new Error('sessão não encontrada: ' + chat_session_id);
+
+  if (claude_session_id && claude_session_id !== session.bridge_session_id) {
+    try { await db.updateChatSessionBridgeId(chat_session_id, claude_session_id); } catch {}
+  }
+
+  const cleanText = (text || '').replace(FACT_LINE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+  return upsertAssistantByRequestId({
+    sessionId: chat_session_id, userId: session.user_id, requestId: request_id,
+    content: cleanText, errored: status !== 'done', empty: false,
+    extractFactsFrom: status === 'done' ? text : null,
+  });
+}
+
+router.persistBridgeResult = persistBridgeResult;
 module.exports = router;

@@ -20,7 +20,7 @@ const EXPERTS_DEFAULT = ['DANI', 'DEIVID', 'JUH'];
 // ⚠️ USO ESTRITAMENTE INTERNO — só entra no briefing matinal do operador
 // (AI Advisor → AI_ADVISOR_PHONE). NUNCA pode aparecer nas mensagens dos
 // experts. expert-messages.js NÃO importa isto e não deve importar.
-const OPERATOR_PROFIT_SHARES = { JUH: 0.10, DEIVID: 0.30, DANI: 0.05 };
+const OPERATOR_PROFIT_SHARES = { JUH: 0.10, DEIVID: 0.18, DANI: 0.05 };
 
 // Calcula o lucro do operador (share × net_pl de ONTEM) por expert + total.
 // Computado em JS (não no LLM) pra garantir aritmética correta.
@@ -328,7 +328,7 @@ function buildRelatorioPrompt(slot) {
     manha: `# Slot MANHÃ (08:00 BRT) — BRIEFING DO DIA
 Você está enviando o briefing matinal pelo WhatsApp para o operador (Aytalo).
 
-CONTEÚDO OBRIGATÓRIO:
+CONTEÚDO OBRIGATÓRIO (nessa ordem):
 1. *Fechamento de ONTEM* (use ftds, gasto_meta, net_pl, ftd_amount, deposits_amount, roi)
 2. *💰 Seu lucro de ONTEM* — use o bloco "LUCRO DO OPERADOR (INTERNO)" que já vem CALCULADO nos dados. Mostre o lucro por expert (ex: "JUH: R$ X") e o *TOTAL*. NÃO recalcule, use os números prontos. Essa info é CONFIDENCIAL do operador — ela já está nos dados só porque é o briefing interno dele.
 3. *3 ações pra HOJE* (concretas, com expert/quantidade/horário se possível)

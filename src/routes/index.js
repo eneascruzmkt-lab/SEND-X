@@ -410,7 +410,7 @@ router.get('/pares', async (req, res) => {
 /** POST /pares — cria novo par (nome, telegram_group_id, sendpulse_bot_id obrigatórios) */
 router.post('/pares', async (req, res) => {
   try {
-    const { nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome } = req.body;
+    const { nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome, gatilho_texto } = req.body;
     if (!nome || !telegram_group_id || !sendpulse_bot_id) {
       return res.status(400).json({ error: 'nome, telegram_group_id e sendpulse_bot_id são obrigatórios' });
     }
@@ -420,6 +420,7 @@ router.post('/pares', async (req, res) => {
       telegram_group_id,
       sendpulse_bot_id,
       sendpulse_bot_nome: sendpulse_bot_nome || null,
+      gatilho_texto: gatilho_texto || null,
     });
     res.status(201).json(par);
   } catch (err) {
@@ -440,6 +441,7 @@ router.put('/pares/:id', async (req, res) => {
     telegram_group_id: req.body.telegram_group_id || par.telegram_group_id,
     sendpulse_bot_id: req.body.sendpulse_bot_id || par.sendpulse_bot_id,
     sendpulse_bot_nome: req.body.sendpulse_bot_nome ?? par.sendpulse_bot_nome,
+    gatilho_texto: req.body.gatilho_texto ?? par.gatilho_texto,
   });
   res.json(updated);
 });

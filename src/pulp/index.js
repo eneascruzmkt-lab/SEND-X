@@ -38,13 +38,16 @@ async function callMcpTool(pulpUrl, apiKey, toolName, args) {
   const res = await axios.post(`${pulpUrl}/mcp`, body, {
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
       'Authorization': `Bearer ${apiKey}`,
     },
     timeout: 30000,
   });
 
-  // MCP retorna resultado em res.data.result.content[0].text
-  const data = res.data;
+  // MCP StreamableHTTP retorna SSE: "event: message\ndata: {...}"
+  const raw = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+  const jsonMatch = raw.match(/^data: (.+)$/m);
+  const data = jsonMatch ? JSON.parse(jsonMatch[1]) : (typeof res.data === 'object' ? res.data : JSON.parse(raw));
   if (data.error) throw new Error(data.error.message || 'Erro MCP');
   const content = data.result?.content?.[0];
   if (!content) throw new Error('Resposta MCP vazia');

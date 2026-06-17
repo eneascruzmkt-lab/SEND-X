@@ -25,6 +25,9 @@
  */
 
 const db = require('../db');
+const pulp = require('../pulp');
+const PULP_URL = process.env.PULP_URL;
+const PULP_API_KEY = process.env.PULP_API_KEY;
 
 let io = null;              // Referência ao Socket.io (injetada via start)
 
@@ -139,6 +142,40 @@ async function startUserBot(userId, telegramToken) {
         // Salva no banco e notifica frontend via Socket.io
         const saved = await db.insertMessage(msgData);
         if (io) io.to(`par_${par.id}`).emit('new_message', saved);
+
+        // ── Gatilho: disparo automatico se mensagem bate com frase ──
+        if (par.gatilho_texto && text) {
+          const trigger = par.gatilho_texto.trim().toLowerCase();
+          const msgTextLower = text.trim().toLowerCase();
+          if (msgTextLower.startsWith(trigger) && PULP_URL && PULP_API_KEY) {
+            const cooldown = 5 * 60 * 1000;
+            if (par.gatilho_ultimo_disparo && (Date.now() - new Date(par.gatilho_ultimo_disparo).getTime()) < cooldown) {
+              console.log(`[gatilho] cooldown ativo para par ${par.id}, ignorando`);
+            } else {
+              try {
+                const schedule = await db.createSchedule({
+                  user_id: par.user_id,
+                  par_id: par.id,
+                  sendpulse_bot_id: par.sendpulse_bot_id,
+                  sendpulse_bot_nome: par.sendpulse_bot_nome,
+                  origem: 'gatilho',
+                  content_type: msgType,
+                  content_text: text,
+                  content_media_url: publicMediaUrl || null,
+                  scheduled_at: new Date().toISOString(),
+                });
+                await pulp.dispatch(schedule, par, PULP_URL, PULP_API_KEY);
+                await db.updateScheduleStatus(schedule.id, 'enviado');
+                await db.insertLog({ schedule_id: schedule.id, par_id: par.id, status: 'enviado' });
+                await db.updateGatilhoUltimoDisparo(par.id);
+                if (io) io.to(`par_${par.id}`).emit('dispatch_fired', { par_id: par.id, schedule_id: schedule.id, status: 'enviado' });
+                console.log(`[gatilho] disparo automatico enviado, schedule ${schedule.id}, par ${par.id}`);
+              } catch (triggerErr) {
+                console.error(`[gatilho] erro no disparo para par ${par.id}:`, triggerErr.message);
+              }
+            }
+          }
+        }
       } catch (err) {
         console.error('[feed/telegraf] error:', err.message);
       }

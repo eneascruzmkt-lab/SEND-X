@@ -3,15 +3,10 @@
  *  Bot — Captura de mensagens dos grupos Telegram (Feed)
  * ============================================================
  *
- *  Duas estratégias de captura (uma por usuário):
+ *  Estratégia de captura:
  *
- *  1. TELEGRAF (preferencial): Se o usuário tem telegram_token,
+ *  TELEGRAF: Se o usuário tem telegram_token,
  *     cria um bot Telegraf que recebe mensagens em tempo real.
- *     Mais rápido e confiável.
- *
- *  2. POLLING SENDPULSE (fallback): Se não tem telegram_token,
- *     faz polling da API SendPulse a cada 15s para buscar novas
- *     mensagens. Mais lento e limitado.
  *
  *  Fluxo Telegraf:
  *  ┌───────────────────────────────────────────────────────────┐
@@ -20,7 +15,6 @@
  *  │  3. Identifica o par pelo chat.id (telegram_group_id)     │
  *  │  4. Detecta tipo: text, photo, video, document            │
  *  │  5. Se mídia: baixa do Telegram → upload catbox.moe       │
- *  │     (fallback: busca URL no SendPulse)                    │
  *  │  6. Dedup: verifica se mensagem duplicada (2min window)   │
  *  │  7. Salva no banco (messages) + emite via Socket.io       │
  *  └───────────────────────────────────────────────────────────┘
@@ -30,12 +24,9 @@
  * ============================================================
  */
 
-const sendpulse = require('../sendpulse');
 const db = require('../db');
 
 let io = null;              // Referência ao Socket.io (injetada via start)
-let pollingInterval = null; // Intervalo do polling SendPulse
-const lastSeenMsg = {};     // Controle de dedup do polling: { [par_id]: last_msg_id }
 
 // Instâncias Telegraf por usuário: { [userId]: Telegraf }
 // Cada usuário com telegram_token tem seu próprio bot rodando
@@ -43,43 +34,13 @@ const userBots = {};
 
 /**
  * Inicia o bot manager: cria bots Telegraf para todos os usuários
- * com telegram_token e inicia polling SendPulse como fallback.
+ * com telegram_token.
  */
 function start(socketIo) {
   io = socketIo;
 
   // Inicia bots Telegraf para todos os usuários com token configurado
   refreshAllBots();
-
-  // Polling SendPulse como fallback para usuários sem Telegraf
-  // Roda a cada 15 segundos
-  pollingInterval = setInterval(async () => {
-    try {
-      // Busca usuários que têm pares ativos E credenciais SendPulse
-      const usersWithSP = await db.query(`
-        SELECT DISTINCT p.user_id FROM pares p
-        JOIN user_settings us ON us.user_id = p.user_id
-        WHERE p.ativo=1 AND us.sendpulse_id IS NOT NULL AND us.sendpulse_secret IS NOT NULL
-      `);
-
-      for (const { user_id } of usersWithSP) {
-        // Pula usuários que já têm bot Telegraf rodando (não precisa de polling)
-        if (userBots[user_id]) continue;
-
-        const settings = await db.getUserSettings(user_id);
-        const credentials = {
-          sendpulse_id: settings.sendpulse_id,
-          sendpulse_secret: settings.sendpulse_secret,
-        };
-        const pares = await db.getAllPares(user_id);
-        for (const par of pares) {
-          await pollParMessages(par, credentials);
-        }
-      }
-    } catch (err) {
-      console.error('[feed] polling error:', err.message);
-    }
-  }, 15000);
 
   console.log('[feed] bot manager iniciado');
 }
@@ -151,26 +112,6 @@ async function startUserBot(userId, telegramToken) {
             publicMediaUrl = result.publicUrl;
           } catch (e) {
             console.error('[feed] download error:', e.message);
-            // Fallback: busca URL da mídia no histórico do SendPulse
-            try {
-              const settings = await db.getUserSettings(userId);
-              if (settings.sendpulse_id && settings.sendpulse_secret) {
-                const caption = msg.text || msg.caption || null;
-                // Espera SendPulse processar a mensagem
-                await new Promise(r => setTimeout(r, 3000));
-                const spUrl = await sendpulse.getMediaUrl(
-                  par.sendpulse_bot_id,
-                  { sendpulse_id: settings.sendpulse_id, sendpulse_secret: settings.sendpulse_secret },
-                  caption
-                );
-                if (spUrl) {
-                  publicMediaUrl = spUrl;
-                  console.log('[feed] got media URL from SendPulse:', spUrl.slice(0, 80));
-                }
-              }
-            } catch (e2) {
-              console.error('[feed] SendPulse media fallback error:', e2.message);
-            }
           }
         }
 
@@ -398,97 +339,8 @@ function extractTelegrafFileId(message) {
   return null;
 }
 
-/**
- * Polling de mensagens via API SendPulse (fallback para usuários sem Telegraf).
- * Busca últimas 20 mensagens do grupo e salva as novas.
- * Usa lastSeenMsg para evitar reprocessar mensagens já vistas.
- */
-async function pollParMessages(par, credentials) {
-  try {
-    // Busca contatos do bot — procura o contato do grupo (type === 3)
-    const contacts = await sendpulse.listContacts(par.sendpulse_bot_id, credentials);
-    const groupContact = contacts.find(c => c.type === 3);
-    if (!groupContact) return;
-
-    const token = await sendpulse.getToken(credentials);
-    const axios = require('axios');
-    const res = await axios.get(
-      `https://api.sendpulse.com/telegram/chats/messages?contact_id=${groupContact.id}&size=20&order=desc`,
-      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 }
-    );
-
-    // Filtra apenas mensagens recebidas (direction === 1), ignora enviadas
-    const msgs = (res.data.data || res.data).filter(m => m.direction === 1);
-    if (msgs.length === 0) return;
-
-    // Determina quais mensagens são novas (comparando com lastSeen)
-    const lastSeen = lastSeenMsg[par.id];
-    const newMsgs = lastSeen
-      ? msgs.filter(m => m.id > lastSeen)
-      : msgs.slice(0, 10); // Primeira vez: pega últimas 10
-
-    if (newMsgs.length === 0) return;
-    lastSeenMsg[par.id] = msgs[0].id; // Atualiza marcador
-
-    // Processa novas mensagens (mais antiga primeiro)
-    for (const m of newMsgs.reverse()) {
-      const media = extractMedia(m.data);
-      const msgData = {
-        par_id: par.id,
-        text: m.data?.text || m.data?.caption || null,
-        from_user: groupContact.channel_data?.name || 'grupo',
-        message_type: media.type,
-        file_id: media.url || null,
-        created_at: m.created_at ? m.created_at.replace('+00:00', '').replace('T', ' ') : undefined,
-      };
-
-      // Dedup: verifica se mensagem já existe (por conteúdo + timestamp ~1min)
-      const existing = await db.getMessages(par.id, 50);
-      const isDuplicate = existing.some(e =>
-        e.text === msgData.text &&
-        e.file_id === msgData.file_id &&
-        e.created_at &&
-        Math.abs(new Date(e.created_at).getTime() - new Date(m.created_at).getTime()) < 60000
-      );
-      if (isDuplicate) continue;
-
-      const saved = await db.insertMessage(msgData);
-      if (io) io.to(`par_${par.id}`).emit('new_message', saved);
-    }
-  } catch (err) {
-    // Ignora erros de rate limit (429) — normal no polling
-    if (!err.message.includes('429')) {
-      console.error(`[feed] poll error for par ${par.id}:`, err.message);
-    }
-  }
-}
-
-/**
- * Extrai informação de mídia dos dados de uma mensagem SendPulse.
- * Formatos variam: pode ser string (URL), objeto com file_id/url, ou array.
- * @returns {{ type: string, url: string|null }}
- */
-function extractMedia(data) {
-  if (!data) return { type: 'text', url: null };
-  if (data.photo) {
-    if (typeof data.photo === 'string') return { type: 'photo', url: data.photo };
-    if (Array.isArray(data.photo) && data.photo.length > 0) return { type: 'photo', url: data.photo[data.photo.length - 1].file_id || null };
-    return { type: 'photo', url: data.photo.file_id || data.photo.url || null };
-  }
-  if (data.video) {
-    if (typeof data.video === 'string') return { type: 'video', url: data.video };
-    return { type: 'video', url: data.video.file_id || data.video.url || null };
-  }
-  if (data.document) {
-    if (typeof data.document === 'string') return { type: 'document', url: data.document };
-    return { type: 'document', url: data.document.file_id || data.document.url || null };
-  }
-  return { type: 'text', url: null };
-}
-
-/** Para todos os bots e o polling. Chamado no graceful shutdown. */
+/** Para todos os bots. Chamado no graceful shutdown. */
 function stop() {
-  if (pollingInterval) clearInterval(pollingInterval);
   for (const userId of Object.keys(userBots)) {
     try { userBots[userId].stop(); } catch {}
   }

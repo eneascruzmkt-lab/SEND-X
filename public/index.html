@@ -159,7 +159,7 @@ tailwind.config = {
 <div class="flex items-center justify-center min-h-screen p-5" id="authPage">
   <div class="bg-surface border border-border/60 rounded-2xl p-10 w-full max-w-md shadow-2xl shadow-black/40">
     <h1 class="text-3xl font-extrabold text-green-500 text-center tracking-tight">SEND X</h1>
-    <p class="text-center text-gray-500 text-xs mt-1 mb-7">Agendamento SendPulse</p>
+    <p class="text-center text-gray-500 text-xs mt-1 mb-7">Agendamento Pulp</p>
 
     <div class="flex mb-6 rounded-lg overflow-hidden border border-border/60">
       <button class="auth-tab flex-1 py-2.5 text-center text-[13px] font-semibold bg-surface-2 text-gray-400 border-none transition-all duration-150 active" onclick="showAuthTab('login')">Entrar</button>
@@ -211,7 +211,7 @@ tailwind.config = {
   <aside id="sidebar" class="hidden md:flex w-full md:w-64 bg-surface border-r border-border/40 flex-col flex-shrink-0 absolute md:relative z-40 h-full md:h-auto">
     <div class="p-5 border-b border-border-light/40">
       <h1 class="text-xl font-extrabold text-green-500 tracking-tight">SEND X</h1>
-      <p class="text-[11px] text-gray-500 mt-0.5">Agendamento SendPulse</p>
+      <p class="text-[11px] text-gray-500 mt-0.5">Agendamento Pulp</p>
     </div>
     <div class="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Menu</div>
     <nav class="flex-1 overflow-y-auto px-2 py-1">
@@ -548,12 +548,12 @@ tailwind.config = {
             <div class="text-5xl mb-3 opacity-50">&#128279;</div>
             <h3 class="text-lg font-bold mb-2">Configurar Feed ao vivo</h3>
             <p class="text-gray-500 text-[13px] mb-6 leading-relaxed">
-              Para monitorar mensagens em tempo real, vincule um grupo/canal do Telegram a um bot da SendPulse.<br>
-              O bot monitor captura as mensagens e o bot SendPulse faz os disparos.
+              Para monitorar mensagens em tempo real, vincule um grupo/canal do Telegram a um bot do Pulp.<br>
+              O bot monitor captura as mensagens e o bot Pulp faz os disparos.
             </p>
             <div id="feedSetupNeedsCreds" style="display:none" class="mb-4">
               <div class="bg-amber-500/10 text-amber-400 p-3 rounded-lg text-[13px]">
-                Configure suas credenciais SendPulse primeiro em <strong>Configuracoes</strong>.
+                Configure o Pulp primeiro em <strong>Configuracoes</strong>.
               </div>
             </div>
             <div class="max-w-full text-left bg-surface border border-border-light/60 rounded-xl p-5" id="feedSetupForm">
@@ -568,7 +568,7 @@ tailwind.config = {
                 <div class="text-[11px] text-gray-500 mt-1">Encontre o ID adicionando @RawDataBot ao grupo e vendo o chat.id.</div>
               </div>
               <div class="mb-3.5">
-                <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot SendPulse (para disparos)</label>
+                <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot Pulp (para disparos)</label>
                 <select id="setupBotSelect" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"><option value="">Carregando bots...</option></select>
               </div>
               <button class="w-full bg-green-500 hover:bg-green-400 text-white font-semibold py-2.5 rounded-lg transition-all duration-150" onclick="submitSetup()">Conectar e ativar feed</button>
@@ -763,14 +763,6 @@ tailwind.config = {
         </h3>
         <div class="max-w-lg bg-surface border border-border-light/60 rounded-xl p-5 mb-8">
           <div class="mb-3.5">
-            <label class="block text-xs font-semibold text-gray-400 mb-1.5">SendPulse Client ID</label>
-            <input type="text" id="cfgSpId" placeholder="Encontre em sendpulse.com/integrations/api" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
-          </div>
-          <div class="mb-3.5">
-            <label class="block text-xs font-semibold text-gray-400 mb-1.5">SendPulse Client Secret</label>
-            <input type="password" id="cfgSpSecret" placeholder="Encontre em sendpulse.com/integrations/api" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
-          </div>
-          <div class="mb-3.5">
             <label class="block text-xs font-semibold text-gray-400 mb-1.5">Token do Bot Telegram (monitor)</label>
             <input type="password" id="cfgTgToken" placeholder="Token do @BotFather" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
             <div class="text-[11px] text-gray-500 mt-1">Bot que captura mensagens dos grupos. Crie um com @BotFather.</div>
@@ -862,7 +854,7 @@ tailwind.config = {
             <input type="text" id="cfgGroupId" placeholder="-100xxxxxxxxxx" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
           </div>
           <div class="mb-3.5">
-            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot SendPulse</label>
+            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Bot Pulp</label>
             <select id="cfgBotSelect" class="w-full bg-[#0c0f0c] text-gray-200 border border-border/60 py-2 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50"><option value="">Carregando bots...</option></select>
           </div>
           <button class="bg-green-500 hover:bg-green-400 text-white font-semibold py-2 px-5 rounded-lg transition-all duration-150 text-sm" onclick="createPar()">Criar par</button>
@@ -1171,8 +1163,6 @@ async function switchPar() {
 async function loadSettings() {
   try {
     const s = await api('/settings');
-    document.getElementById('cfgSpId').value = s.sendpulse_id || '';
-    document.getElementById('cfgSpSecret').value = s.sendpulse_secret || '';
     document.getElementById('cfgTgToken').value = s.telegram_token || '';
     document.getElementById('cfgWebhook').value = s.webhook_domain || '';
     document.getElementById('cfgGoogleKey').value = s.google_service_account_key || '';
@@ -1196,7 +1186,6 @@ async function generateApiKey() {
 function updateCredsStatus(s) {
   const el = document.getElementById('credsStatus');
   const parts = [];
-  if (s.has_sendpulse) parts.push('SendPulse');
   if (s.has_telegram) parts.push('Telegram');
   if (s.has_google) parts.push('Sheets');
   if (parts.length === 3) {
@@ -1213,8 +1202,6 @@ function updateCredsStatus(s) {
 
 async function saveSettings() {
   const data = {
-    sendpulse_id: document.getElementById('cfgSpId').value.trim(),
-    sendpulse_secret: document.getElementById('cfgSpSecret').value.trim(),
     telegram_token: document.getElementById('cfgTgToken').value.trim(),
     webhook_domain: document.getElementById('cfgWebhook').value.trim(),
     google_service_account_key: document.getElementById('cfgGoogleKey').value.trim(),
@@ -2610,7 +2597,7 @@ async function submitComposer(immediate) {
 // ── Config / Bots ───────────────────────────────
 async function loadBots() {
   try {
-    botsList = await api('/sendpulse/bots');
+    botsList = await api('/pulp/bots');
     if (!Array.isArray(botsList)) botsList = [];
   } catch { botsList = []; }
 

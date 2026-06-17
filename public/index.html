@@ -582,17 +582,14 @@ tailwind.config = {
 
           <!-- Popup Gatilhos -->
           <div id="gatilhoPopup" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.6)">
-            <div class="bg-[#111311] border border-border/60 rounded-2xl p-6 w-full max-w-md mx-4">
+            <div class="bg-[#111311] border border-border/60 rounded-2xl p-6 w-full max-w-lg mx-4">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-bold text-gray-200">Gatilhos</h3>
                 <button onclick="fecharGatilhoPopup()" class="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
               </div>
-              <p class="text-xs text-gray-500 mb-4">Dispara quando a mensagem contem TODAS as palavras abaixo.</p>
-              <div id="gatilhoLista" class="flex flex-col gap-2 mb-4 max-h-48 overflow-y-auto"></div>
-              <div class="flex gap-2">
-                <input type="text" id="gatilhoNovoInput" placeholder="Ex: ESTAMOS AO VIVO" class="flex-1 bg-[#0c0f0c] text-gray-200 border border-border/60 py-1.5 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
-                <button onclick="adicionarGatilho()" class="bg-green-500 hover:bg-green-400 text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150">Adicionar</button>
-              </div>
+              <p class="text-xs text-gray-500 mb-4">Cada gatilho dispara quando a mensagem contem TODAS as suas palavras. Qualquer gatilho que bater ja dispara.</p>
+              <div id="gatilhoLista" class="flex flex-col gap-3 mb-4 max-h-72 overflow-y-auto"></div>
+              <button onclick="novoGatilho()" class="w-full border border-dashed border-border/60 hover:border-green-500/40 text-gray-400 hover:text-green-400 text-xs font-semibold py-2 rounded-lg transition-all duration-150">+ Novo gatilho</button>
             </div>
           </div>
           <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -1386,6 +1383,7 @@ async function submitSetup() {
   switchPar();
 }
 
+// gatilhosList = array de arrays: [["palavra1","palavra2"], ["outra"]]
 let gatilhosList = [];
 
 async function carregarGatilho() {
@@ -1393,8 +1391,12 @@ async function carregarGatilho() {
   const pares = await api('/pares');
   const par = pares.find(p => p.id === currentPar.id);
   if (par && par.gatilho_texto) {
-    try { gatilhosList = JSON.parse(par.gatilho_texto); } catch { gatilhosList = par.gatilho_texto ? [par.gatilho_texto] : []; }
-    if (!Array.isArray(gatilhosList)) gatilhosList = [gatilhosList];
+    try { gatilhosList = JSON.parse(par.gatilho_texto); } catch { gatilhosList = []; }
+    if (!Array.isArray(gatilhosList)) gatilhosList = [];
+    // migra formato antigo (array de strings) para array de arrays
+    if (gatilhosList.length > 0 && typeof gatilhosList[0] === 'string') {
+      gatilhosList = [gatilhosList];
+    }
   } else {
     gatilhosList = [];
   }
@@ -1423,27 +1425,28 @@ function renderGatilhoLista() {
     el.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Nenhum gatilho configurado</div>';
     return;
   }
-  el.innerHTML = gatilhosList.map((g, i) => `
-    <div class="flex items-center gap-2 bg-[#0c0f0c] border border-border/60 rounded-lg py-1.5 px-3">
-      <span class="flex-1 text-sm text-gray-200">${esc(g)}</span>
-      <button onclick="removerGatilho(${i})" class="text-red-400 hover:text-red-300 text-xs font-semibold">&times;</button>
-    </div>
-  `).join('');
+  el.innerHTML = gatilhosList.map((palavras, i) => {
+    const tags = palavras.map((p, j) => `<span class="inline-flex items-center gap-1 bg-[#1a1d1a] border border-border/60 rounded-md py-0.5 px-2 text-xs text-gray-300">${esc(p)} <button onclick="removerPalavra(${i},${j})" class="text-red-400 hover:text-red-300 ml-0.5">&times;</button></span>`).join(' ');
+    return `
+      <div class="bg-[#0c0f0c] border border-border/60 rounded-lg p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-400">Gatilho ${i + 1}</span>
+          <button onclick="removerGatilho(${i})" class="text-red-400 hover:text-red-300 text-xs">Remover</button>
+        </div>
+        <div class="flex flex-wrap gap-1.5 mb-2">${tags}</div>
+        <div class="flex gap-2">
+          <input type="text" id="gatilhoPalavra_${i}" placeholder="Adicionar palavra" class="flex-1 bg-[#111311] text-gray-200 border border-border/60 py-1 px-2 rounded text-xs focus:outline-none focus:border-green-500/50">
+          <button onclick="adicionarPalavra(${i})" class="text-green-400 hover:text-green-300 text-xs font-semibold">+ Palavra</button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
-async function adicionarGatilho() {
-  const input = document.getElementById('gatilhoNovoInput');
-  const texto = input.value.trim();
-  if (!texto) return;
-  if (gatilhosList.some(g => g.toLowerCase() === texto.toLowerCase())) {
-    showToast('Gatilho ja existe', 'error');
-    return;
-  }
-  gatilhosList.push(texto);
-  input.value = '';
+async function novoGatilho() {
+  gatilhosList.push([]);
   renderGatilhoLista();
   await salvarGatilhoLista();
-  showToast('Gatilho adicionado', 'success');
 }
 
 async function removerGatilho(index) {
@@ -1451,6 +1454,23 @@ async function removerGatilho(index) {
   renderGatilhoLista();
   await salvarGatilhoLista();
   showToast('Gatilho removido', 'success');
+}
+
+async function adicionarPalavra(gatilhoIndex) {
+  const input = document.getElementById('gatilhoPalavra_' + gatilhoIndex);
+  const texto = input.value.trim();
+  if (!texto) return;
+  gatilhosList[gatilhoIndex].push(texto);
+  input.value = '';
+  renderGatilhoLista();
+  await salvarGatilhoLista();
+}
+
+async function removerPalavra(gatilhoIndex, palavraIndex) {
+  gatilhosList[gatilhoIndex].splice(palavraIndex, 1);
+  if (gatilhosList[gatilhoIndex].length === 0) gatilhosList.splice(gatilhoIndex, 1);
+  renderGatilhoLista();
+  await salvarGatilhoLista();
 }
 
 async function loadFeed() {

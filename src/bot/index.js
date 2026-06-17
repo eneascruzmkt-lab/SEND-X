@@ -145,12 +145,17 @@ async function startUserBot(userId, telegramToken) {
 
         // ── Gatilho: disparo automatico se mensagem bate com frase ──
         if (par.gatilho_texto && text) {
+          // gatilho_texto = JSON array de arrays: [["palavra1","palavra2"], ["outra1"]]
+          // Cada sub-array e um gatilho independente. Todas as palavras do sub-array devem estar na mensagem.
+          // Se QUALQUER gatilho bater, dispara.
           let triggers = [];
-          try { triggers = typeof par.gatilho_texto === 'string' ? JSON.parse(par.gatilho_texto) : par.gatilho_texto; } catch { triggers = [par.gatilho_texto]; }
-          if (!Array.isArray(triggers)) triggers = [triggers];
-          triggers = triggers.filter(t => t);
+          try { triggers = typeof par.gatilho_texto === 'string' ? JSON.parse(par.gatilho_texto) : par.gatilho_texto; } catch { triggers = []; }
+          if (!Array.isArray(triggers)) triggers = [];
           const msgTextLower = text.trim().toLowerCase();
-          const matched = triggers.length > 0 && triggers.every(t => msgTextLower.includes(t.trim().toLowerCase()));
+          const matched = triggers.some(grupo => {
+            if (!Array.isArray(grupo) || grupo.length === 0) return false;
+            return grupo.every(palavra => palavra && msgTextLower.includes(palavra.trim().toLowerCase()));
+          });
           if (matched && PULP_URL && PULP_API_KEY) {
             const cooldown = 5 * 60 * 1000;
             if (par.gatilho_ultimo_disparo && (Date.now() - new Date(par.gatilho_ultimo_disparo).getTime()) < cooldown) {

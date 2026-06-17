@@ -584,25 +584,30 @@ module.exports = {
       // Reativa o par existente com os novos dados
       const id = existing.rows[0].id;
       await pool.query(`
-        UPDATE pares SET nome=$2, sendpulse_bot_id=$3, sendpulse_bot_nome=$4, ativo=1
+        UPDATE pares SET nome=$2, sendpulse_bot_id=$3, sendpulse_bot_nome=$4, ativo=1, gatilho_texto=$5
         WHERE id=$1
-      `, [id, data.nome, data.sendpulse_bot_id, data.sendpulse_bot_nome]);
+      `, [id, data.nome, data.sendpulse_bot_id, data.sendpulse_bot_nome, data.gatilho_texto || null]);
       return this.getParById(id);
     }
     const res = await pool.query(`
-      INSERT INTO pares (user_id, nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome)
-      VALUES ($1, $2, $3, $4, $5) RETURNING *
-    `, [data.user_id, data.nome, data.telegram_group_id, data.sendpulse_bot_id, data.sendpulse_bot_nome]);
+      INSERT INTO pares (user_id, nome, telegram_group_id, sendpulse_bot_id, sendpulse_bot_nome, gatilho_texto)
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+    `, [data.user_id, data.nome, data.telegram_group_id, data.sendpulse_bot_id, data.sendpulse_bot_nome, data.gatilho_texto || null]);
     return res.rows[0];
   },
 
   /** Atualiza dados do par (nome, IDs) */
   async updatePar(id, data) {
     await pool.query(`
-      UPDATE pares SET nome=$2, telegram_group_id=$3, sendpulse_bot_id=$4, sendpulse_bot_nome=$5
+      UPDATE pares SET nome=$2, telegram_group_id=$3, sendpulse_bot_id=$4, sendpulse_bot_nome=$5, gatilho_texto=$6
       WHERE id=$1
-    `, [id, data.nome, data.telegram_group_id, data.sendpulse_bot_id, data.sendpulse_bot_nome]);
+    `, [id, data.nome, data.telegram_group_id, data.sendpulse_bot_id, data.sendpulse_bot_nome, data.gatilho_texto ?? null]);
     return this.getParById(id);
+  },
+
+  /** Atualiza timestamp do ultimo disparo de gatilho */
+  async updateGatilhoUltimoDisparo(parId) {
+    await pool.query('UPDATE pares SET gatilho_ultimo_disparo = NOW() WHERE id = $1', [parId]);
   },
 
   /** Desativa par (soft delete — ativo=0). Schedules existentes NÃO são afetados. */

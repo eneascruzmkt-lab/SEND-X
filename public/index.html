@@ -576,6 +576,11 @@ tailwind.config = {
           </div>
         </div>
         <div id="feedContent" style="display:none">
+          <div class="flex items-center gap-3 mb-4 p-3 bg-surface border border-border/60 rounded-xl">
+            <label class="text-xs font-semibold text-gray-400 whitespace-nowrap">Gatilho</label>
+            <input type="text" id="gatilhoInput" placeholder="Ex: ESTAMOS AO VIVO" class="flex-1 bg-[#0c0f0c] text-gray-200 border border-border/60 py-1.5 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+            <button onclick="salvarGatilho()" class="bg-green-500 hover:bg-green-400 text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150">Salvar</button>
+          </div>
           <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div class="flex items-center gap-3">
               <span class="badge-live py-1 px-2.5 text-xs">AO VIVO</span>
@@ -1367,6 +1372,22 @@ async function submitSetup() {
   switchPar();
 }
 
+async function carregarGatilho() {
+  if (!currentPar) return;
+  const pares = await api('/pares');
+  const par = pares.find(p => p.id === currentPar.id);
+  if (par) {
+    document.getElementById('gatilhoInput').value = par.gatilho_texto || '';
+  }
+}
+
+async function salvarGatilho() {
+  if (!currentPar) return;
+  const texto = document.getElementById('gatilhoInput').value.trim();
+  await api('/pares/' + currentPar.id, { method: 'PUT', body: { gatilho_texto: texto || null } });
+  showToast(texto ? 'Gatilho salvo' : 'Gatilho removido', 'success');
+}
+
 async function loadFeed() {
   if (!currentPar) return;
   const msgs = await api(`/messages?par_id=${currentPar.id}`);
@@ -1379,6 +1400,7 @@ async function loadFeed() {
   document.getElementById('msgCount').textContent = `${msgs.length} mensagens`;
   selectedMsgs.clear();
   updateSelBtn();
+  carregarGatilho();
 }
 
 function renderMsg(m) {

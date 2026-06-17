@@ -25,7 +25,7 @@
  *  - DELETE /schedules/:id    → excluir agendamento (permanente!)
  *  - POST   /schedules/:id/send → enviar agendamento manualmente
  *  - GET    /dashboard        → contadores do dashboard
- *  - GET    /sendpulse/bots   → listar bots SendPulse
+ *  - GET    /pulp/bots        → listar bots Pulp
  *
  *  Todas as rotas protegidas usam req.userId (injetado pelo middleware auth).
  *  Verificação de ownership: cada recurso valida se pertence ao usuário.
@@ -37,7 +37,10 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('../db');
-const sendpulse = require('../sendpulse');
+const pulp = require('../pulp');
+
+const PULP_URL = process.env.PULP_URL;
+const PULP_API_KEY = process.env.PULP_API_KEY;
 const { hashPassword, comparePassword, generateToken, auth } = require('../auth');
 
 const router = express.Router();
@@ -313,14 +316,11 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 router.get('/settings', async (req, res) => {
   const settings = await db.getUserSettings(req.userId);
   res.json({
-    sendpulse_id: settings.sendpulse_id || '',
-    sendpulse_secret: settings.sendpulse_secret ? '••••••••' : '',
     telegram_token: settings.telegram_token ? '••••••••' : '',
     webhook_domain: settings.webhook_domain || '',
     google_service_account_key: settings.google_service_account_key ? '••••••••' : '',
     google_sheet_id: settings.google_sheet_id || '',
     api_key: settings.api_key || '',
-    has_sendpulse: !!(settings.sendpulse_id && settings.sendpulse_secret),
     has_telegram: !!settings.telegram_token,
     has_google: !!(settings.google_service_account_key),
     anthropic_api_key: settings.anthropic_api_key ? '••••••••' : '',
@@ -372,13 +372,11 @@ router.put('/settings/anthropic-key', async (req, res) => {
 
 /** PUT /settings — atualizar configurações (não sobrescreve se mascarado) */
 router.put('/settings', async (req, res) => {
-  const { sendpulse_id, sendpulse_secret, telegram_token, webhook_domain, google_service_account_key, google_sheet_id } = req.body;
+  const { telegram_token, webhook_domain, google_service_account_key, google_sheet_id } = req.body;
   const current = await db.getUserSettings(req.userId);
 
   // Se o valor é '••••••••', mantém o atual (campo mascarado = não alterou)
   const updated = await db.upsertUserSettings(req.userId, {
-    sendpulse_id: sendpulse_id ?? current.sendpulse_id ?? null,
-    sendpulse_secret: (sendpulse_secret && sendpulse_secret !== '••••••••') ? sendpulse_secret : (current.sendpulse_secret ?? null),
     telegram_token: (telegram_token && telegram_token !== '••••••••') ? telegram_token : (current.telegram_token ?? null),
     webhook_domain: webhook_domain ?? current.webhook_domain ?? null,
     google_service_account_key: (google_service_account_key && google_service_account_key !== '••••••••') ? google_service_account_key : (current.google_service_account_key ?? null),
@@ -390,33 +388,15 @@ router.put('/settings', async (req, res) => {
   if (botManager) botManager.refreshUser(req.userId);
 
   res.json({
-    sendpulse_id: updated.sendpulse_id || '',
-    sendpulse_secret: updated.sendpulse_secret ? '••••••••' : '',
     telegram_token: updated.telegram_token ? '••••••••' : '',
     webhook_domain: updated.webhook_domain || '',
     google_service_account_key: updated.google_service_account_key ? '••••••••' : '',
     google_sheet_id: updated.google_sheet_id || '',
-    has_sendpulse: !!(updated.sendpulse_id && updated.sendpulse_secret),
     has_telegram: !!updated.telegram_token,
     has_google: !!(updated.google_service_account_key && updated.google_sheet_id),
   });
 });
 
-/**
- * Helper: obtém credenciais SendPulse do usuário logado.
- * Retorna null se não configuradas (usado para validação).
- */
-async function getCredentials(req) {
-  const settings = await db.getUserSettings(req.userId);
-  if (!settings.sendpulse_id || !settings.sendpulse_secret) {
-    return null;
-  }
-  return {
-    sendpulse_id: settings.sendpulse_id,
-    sendpulse_secret: settings.sendpulse_secret,
-    webhook_domain: settings.webhook_domain,
-  };
-}
 
 // ── Pares ───────────────────────────────────────────────
 // Par = vínculo entre Telegram grupo + SendPulse bot
@@ -557,20 +537,19 @@ router.post('/schedules', async (req, res) => {
 /** POST /schedules/:id/send — envio manual imediato de um agendamento */
 router.post('/schedules/:id/send', async (req, res) => {
   const schedule = await db.getScheduleById(req.params.id);
-  if (!schedule || schedule.user_id !== req.userId) return res.status(404).json({ error: 'Agendamento não encontrado' });
+  if (!schedule || schedule.user_id !== req.userId) return res.status(404).json({ error: 'Agendamento nao encontrado' });
 
-  const credentials = await getCredentials(req);
-  if (!credentials) return res.status(400).json({ error: 'Configure suas credenciais SendPulse em Configurações' });
+  if (!PULP_URL || !PULP_API_KEY) return res.status(400).json({ error: 'PULP_URL ou PULP_API_KEY nao configuradas' });
 
   // Resolve bot_id: do schedule ou do par
   let botId = schedule.sendpulse_bot_id;
   const par = schedule.par_id ? await db.getParById(schedule.par_id) : null;
   if (!botId && par) botId = par.sendpulse_bot_id;
-  if (!botId) return res.status(400).json({ error: 'Bot ID não encontrado' });
+  if (!botId) return res.status(400).json({ error: 'Bot ID nao encontrado' });
 
   try {
     const s = { ...schedule, sendpulse_bot_id: botId };
-    await sendpulse.dispatch(s, par, credentials);
+    await pulp.dispatch(s, par, PULP_URL, PULP_API_KEY);
     await db.updateScheduleStatus(schedule.id, 'enviado');
     await db.insertLog({ schedule_id: schedule.id, par_id: schedule.par_id, status: 'enviado' });
     res.json({ ok: true, status: 'enviado' });
@@ -620,20 +599,19 @@ router.get('/dashboard', async (req, res) => {
   res.json(await db.getDashboard(Number(par_id)));
 });
 
-// ── SendPulse Bots ──────────────────────────────────────
+// ── Pulp Bots ──────────────────────────────────────
 
-/** GET /sendpulse/bots — lista bots da conta SendPulse do usuário */
-router.get('/sendpulse/bots', async (req, res) => {
-  const credentials = await getCredentials(req);
-  if (!credentials) {
-    return res.status(400).json({ error: 'Configure suas credenciais SendPulse em Configurações', needs_setup: true });
+/** GET /pulp/bots — lista bots do Pulp */
+router.get('/pulp/bots', async (req, res) => {
+  if (!PULP_URL || !PULP_API_KEY) {
+    return res.status(400).json({ error: 'PULP_URL ou PULP_API_KEY nao configuradas', needs_setup: true });
   }
   try {
-    const bots = await sendpulse.listBots(credentials);
-    console.log('[sendpulse/bots] resultado:', JSON.stringify(bots).slice(0, 500));
+    const bots = await pulp.listBots(PULP_URL, PULP_API_KEY);
+    console.log('[pulp/bots] resultado:', JSON.stringify(bots).slice(0, 500));
     res.json(bots);
   } catch (err) {
-    console.error('[sendpulse/bots] erro:', err.response?.data || err.message);
+    console.error('[pulp/bots] erro:', err.message);
     res.status(500).json({ error: 'Erro ao buscar bots: ' + err.message });
   }
 });

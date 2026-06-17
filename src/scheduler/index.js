@@ -6,7 +6,7 @@
  *  Dois cron jobs:
  *
  *  1. A CADA MINUTO: verifica schedules pendentes com scheduled_at <= NOW()
- *     e dispara via SendPulse. Processa todos os usuários.
+ *     e dispara via Pulp. Processa todos os usuários.
  *
  *  2. MEIA-NOITE: limpa tabela messages (feed do dia anterior).
  *     ATENÇÃO: Só limpa messages, NUNCA schedules.
@@ -15,7 +15,7 @@
  *  ┌──────────────────────────────────────────────────────────┐
  *  │  1. getSchedulesDue() → busca pendentes com data <= NOW  │
  *  │  2. Proteção B: se atraso > 2h, marca 'expirado' e pula │
- *  │  3. Valida: user_id, credenciais SendPulse, bot_id       │
+ *  │  3. Valida: user_id, PULP_URL/PULP_API_KEY, bot_id       │
  *  │  4. sendpulse.dispatch() → envia campanha                │
  *  │  5. Se recorrente: cria próxima ocorrência ANTES de      │
  *  │     marcar como 'enviado' (protege contra perda)          │
@@ -33,7 +33,9 @@
 
 const cron = require('node-cron');
 const db = require('../db');
-const sendpulse = require('../sendpulse');
+const pulp = require('../pulp');
+const PULP_URL = process.env.PULP_URL;
+const PULP_API_KEY = process.env.PULP_API_KEY;
 
 let io = null; // Referência ao Socket.io (injetada via start)
 
@@ -148,26 +150,11 @@ function start(socketIo) {
         continue;
       }
 
-      // Validação: credenciais SendPulse devem estar configuradas
-      let settings;
-      try {
-        settings = await db.getUserSettings(userId);
-      } catch (err) {
-        console.error('[scheduler] erro ao buscar settings user', userId, ':', err.message);
-        await db.updateScheduleStatus(s.id, 'erro', 'Erro ao buscar configurações');
+      // Validacao: env vars do Pulp devem estar configuradas
+      if (!PULP_URL || !PULP_API_KEY) {
+        await db.updateScheduleStatus(s.id, 'erro', 'PULP_URL ou PULP_API_KEY nao configuradas');
         continue;
       }
-
-      if (!settings.sendpulse_id || !settings.sendpulse_secret) {
-        await db.updateScheduleStatus(s.id, 'erro', 'Credenciais SendPulse não configuradas');
-        continue;
-      }
-
-      const credentials = {
-        sendpulse_id: settings.sendpulse_id,
-        sendpulse_secret: settings.sendpulse_secret,
-        webhook_domain: settings.webhook_domain,
-      };
 
       // Resolve bot_id: do schedule ou do par vinculado
       const par = s.par_id ? await db.getParById(s.par_id) : null;
@@ -181,7 +168,7 @@ function start(socketIo) {
 
       try {
         // ── Disparo via SendPulse ──
-        await sendpulse.dispatch(s, par, credentials);
+        await pulp.dispatch(s, par, PULP_URL, PULP_API_KEY);
 
         // ── Recorrência: cria próxima ocorrência ANTES de marcar como enviado ──
         if (s.recurrence) {

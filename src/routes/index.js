@@ -514,12 +514,9 @@ router.post('/schedules', async (req, res) => {
     if (req.body.recurrence && !['diario', 'diasuteis', 'semanal'].includes(req.body.recurrence)) {
       return res.status(400).json({ error: 'recurrence inválido. Use: diario, diasuteis ou semanal' });
     }
-    // Valida buttons (máximo 3, não permitido para mensagens do grupo)
+    // Valida buttons (máximo 3)
     if (req.body.buttons && req.body.buttons.length > 3) {
       return res.status(400).json({ error: 'Máximo 3 botões permitidos' });
-    }
-    if (req.body.buttons && req.body.buttons.length > 0 && req.body.origem === 'grupo') {
-      return res.status(400).json({ error: 'Botões não permitidos para mensagens do grupo' });
     }
     // Injeta user_id do token JWT
     req.body.user_id = req.userId;

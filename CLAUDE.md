@@ -71,7 +71,7 @@
 ---
 
 ### 3. Conversão de vídeo .MOV → .MP4 no SEND-X
-**Problema:** Telegram envia .MOV como document, SendPulse não reproduz .MOV como vídeo inline.
+**Problema:** Telegram envia .MOV como document, plataforma de disparo não reproduz .MOV como vídeo inline.
 
 **Solução em dois pontos:**
 
@@ -80,13 +80,60 @@
 - `src/bot/index.js` — **MODIFICADO**:
   - `detectTelegrafType()`: documentos com mime `video/*` ou extensão de vídeo (.mov, .avi, etc) agora retornam 'video' em vez de 'document'
   - `downloadTelegramFile()`: se vídeo não é .mp4, converte com ffmpeg antes de upload pro Catbox
-  - Função `telegramToHtml()` existe no código mas NÃO está sendo usada (foi revertida — causava problemas com parse_mode HTML na SendPulse)
+  - Função `telegramToHtml()` existe no código mas NÃO está sendo usada (foi revertida — causava problemas com parse_mode HTML)
 
-- `src/sendpulse/index.js` — **MODIFICADO**:
-  - `buildCampaignMessage()` agora é `async`
-  - Se URL do vídeo não é .mp4 no momento do envio, baixa, converte com ffmpeg e re-upa pro Catbox (safety net)
-  - `convertRemoteVideoToMp4()`: função que baixa vídeo remoto, converte e re-upa
+- `src/pulp/index.js` — Conversão de vídeo:
+  - `convertRemoteVideoToMp4()`: função que baixa vídeo remoto, converte e re-upa pro Catbox
+  - Se URL do vídeo não é .mp4 no momento do envio, converte automaticamente
   - Se conversão falhar, o schedule fica com status 'erro' (nunca envia .MOV)
+
+---
+
+### 4. Migração SendPulse → Pulp (17/06/2026)
+**Problema:** SendPulse deixou de ser usada. Substituída pelo Pulp (plataforma própria do operador).
+
+**O que mudou:**
+
+- `src/pulp/index.js` — **CRIADO**: Módulo de comunicação com o MCP do Pulp
+  - `listBots(pulpUrl, apiKey)`: lista bots via MCP tool `list_bots`
+  - `dispatch(schedule, par, pulpUrl, apiKey)`: cria broadcast via MCP tool `create_and_send_broadcast`
+  - Comunicação via JSON-RPC 2.0 em `POST <PULP_URL>/mcp` com Bearer token
+  - Inclui `convertRemoteVideoToMp4()` (movida do antigo sendpulse)
+
+- `src/scheduler/index.js` — **MODIFICADO**:
+  - Import trocado de `sendpulse` para `pulp`
+  - Credenciais vêm de env vars (`PULP_URL`, `PULP_API_KEY`) em vez de `user_settings`
+  - `pulp.dispatch()` no lugar de `sendpulse.dispatch()`
+
+- `src/routes/index.js` — **MODIFICADO**:
+  - Rota `GET /api/sendpulse/bots` → `GET /api/pulp/bots`
+  - Disparo manual usa `pulp.dispatch()`
+  - Função `getCredentials()` removida
+  - Settings não exibem mais campos SendPulse
+
+- `src/bot/index.js` — **MODIFICADO**:
+  - Import do sendpulse removido
+  - Polling SendPulse (fallback cada 15s) removido inteiramente
+  - Fallback `sendpulse.getMediaUrl()` removido
+  - Funções `pollParMessages()` e `extractMedia()` removidas
+
+- `public/index.html` — **MODIFICADO**:
+  - Endpoint de bots: `/api/pulp/bots`
+  - Campos SendPulse Client ID/Secret removidos das configurações
+  - Textos "SendPulse" trocados por "Pulp"
+  - Botões permitidos em mensagens capturadas do grupo
+
+- `src/sendpulse/index.js` — Mantido no repo mas NÃO é importado por nenhum arquivo
+
+#### Env vars do SEND-X (Railway):
+- `PULP_URL` = `https://pulp.up.railway.app`
+- `PULP_API_KEY` = chave MCP do Pulp
+
+#### Mapeamento de bots (coluna `sendpulse_bot_id` agora guarda IDs do Pulp):
+- DANI (@danidaroletabot) → bot_id `8`
+- DEIVID (@malvadezaaviator_bot) → bot_id `7`
+- NUCLEAR (@nucleartraderbot) → bot_id `5`
+- JUH → ainda não está no Pulp
 
 ---
 
@@ -94,7 +141,8 @@
 - Fluxos existentes de texto, foto e vídeo .mp4 não foram alterados
 - A função `telegramToHtml` existe no bot/index.js mas NÃO é chamada — foi desativada por causar problemas
 - Os links do Telegram no caption são perdidos (texto puro) — tentativa de preservar via HTML foi revertida
-- Todas as rotas originais do SEND-X estão intactas
+- Colunas `sendpulse_bot_id` e `sendpulse_bot_nome` no banco NÃO foram renomeadas — agora guardam IDs/nomes do Pulp
+- `src/sendpulse/index.js` existe mas não é usado — não importar de volta
 
 ---
 
@@ -102,6 +150,7 @@
 
 **Repos / Services:**
 - **SEND-X** painel + API → repo `eneascruzmkt-lab/SEND-X` → Railway service `SEND-X` no projeto Railway `SEND-X` → URL `https://send-x-production.up.railway.app`
+- **Pulp** plataforma de bots/disparos Telegram → repo `eneascruzmkt-lab/pulp` → Railway → URL `https://pulp.up.railway.app` (MCP em `/mcp`, auth Bearer = `MCP_API_KEY`)
 - **sendx-mcp** servidor MCP HTTP → repo `aytalo/sendx-mcp` → Railway service `sendx-mcp` no mesmo projeto → URL `https://sendx-mcp-production.up.railway.app/mcp` (auth Bearer = `user_settings.api_key`)
 - **sendx-mcp local stdio** → `/Users/aytalooliveira/sendx-mcp/` rodando via `claude mcp add` para Claude Code local
 
@@ -204,9 +253,9 @@ MCP remoto do sistema do operador (substitui a SendPulse pra gestão de bots/can
 **Usuários do painel:** `list_users`, `create_user` (agente: email + bots liberados), `delete_user`
 **Mensagens:** `send_message` (texto de um bot pra um contato)
 **Fluxos:** `list_flows`, `get_flow`, `create_flow` (trigger: start|deeplink|default), `author_flow` (define os passos), `delete_flow`
-**Disparos:** `list_broadcasts`, `create_broadcast_draft` (cria RASCUNHO — NÃO envia, envio depende de aprovação)
+**Disparos:** `list_broadcasts`, `create_broadcast_draft` (cria RASCUNHO — NÃO envia, envio depende de aprovação), `create_and_send_broadcast` (cria e agenda pra envio imediato — usado pelo SEND-X)
 
-Use pra "cria um bot", "importa esses leads", "monta um fluxo de boas-vindas", "lista os contatos do bot X", "cria um disparo". Disparo só vira rascunho — confirme com o operador antes de qualquer envio real.
+Use pra "cria um bot", "importa esses leads", "monta um fluxo de boas-vindas", "lista os contatos do bot X", "cria um disparo". `create_broadcast_draft` vira rascunho — confirme com o operador antes de qualquer envio real. `create_and_send_broadcast` é usado automaticamente pelo SEND-X para disparos agendados.
 
 ### ⚠️ Tools que NÃO existem no bridge
 Algumas MCPs do Claude Code local do operador **NÃO estão wired no bridge**:
@@ -231,6 +280,7 @@ Se a pergunta exige um desses MCPs, **avise o operador em vez de tentar chamar**
 
 ### Branches dos repos
 - `eneascruzmkt-lab/SEND-X` → `main` (auto-deploy ✓)
+- `eneascruzmkt-lab/pulp` → `master` (auto-deploy ✓)
 - `aytalo/sendx-mcp` → `main` (auto-deploy ✓)
 - `aytalo/quiz-juh-aviator` → `main` (auto-deploy ✓)
 - **`aytalo/quiz-dani-roleta` → `master`** (auto-deploy ✓ — atenção: é master, não main)
@@ -241,7 +291,7 @@ Se a pergunta exige um desses MCPs, **avise o operador em vez de tentar chamar**
 ### Regras de execução no chat
 **Faça direto (sem perguntar):** análise, leitura, pesquisa, copy, Edit/Write local, commit local sem push, tools de leitura, `gh`/`railway` read-only.
 
-**Peça confirmação antes:** `git push` (deploy prod), `railway up`/`redeploy`/`down`/`delete`, `rm -rf`, `DROP/TRUNCATE/DELETE FROM` sem WHERE, `git reset --hard`/`push --force`, criar/apagar schedule SendPulse, mudar env var prod, operações que custam dinheiro (Apify/RapidAPI/Higgsfield).
+**Peça confirmação antes:** `git push` (deploy prod), `railway up`/`redeploy`/`down`/`delete`, `rm -rf`, `DROP/TRUNCATE/DELETE FROM` sem WHERE, `git reset --hard`/`push --force`, criar/apagar schedule/broadcast Pulp, mudar env var prod, operações que custam dinheiro (Apify/RapidAPI/Higgsfield).
 
 **Quando entregar página/quiz/site:** confirme com `curl` o que tá REALMENTE servido (não confunda local vs prod). NUNCA fique em loop `until curl ...` esperando deploy — responde imediatamente "deploy disparado, em ~2min tá no ar".
 

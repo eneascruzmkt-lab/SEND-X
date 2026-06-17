@@ -145,9 +145,12 @@ async function startUserBot(userId, telegramToken) {
 
         // ── Gatilho: disparo automatico se mensagem bate com frase ──
         if (par.gatilho_texto && text) {
-          const trigger = par.gatilho_texto.trim().toLowerCase();
+          let triggers = [];
+          try { triggers = typeof par.gatilho_texto === 'string' ? JSON.parse(par.gatilho_texto) : par.gatilho_texto; } catch { triggers = [par.gatilho_texto]; }
+          if (!Array.isArray(triggers)) triggers = [triggers];
           const msgTextLower = text.trim().toLowerCase();
-          if (msgTextLower.startsWith(trigger) && PULP_URL && PULP_API_KEY) {
+          const matched = triggers.some(t => t && msgTextLower.startsWith(t.trim().toLowerCase()));
+          if (matched && PULP_URL && PULP_API_KEY) {
             const cooldown = 5 * 60 * 1000;
             if (par.gatilho_ultimo_disparo && (Date.now() - new Date(par.gatilho_ultimo_disparo).getTime()) < cooldown) {
               console.log(`[gatilho] cooldown ativo para par ${par.id}, ignorando`);

@@ -576,10 +576,24 @@ tailwind.config = {
           </div>
         </div>
         <div id="feedContent" style="display:none">
-          <div class="flex items-center gap-3 mb-4 p-3 bg-surface border border-border/60 rounded-xl">
-            <label class="text-xs font-semibold text-gray-400 whitespace-nowrap">Gatilho</label>
-            <input type="text" id="gatilhoInput" placeholder="Ex: ESTAMOS AO VIVO" class="flex-1 bg-[#0c0f0c] text-gray-200 border border-border/60 py-1.5 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
-            <button onclick="salvarGatilho()" class="bg-green-500 hover:bg-green-400 text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150">Salvar</button>
+          <div class="flex items-center gap-3 mb-4">
+            <button onclick="abrirGatilhoPopup()" id="btnGatilhos" class="bg-surface border border-border/60 hover:border-green-500/30 text-gray-300 text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150">Gatilhos (0)</button>
+          </div>
+
+          <!-- Popup Gatilhos -->
+          <div id="gatilhoPopup" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.6)">
+            <div class="bg-[#111311] border border-border/60 rounded-2xl p-6 w-full max-w-md mx-4">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-bold text-gray-200">Gatilhos</h3>
+                <button onclick="fecharGatilhoPopup()" class="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
+              </div>
+              <p class="text-xs text-gray-500 mb-4">Mensagens que comecam com essas frases disparam automaticamente.</p>
+              <div id="gatilhoLista" class="flex flex-col gap-2 mb-4 max-h-48 overflow-y-auto"></div>
+              <div class="flex gap-2">
+                <input type="text" id="gatilhoNovoInput" placeholder="Ex: ESTAMOS AO VIVO" class="flex-1 bg-[#0c0f0c] text-gray-200 border border-border/60 py-1.5 px-3 rounded-lg text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/10">
+                <button onclick="adicionarGatilho()" class="bg-green-500 hover:bg-green-400 text-white text-xs font-semibold py-1.5 px-4 rounded-lg transition-all duration-150">Adicionar</button>
+              </div>
+            </div>
           </div>
           <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div class="flex items-center gap-3">
@@ -1372,20 +1386,71 @@ async function submitSetup() {
   switchPar();
 }
 
+let gatilhosList = [];
+
 async function carregarGatilho() {
   if (!currentPar) return;
   const pares = await api('/pares');
   const par = pares.find(p => p.id === currentPar.id);
-  if (par) {
-    document.getElementById('gatilhoInput').value = par.gatilho_texto || '';
+  if (par && par.gatilho_texto) {
+    try { gatilhosList = JSON.parse(par.gatilho_texto); } catch { gatilhosList = par.gatilho_texto ? [par.gatilho_texto] : []; }
+    if (!Array.isArray(gatilhosList)) gatilhosList = [gatilhosList];
+  } else {
+    gatilhosList = [];
   }
+  document.getElementById('btnGatilhos').textContent = `Gatilhos (${gatilhosList.length})`;
 }
 
-async function salvarGatilho() {
+async function salvarGatilhoLista() {
   if (!currentPar) return;
-  const texto = document.getElementById('gatilhoInput').value.trim();
-  await api('/pares/' + currentPar.id, { method: 'PUT', body: { gatilho_texto: texto || null } });
-  showToast(texto ? 'Gatilho salvo' : 'Gatilho removido', 'success');
+  const valor = gatilhosList.length > 0 ? JSON.stringify(gatilhosList) : null;
+  await api('/pares/' + currentPar.id, { method: 'PUT', body: { gatilho_texto: valor } });
+  document.getElementById('btnGatilhos').textContent = `Gatilhos (${gatilhosList.length})`;
+}
+
+function abrirGatilhoPopup() {
+  renderGatilhoLista();
+  document.getElementById('gatilhoPopup').classList.remove('hidden');
+}
+
+function fecharGatilhoPopup() {
+  document.getElementById('gatilhoPopup').classList.add('hidden');
+}
+
+function renderGatilhoLista() {
+  const el = document.getElementById('gatilhoLista');
+  if (gatilhosList.length === 0) {
+    el.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Nenhum gatilho configurado</div>';
+    return;
+  }
+  el.innerHTML = gatilhosList.map((g, i) => `
+    <div class="flex items-center gap-2 bg-[#0c0f0c] border border-border/60 rounded-lg py-1.5 px-3">
+      <span class="flex-1 text-sm text-gray-200">${esc(g)}</span>
+      <button onclick="removerGatilho(${i})" class="text-red-400 hover:text-red-300 text-xs font-semibold">&times;</button>
+    </div>
+  `).join('');
+}
+
+async function adicionarGatilho() {
+  const input = document.getElementById('gatilhoNovoInput');
+  const texto = input.value.trim();
+  if (!texto) return;
+  if (gatilhosList.some(g => g.toLowerCase() === texto.toLowerCase())) {
+    showToast('Gatilho ja existe', 'error');
+    return;
+  }
+  gatilhosList.push(texto);
+  input.value = '';
+  renderGatilhoLista();
+  await salvarGatilhoLista();
+  showToast('Gatilho adicionado', 'success');
+}
+
+async function removerGatilho(index) {
+  gatilhosList.splice(index, 1);
+  renderGatilhoLista();
+  await salvarGatilhoLista();
+  showToast('Gatilho removido', 'success');
 }
 
 async function loadFeed() {

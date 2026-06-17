@@ -195,6 +195,19 @@ Carregadas dinamicamente do SEND-X `/api/tools/list` no startup. Atualmente ~37 
 5. **Pra escalar um criativo bom**: `duplicate_meta_ads_ad(source_ad_id, target_adset_id, new_name)` — copia o creative pra um novo ad em outro adset.
 6. Se o operador pedir pra mexer em orçamento ou pausar/ativar ad existente, **avise que ainda não tem essas tools** (fases A+B não implementadas). Por enquanto Ads Manager direto.
 
+### PULP — sistema próprio de bots/leads Telegram (`mcp__pulp__*`)
+MCP remoto do sistema do operador (substitui a SendPulse pra gestão de bots/canais/leads no Telegram). Wired no bridge via HTTP + Bearer key (env `PULP_MCP_KEY`). 19 tools:
+
+**Bots:** `list_bots`, `create_bot` (a partir do token BotFather), `delete_bot`
+**Contatos:** `list_contacts` (paginado), `import_contacts` (CSV/texto, precisa telegram_id), `delete_contact`
+**Links rastreáveis:** `list_links`, `create_link` (bot + fluxo + utm base)
+**Usuários do painel:** `list_users`, `create_user` (agente: email + bots liberados), `delete_user`
+**Mensagens:** `send_message` (texto de um bot pra um contato)
+**Fluxos:** `list_flows`, `get_flow`, `create_flow` (trigger: start|deeplink|default), `author_flow` (define os passos), `delete_flow`
+**Disparos:** `list_broadcasts`, `create_broadcast_draft` (cria RASCUNHO — NÃO envia, envio depende de aprovação)
+
+Use pra "cria um bot", "importa esses leads", "monta um fluxo de boas-vindas", "lista os contatos do bot X", "cria um disparo". Disparo só vira rascunho — confirme com o operador antes de qualquer envio real.
+
 ### ⚠️ Tools que NÃO existem no bridge
 Algumas MCPs do Claude Code local do operador **NÃO estão wired no bridge**:
 - `mcp__claude_ai_Meta_MCP__*` — NÃO disponível. Use as `mcp__bridge__get_meta_ads_*` acima.

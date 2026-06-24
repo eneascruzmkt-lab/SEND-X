@@ -239,16 +239,6 @@ tailwind.config = {
       <button class="nav-item" data-tab="ecossistema" onclick="showPanel('ecossistema')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><circle cx="4" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="5" r="1.8" fill="currentColor" opacity=".6"/><circle cx="4" cy="15" r="1.8" fill="currentColor" opacity=".6"/><circle cx="16" cy="15" r="1.8" fill="currentColor" opacity=".6"/><line x1="10" y1="10" x2="4" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="5" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="4" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/><line x1="10" y1="10" x2="16" y2="15" stroke="currentColor" stroke-width="1.2" opacity=".4"/></svg> Ecossistema
       </button>
-      <button class="nav-item" data-tab="feed" onclick="showPanel('feed')">
-        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" fill="currentColor"/><path d="M10 3a7 7 0 017 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".5"/><path d="M10 6a4 4 0 014 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".7"/></svg> Feed ao vivo
-        <span class="ml-auto badge-live text-[9px] py-0.5 px-1.5">LIVE</span>
-      </button>
-      <button class="nav-item" data-tab="composer" onclick="showPanel('composer')">
-        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5 5.5l3 3" stroke="currentColor" stroke-width="1.6"/></svg> Nova campanha
-      </button>
-      <button class="nav-item" data-tab="schedules" onclick="showPanel('schedules')">
-        <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v4.5l3 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Historico
-      </button>
       <button class="nav-item" data-tab="config" onclick="showPanel('config')">
         <svg class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.5 1.5M14.3 14.3l1.5 1.5M4.2 15.8l1.5-1.5M14.3 5.7l1.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Configuracoes
       </button>
@@ -541,9 +531,8 @@ tailwind.config = {
         </div>
       </div>
 
-      <!-- Feed -->
-      <div class="panel" id="panel-feed">
-        <div id="feedSetup" style="display:none">
+      <!-- Feed, Historico e Composer removidos (migrados para Pulp) -->
+      <!-- REMOVED-PANELS-START --><div style="display:none">
           <div class="max-w-lg mx-auto mt-10 text-center">
             <div class="text-5xl mb-3 opacity-50">&#128279;</div>
             <h3 class="text-lg font-bold mb-2">Configurar Feed ao vivo</h3>
@@ -771,6 +760,8 @@ tailwind.config = {
         </div>
       </div>
 
+      </div><!-- REMOVED-PANELS-END -->
+
       <!-- Config -->
       <div class="panel" id="panel-config">
         <h3 class="text-base font-bold mb-4 flex items-center gap-2">
@@ -880,8 +871,8 @@ tailwind.config = {
   </div>
 </div>
 
-<!-- Schedule modal -->
-<div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden" id="schedModal">
+<!-- Modais de schedule/edit removidos (migrados para Pulp) -->
+<div style="display:none">
   <div class="bg-surface border border-border/60 rounded-2xl p-4 sm:p-6 w-[95%] sm:w-[90%] max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
     <h3 class="text-base font-bold mb-4">Enviar mensagens selecionadas</h3>
     <div id="schedModalSummary" class="text-[13px] text-gray-500 mb-3.5"></div>
@@ -1026,6 +1017,8 @@ tailwind.config = {
   </div>
 </div>
 
+</div><!-- end removed modals -->
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 const socket = io();
@@ -1039,7 +1032,7 @@ let mediaBlock = null;
 let authToken = localStorage.getItem('sendx_token');
 let currentUser = null;
 
-const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', quiz: 'Quiz Juh', instagram: 'Instagram', ecossistema: 'Ecossistema', feed: 'Feed ao vivo', schedules: 'Historico', composer: 'Nova campanha', config: 'Configuracoes' };
+const titles = { dashboard: 'Dashboard', relatorio: 'Relatorio', insights: 'Insights IA', advisor: 'AI Advisor', quiz: 'Quiz Juh', instagram: 'Instagram', ecossistema: 'Ecossistema', config: 'Configuracoes' };
 
 // ── Auth ─────────────────────────────────────────
 function showAuthTab(tab) {
@@ -1157,7 +1150,6 @@ async function init() {
   loadSettings();
   loadSheetMonths();
   loadAdAccounts();
-  checkFeedSetup();
 }
 
 function renderParSelect() {
@@ -1172,7 +1164,7 @@ async function switchPar() {
   if (currentPar) socket.emit('leave_par', currentPar.id);
   currentPar = par;
   socket.emit('join_par', currentPar.id);
-  await Promise.all([loadFeed(), loadSchedules(), loadDashboard()]);
+  await loadDashboard();
 }
 
 // ── Settings ────────────────────────────────────
@@ -1348,21 +1340,10 @@ async function deleteAdAccount(tab) {
   }
 }
 
-// ── Feed ────────────────────────────────────────
-function checkFeedSetup() {
-  const hasSetup = pares.length > 0;
-  document.getElementById('feedSetup').style.display = hasSetup ? 'none' : '';
-  document.getElementById('feedContent').style.display = hasSetup ? '' : 'none';
-  if (!hasSetup) {
-    const needsCreds = botsList.length === 0;
-    document.getElementById('feedSetupNeedsCreds').style.display = needsCreds ? '' : 'none';
-    document.getElementById('feedSetupForm').style.display = needsCreds ? 'none' : '';
-    const sel = document.getElementById('setupBotSelect');
-    if (botsList.length > 0) {
-      sel.innerHTML = botsList.map(b => `<option value="${b.id}">@${b.username || b.name} (${b.subscribers} inscritos)</option>`).join('');
-    }
-  }
-}
+// ── Feed / Schedules / Composer (migrados para Pulp) ──
+function checkFeedSetup() {}
+function loadFeed() {}
+function loadSchedules() {}
 
 async function submitSetup() {
   const nome = document.getElementById('setupNome').value.trim();
